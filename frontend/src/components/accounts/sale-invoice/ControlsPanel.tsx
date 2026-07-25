@@ -199,6 +199,95 @@ export function ControlsPanel({ entities }: Props) {
         </div>
       </Section>
 
+      <CollapsibleSection
+        title="Dispatch & reference details"
+        open={draft.toggles.dispatchDetails}
+        onToggle={(v) => dispatch({ type: 'SET_TOGGLE', key: 'dispatchDetails', value: v })}
+      >
+        {!draft.toggles.dispatchDetails ? (
+          <div className="text-xs text-gray-400">Expand to expose the dispatch + reference section.</div>
+        ) : (
+          <Grid>
+            <Field label="Delivery Note">
+              <input className="form-input" value={draft.dispatchDetails?.deliveryNote ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { deliveryNote: e.target.value } })} />
+            </Field>
+            <Field label="Delivery Note Date">
+              <input type="date" className="form-input" value={draft.dispatchDetails?.deliveryNoteDate ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { deliveryNoteDate: e.target.value } })} />
+            </Field>
+            <Field label="Dispatch Doc No.">
+              <input className="form-input" value={draft.dispatchDetails?.dispatchDocNo ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { dispatchDocNo: e.target.value } })} />
+            </Field>
+            <Field label="Dispatched through">
+              <input className="form-input" value={draft.dispatchDetails?.dispatchedThrough ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { dispatchedThrough: e.target.value } })} />
+            </Field>
+            <Field label="Destination">
+              <input className="form-input" value={draft.dispatchDetails?.destination ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { destination: e.target.value } })} />
+            </Field>
+            <Field label="Reference No.">
+              <input className="form-input" value={draft.dispatchDetails?.referenceNo ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { referenceNo: e.target.value } })} />
+            </Field>
+            <Field label="Reference Date">
+              <input type="date" className="form-input" value={draft.dispatchDetails?.referenceDate ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { referenceDate: e.target.value } })} />
+            </Field>
+            <Field label="Other References">
+              <input className="form-input" value={draft.dispatchDetails?.otherReferences ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { otherReferences: e.target.value } })} />
+            </Field>
+            <Field label="Terms of Delivery" className="col-span-2">
+              <input className="form-input" value={draft.dispatchDetails?.termsOfDelivery ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_DISPATCH', patch: { termsOfDelivery: e.target.value } })} />
+            </Field>
+          </Grid>
+        )}
+      </CollapsibleSection>
+
+      <Section title="Optional blocks">
+        <Grid>
+          <ToggleField label="Buyer's Order No. + Date" checked={draft.toggles.buyersOrder}
+            onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'buyersOrder', value: v })} />
+          <ToggleField label="e-Invoice (IRN / Ack No / Ack Date)" checked={draft.toggles.eInvoice}
+            onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'eInvoice', value: v })} />
+        </Grid>
+        {draft.toggles.buyersOrder && (
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Field label="Buyer's Order No.">
+              <input className="form-input" value={draft.buyersOrder?.orderNo ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_BUYER_ORDER', patch: { orderNo: e.target.value } })} />
+            </Field>
+            <Field label="Dated">
+              <input type="date" className="form-input" value={draft.buyersOrder?.orderDate ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_BUYER_ORDER', patch: { orderDate: e.target.value } })} />
+            </Field>
+          </div>
+        )}
+        {draft.toggles.eInvoice && (
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Field label="IRN">
+              <input className="form-input" value={draft.eInvoice?.irn ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_EINVOICE', patch: { irn: e.target.value } })} />
+            </Field>
+            <Field label="Ack No.">
+              <input className="form-input" value={draft.eInvoice?.ackNo ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_EINVOICE', patch: { ackNo: e.target.value } })} />
+            </Field>
+            <Field label="Ack Date">
+              <input type="date" className="form-input" value={draft.eInvoice?.ackDate ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_EINVOICE', patch: { ackDate: e.target.value } })} />
+            </Field>
+            <div className="text-[11px] text-gray-500 self-end pb-2">
+              e-Invoice metadata is manually entered in v1; live IRN generation is v2.
+            </div>
+          </div>
+        )}
+      </Section>
+
       <Section title="Tax">
         <Grid>
           <ToggleField
@@ -286,6 +375,32 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {title}
       </h3>
       {children}
+    </section>
+  )
+}
+
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string
+  open: boolean
+  onToggle: (v: boolean) => void
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-xl border border-[#E7E3DA] bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500"
+      >
+        <span>{title}</span>
+        <span className="text-gray-400">{open ? 'Collapse' : 'Expand'}</span>
+      </button>
+      {open && <div className="p-4 pt-0">{children}</div>}
     </section>
   )
 }

@@ -43,18 +43,30 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
       {/* Right-side meta box */}
       <div className="mt-6 flex justify-between gap-8">
         <PreviewParties invoice={invoice} draft={draft} />
-        <div className="text-xs text-gray-600 min-w-[220px]">
+        <div className="text-xs text-gray-600 min-w-[240px]">
           <Row label="Invoice No." value={draft.invoiceNo || '—'} />
           <Row label="Dated" value={formatDDMonYY(draft.invoiceDate)} />
-          <Row label="Reference No. & Date." value="" />
-          <Row label="Other References" value="" />
-          <Row label="Buyer's Order No." value="" />
-          <Row label="Dated" value="" />
-          <Row label="Dispatch Doc No." value="" />
-          <Row label="Delivery Note Date" value="" />
-          <Row label="Dispatched through" value="" />
-          <Row label="Destination" value="" />
-          <Row label="Terms of Delivery" value="" />
+          {draft.toggles.dispatchDetails && (
+            <>
+              <Row label="Reference No. & Date." value={refNoAndDate(draft)} />
+              <Row label="Other References" value={draft.dispatchDetails?.otherReferences ?? ''} />
+            </>
+          )}
+          {draft.toggles.buyersOrder && (
+            <>
+              <Row label="Buyer's Order No." value={draft.buyersOrder?.orderNo ?? ''} />
+              <Row label="Dated" value={formatDDMonYY(draft.buyersOrder?.orderDate ?? '')} />
+            </>
+          )}
+          {draft.toggles.dispatchDetails && (
+            <>
+              <Row label="Dispatch Doc No." value={draft.dispatchDetails?.dispatchDocNo ?? ''} />
+              <Row label="Delivery Note Date" value={formatDDMonYY(draft.dispatchDetails?.deliveryNoteDate ?? '')} />
+              <Row label="Dispatched through" value={draft.dispatchDetails?.dispatchedThrough ?? ''} />
+              <Row label="Destination" value={draft.dispatchDetails?.destination ?? ''} />
+              <Row label="Terms of Delivery" value={draft.dispatchDetails?.termsOfDelivery ?? ''} />
+            </>
+          )}
         </div>
       </div>
 
@@ -91,4 +103,13 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-gray-900">{value}</span>
     </div>
   )
+}
+
+/** Combine Reference No. + Date into Reference No. &Date row value. */
+function refNoAndDate(draft: import('@crm/shared').InvoiceDraft): string {
+  const d = draft.dispatchDetails
+  if (!d) return ''
+  const refNo = d.referenceNo ?? ''
+  const refDate = d.referenceDate ? formatDDMonYY(d.referenceDate) : ''
+  return `${refNo}${refDate ? '  ' + refDate : ''}`.trim()
 }

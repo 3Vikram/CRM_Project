@@ -341,6 +341,16 @@ describe('POST /api/invoices/compute', () => {
   })
 })
 
+describe('GET /api/entities presets', () => {
+  it('exposes the e-Invoice default flag per seller', async () => {
+    const app = createApp()
+    const res = await request(app).get('/api/entities').expect(200)
+    const map = Object.fromEntries(res.body.map((e: any) => [e.id, e.eInvoiceDefault]))
+    expect(map['3vikram']).toBe(true)
+    expect(map['synov']).toBe(false)
+  })
+})
+
 describe('GET /api/health', () => {
   it('responds ok', async () => {
     const app = createApp()

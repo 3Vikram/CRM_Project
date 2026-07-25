@@ -60,6 +60,9 @@ export type DraftAction =
   | { type: 'SET_SHIPPING_SAME'; value: boolean }
   | { type: 'SET_TOGGLE'; key: keyof InvoiceDraft['toggles']; value: boolean }
   | { type: 'SET_FOOTER'; patch: Partial<InvoiceDraft['footer']> }
+  | { type: 'SET_DISPATCH'; patch: Partial<NonNullable<InvoiceDraft['dispatchDetails']>> }
+  | { type: 'SET_BUYER_ORDER'; patch: Partial<NonNullable<InvoiceDraft['buyersOrder']>> }
+  | { type: 'SET_EINVOICE'; patch: Partial<NonNullable<InvoiceDraft['eInvoice']>> }
   | { type: 'UPDATE_LINE'; index: number; patch: Partial<LineItem> }
   | { type: 'REMOVE_LINE'; index: number }
   | { type: 'SET_LINES_AND_SELLER'; lines: LineItem[]; entity: Entity }
@@ -122,6 +125,34 @@ function reducer(state: InvoiceDraft, action: DraftAction): InvoiceDraft {
       }
     case 'SET_FOOTER':
       return { ...state, footer: { ...state.footer, ...action.patch } }
+    case 'SET_DISPATCH':
+      return {
+        ...state,
+        dispatchDetails: {
+          ...(state.dispatchDetails ?? {
+            deliveryNote: '', deliveryNoteDate: '', dispatchDocNo: '',
+            dispatchedThrough: '', destination: '', referenceNo: '',
+            referenceDate: '', otherReferences: '', termsOfDelivery: '',
+          }),
+          ...action.patch,
+        },
+      }
+    case 'SET_BUYER_ORDER':
+      return {
+        ...state,
+        buyersOrder: {
+          ...(state.buyersOrder ?? { orderNo: '', orderDate: '' }),
+          ...action.patch,
+        },
+      }
+    case 'SET_EINVOICE':
+      return {
+        ...state,
+        eInvoice: {
+          ...(state.eInvoice ?? { irn: '', ackNo: '', ackDate: '' }),
+          ...action.patch,
+        },
+      }
     case 'UPDATE_LINE':
       return {
         ...state,
