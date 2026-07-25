@@ -12,6 +12,7 @@ import DCTrackingPage from '@/pages/DCTrackingPage'
 import BillSalePage from '@/pages/BillSalePage'
 import PlaceholderPage from '@/pages/PlaceholderPage'
 import AccountsBlankPage from '@/pages/accounts/AccountsBlankPage'
+import SaleInvoicePage from '@/pages/accounts/SaleInvoicePage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -129,10 +130,7 @@ export default function App() {
           path="/accounts/sale-invoice"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="Sale Invoice"
-                description="Create and track sales invoices."
-              />
+              <SaleInvoicePage />
             </AccountsLayout>
           }
         />
