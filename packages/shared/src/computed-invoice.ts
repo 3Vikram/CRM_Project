@@ -77,6 +77,24 @@ export const ComputedInvoiceSchema = z.object({
   roundedGrandTotal: z.number(),
   amountInWords: z.string(),
   taxInWords: z.string(),
+  /** Footer blocks resolved from the seller preset when the draft leaves them
+   *  empty. Always reflects the show/hide toggles (omitted when off). */
+  resolvedFooter: z
+    .object({
+      remarks: z.string().optional(),
+      declaration: z.string().optional(),
+      terms: z.string().optional(),
+      bank: z
+        .object({
+          holderName: z.string(),
+          bankName: z.string(),
+          accountNo: z.string(),
+          branch: z.string(),
+          ifsc: z.string(),
+        })
+        .optional(),
+    })
+    .optional(),
   placeOfSupply: z.string(),
   taxType: z.enum(['CGST_SGST', 'IGST', 'NONE']),
   /** When true, the dropped rows mixed companies and compute is blocked. */

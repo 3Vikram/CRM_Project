@@ -149,9 +149,15 @@ function SaleInvoiceInner() {
       )}
       {mixedCompany && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
-          The dropped rows contain mixed <code>COMPANY</code> values (both
-          SYNOV and 3VIKRAM). One GSTIN cannot bill another entity's rentals
-          in a single GST invoice — split into two invoices before generating.
+          <div className="font-semibold">
+            The dropped rows contain mixed <code>COMPANY</code> values — split
+            into two invoices before generating.
+          </div>
+          {computed?.mixedCompany && computed?.companyBreakdown && (
+            <div className="mt-1 text-xs">
+              {computed.companyBreakdown.map((c) => `${c.company}: ${c.count}`).join(' · ')}
+            </div>
+          )}
         </div>
       )}
 

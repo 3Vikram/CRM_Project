@@ -216,6 +216,65 @@ describe('POST /api/invoices/compute', () => {
     expect(body.totalTax).toBeCloseTo((18 / 100) * 7300, 2)
   })
 
+  it('blocks compute when rows mix COMPANY into an empty-lines mixedCompany response', async () => {
+    const app = createApp()
+    const lines = [
+      { ...line1(), company: 'SYNOV' },
+      { ...line2(), company: '3VIKRAM' },
+    ]
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ lines: lines as any }))
+      .expect(200)
+    const body = res.body
+    expect(body.mixedCompany).toBe(true)
+    expect(body.mixedCompanyWarning).toBeTruthy()
+    expect(body.lines).toEqual([])
+    expect(body.taxableTotal).toBe(0)
+    expect(body.companyBreakdown.map((c: any) => c.company).sort()).toEqual(['3VIKRAM', 'SYNOV'])
+  })
+
+  it('resolves the seller footer blocks (remarks/declaration/terms/bank) from preset when toggles on', async () => {
+    const app = createApp()
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({
+        sellerId: '3vikram',
+        footer: {}, // blank -> fall back to seller preset
+        invoiceNo: '3VT/177/2026-27',
+        lines: [{ ...line2(), company: '3VIKRAM' }],
+      }))
+      .expect(200)
+    const body = res.body
+    const f = body.resolvedFooter
+    expect(f).toBeDefined()
+    expect(f.remarks).toContain('Rental Invoice')
+    expect(f.remarks).toContain('December 2025')
+    expect(f.declaration).toBeTruthy()
+    expect(f.terms).toContain('Interest @24%')
+    expect(f.bank?.ifsc).toBe('HDFC0000446')
+    expect(body.seller.invoicePrefix).toBe('3VT/')
+  })
+
+  it('omits resolved footer fields when their toggle is off', async () => {
+    const app = createApp()
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({
+        footer: {},
+        toggles: {
+          eInvoice: false, buyersOrder: false, dispatchDetails: false, lineDiscount: false,
+          showRemarks: false, showDeclaration: true, showTc: false, showBank: false,
+        },
+      }))
+      .expect(200)
+    const f = res.body.resolvedFooter
+    expect(f.remarks).toBeUndefined()
+    expect(f.terms).toBeUndefined()
+    expect(f.bank).toBeUndefined()
+    expect(f.declaration).toBeTruthy()
+  })
+
   it('rejects a malformed draft with 4xx', async () => {
     const app = createApp()
     await request(app)

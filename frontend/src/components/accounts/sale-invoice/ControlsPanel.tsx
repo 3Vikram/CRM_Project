@@ -18,6 +18,7 @@ interface Props {
 export function ControlsPanel({ entities }: Props) {
   const { draft, dispatch } = useDraft()
   const [grouped, setGrouped] = useState(false)
+  const seller = entities.find((e) => e.id === draft.sellerId)
 
   return (
     <div className="space-y-4">
@@ -85,6 +86,32 @@ export function ControlsPanel({ entities }: Props) {
             ))}
           </select>
         </Field>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-gray-600">
+          <div><span className="text-gray-400">GSTIN: </span>{seller?.gstin ?? '—'}</div>
+          <div><span className="text-gray-400">Invoice prefix: </span>{seller?.invoicePrefix ?? '—'}</div>
+          <div><span className="text-gray-400">State: </span>{seller?.stateName} ({seller?.stateCode})</div>
+          <div><span className="text-gray-400">MSME: </span>{seller?.msme ?? '—'}</div>
+        </div>
+      </Section>
+
+      <Section title="Footer blocks">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+          <ToggleField label="Remarks" checked={draft.toggles.showRemarks} onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'showRemarks', value: v })} />
+          <ToggleField label="Declaration" checked={draft.toggles.showDeclaration} onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'showDeclaration', value: v })} />
+          <ToggleField label="Terms & conditions" checked={draft.toggles.showTc} onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'showTc', value: v })} />
+          <ToggleField label="Bank details" checked={draft.toggles.showBank} onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'showBank', value: v })} />
+        </div>
+        <div className="mt-2 text-[11px] text-gray-500">
+          When on, empty fields fall back to the seller preset (remarks
+          template substitutes the billing month). Override below.
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          <Field label="Remarks override">
+            <input className="form-input" value={draft.footer.remarks ?? ''}
+              onChange={(e) => dispatch({ type: 'SET', patch: { footer: { ...draft.footer, remarks: e.target.value } } })}
+              placeholder="Seller template used when blank" />
+          </Field>
+        </div>
       </Section>
 
       <Section title="Tax">

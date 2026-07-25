@@ -77,6 +77,11 @@ function reducer(state: InvoiceDraft, action: DraftAction): InvoiceDraft {
           ...state.toggles,
           eInvoice: action.entity.eInvoiceDefault,
         },
+        invoiceNo:
+          action.invoiceNo ??
+          (state.invoiceNo.trim()
+            ? state.invoiceNo
+            : (action.entity.invoicePrefix ?? '')),
         footer: {
           ...state.footer,
           remarks: state.footer.remarks ?? '',
@@ -124,6 +129,9 @@ function reducer(state: InvoiceDraft, action: DraftAction): InvoiceDraft {
         lines: action.lines,
         sellerId: action.entity.id,
         toggles: { ...state.toggles, eInvoice: action.entity.eInvoiceDefault },
+        invoiceNo: state.invoiceNo.trim()
+          ? state.invoiceNo
+          : (action.entity.invoicePrefix ?? ''),
         footer: {
           ...state.footer,
           declaration: action.entity.declaration,

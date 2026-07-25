@@ -6,6 +6,7 @@ import { PreviewHeader } from './PreviewHeader'
 import { PreviewParties } from './PreviewParties'
 import { PreviewLineTable } from './PreviewLineTable'
 import { PreviewTaxSummary } from './PreviewTaxSummary'
+import { PreviewFooter } from './PreviewFooter'
 
 interface Props {
   invoice: ComputedInvoice | null
@@ -60,6 +61,20 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
       <PreviewLineTable invoice={invoice} />
 
       <PreviewTaxSummary invoice={invoice} draft={draft} />
+
+      {invoice.mixedCompany && (
+        <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
+          <div className="font-semibold">{invoice.mixedCompanyWarning}</div>
+          {invoice.companyBreakdown && (
+            <div className="mt-1 text-xs">
+              {invoice.companyBreakdown.map((c) => `${c.company}: ${c.count}`).join(' · ')}
+            </div>
+          )}
+          Computation is blocked until the rows are split into separate invoices.
+        </div>
+      )}
+
+      {!invoice.mixedCompany && <PreviewFooter invoice={invoice} draft={draft} />}
 
       <div className="mt-12 text-[10px] text-gray-400 text-right">
         Billing month: {billingMonthLabel(draft.billingMonth)} ·

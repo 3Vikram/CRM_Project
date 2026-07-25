@@ -61,6 +61,36 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
 
   const consignee = draft.consignee ?? draft.buyer
 
+  // Mixed COMPANY guard — one GSTIN cannot bill another entity's rentals.
+  const companyKeys = new Set(
+    draft.lines.map((l) => (l.company ?? '').toUpperCase()).filter(Boolean),
+  )
+  if (companyKeys.size > 1) {
+    const breakdown = [...companyKeys.entries()].map(([company, _i]) => ({
+      company,
+      count: draft.lines.filter((l) => (l.company ?? '').toUpperCase() === company).length,
+    }))
+    return {
+      seller: entityToSeller(sellerEntity),
+      buyer: draft.buyer,
+      consignee,
+      hsn: draft.hsn,
+      lines: [],
+      taxableTotal: 0,
+      totalTax: 0,
+      grandTotal: 0,
+      roundedGrandTotal: 0,
+      amountInWords: amountInWords(0),
+      taxInWords: amountInWords(0),
+      placeOfSupply: draft.buyer.stateCode,
+      taxType: 'NONE',
+      mixedCompany: true,
+      mixedCompanyWarning:
+        'The dropped rows contain mixed COMPANY values. Split into two invoices before generating.',
+      companyBreakdown: breakdown,
+    } as ComputedInvoice
+  }
+
   const computedLines: ComputedLine[] = draft.lines.map((line) => {
     const taxable = lineTaxableValue(line)
     return {
@@ -121,6 +151,30 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
     }
   }
 
+  // Resolve footer blocks from the seller preset when the draft leaves
+  // them blank. The show/hide toggles determine which keys are emitted at
+  // all — when off, the field is omitted entirely from resolvedFooter.
+  const monthLabel = billingMonthLabel(draft.billingMonth.from, draft.billingMonth.to)
+  const sellerName = sellerEntity.shortName ?? sellerEntity.name
+  const remarks =
+    draft.footer.remarks && draft.footer.remarks.trim()
+      ? draft.footer.remarks
+      : (sellerEntity.remarksTemplate ?? '').replace('{month}', monthLabel).replace('{seller}', sellerName)
+  const declaration =
+    draft.footer.declaration && draft.footer.declaration.trim()
+      ? draft.footer.declaration
+      : sellerEntity.declaration
+  const terms =
+    draft.footer.terms && draft.footer.terms.trim()
+      ? draft.footer.terms
+      : sellerEntity.terms
+
+  const resolvedFooter: NonNullable<ComputedInvoice['resolvedFooter']> = {}
+  if (draft.toggles.showRemarks && remarks) resolvedFooter.remarks = remarks
+  if (draft.toggles.showDeclaration && declaration) resolvedFooter.declaration = declaration
+  if (draft.toggles.showTc && terms) resolvedFooter.terms = terms
+  if (draft.toggles.showBank && sellerEntity.bank) resolvedFooter.bank = sellerEntity.bank
+
   return {
     seller: entityToSeller(sellerEntity),
     buyer: draft.buyer,
@@ -139,7 +193,19 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
     taxInWords: amountInWords(totalTax),
     placeOfSupply: draft.buyer.stateCode,
     taxType: effectiveTaxType,
+    resolvedFooter: Object.keys(resolvedFooter).length > 0 ? resolvedFooter : undefined,
   }
+}
+
+/** "Jun 2026 / Jul 2026" label spanning the billing month range. */
+function billingMonthLabel(from: string, to: string): string {
+  const a = new Date(from + 'T00:00:00Z')
+  const b = new Date(to + 'T00:00:00Z')
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return ''
+  const fmt = (d: Date) =>
+    d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const s = fmt(a)
+  return s === fmt(b) ? s : `${s} / ${fmt(b)}`
 }
 
 function entityToSeller(entity: ReturnType<typeof findEntity>) {
