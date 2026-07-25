@@ -9,6 +9,7 @@ export function PreviewTaxSummary({
   invoice: ComputedInvoice
   draft: InvoiceDraft
 }) {
+  const totalPcs = invoice.lines.reduce((a, l) => a + l.quantity, 0)
   return (
     <div className="mt-4">
       {/* Tax lines */}
@@ -26,14 +27,13 @@ export function PreviewTaxSummary({
         </div>
       </div>
 
-      {/* Total + round-off + words */}
-      <div className="flex justify-end text-sm mt-3 border-t border-gray-300 pt-2">
+      {/* Total / Rounded-Off / Grand Total — bottom right */}
+      <div className="flex justify-end text-sm mt-3">
         <div className="w-64">
-          <div className="flex justify-between border-b border-[#EFECE5] py-1">
+          <div className="flex justify-between border-t border-gray-300 border-b border-[#EFECE5] py-1">
             <span className="font-medium">Total</span>
             <span className="font-semibold">
-              {invoice.lines.reduce((a, l) => a + l.quantity, 0)} Pcs ·{' '}
-              {invoice.grandTotal.toFixed(2)}
+              {totalPcs} Pcs · {invoice.grandTotal.toFixed(2)}
             </span>
           </div>
           {invoice.roundOff && (
@@ -42,24 +42,18 @@ export function PreviewTaxSummary({
               <span>{Math.abs(invoice.roundOff.difference).toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between border-b border-[#EFECE5] py-1">
-            <span className="font-medium">Round-off {draft.roundOff ? 'on' : 'off'}</span>
-            <span className="font-semibold">{invoice.roundedGrandTotal.toFixed(2)}</span>
+          <div className="flex justify-between border-b border-gray-300 py-1">
+            <span className="font-semibold">Grand Total</span>
+            <span className="font-semibold">
+              {'\u20B9'} {invoice.roundedGrandTotal.toFixed(2)}
+            </span>
           </div>
+          {draft.gstApplicable && (
+            <div className="text-[11px] text-gray-600 mt-1 text-right">
+              Tax Amount (in words): {invoice.taxInWords}
+            </div>
+          )}
         </div>
-      </div>
-
-      <div className="mt-3 text-xs text-gray-700">
-        <div>
-          <span className="font-semibold">Amount Chargeable (in words):</span>{' '}
-          {invoice.amountInWords}
-        </div>
-        {draft.gstApplicable && (
-          <div>
-            <span className="font-semibold">Tax Amount (in words):</span>{' '}
-            {invoice.taxInWords}
-          </div>
-        )}
       </div>
     </div>
   )

@@ -291,6 +291,47 @@ describe('POST /api/invoices/compute', () => {
     expect(f.declaration).toBeTruthy()
   })
 
+  it('round-off line carries the signed paise diff to the nearest ₹1', async () => {
+    const app = createApp()
+    const lines = [{ ...line1(), amount: 100.48 }, { ...line2(), amount: 0 }]
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ lines: lines as any, roundOff: true, gstApplicable: false }))
+      .expect(200)
+    const body = res.body
+    expect(body.grandTotal).toBeCloseTo(100.48, 2)
+    expect(body.roundedGrandTotal).toBe(100)
+    expect(body.roundOff.difference).toBeCloseTo(-0.48, 2)
+    expect(body.roundOff.label).toContain('Rounded Off')
+    // words describe the rounded grand total, not the pre-round value
+    expect(body.amountInWords).toBe('Rupees One Hundred Only')
+  })
+
+  it('rounds mid-values up via Math.round and emits a positive diff', async () => {
+    const app = createApp()
+    const lines = [{ ...line1(), amount: 1000.6 }, { ...line2(), amount: 0 }]
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ lines: lines as any, roundOff: true, gstApplicable: false }))
+      .expect(200)
+    const body = res.body
+    expect(body.roundedGrandTotal).toBe(1001)
+    expect(body.roundOff.difference).toBeCloseTo(0.4, 2)
+  })
+
+  it('tax words include paise when total tax has paise', async () => {
+    const app = createApp()
+    const lines = [{ ...line1(), amount: 100.01 }, { ...line2(), amount: 0 }]
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ lines: lines as any, roundOff: false }))
+      .expect(200)
+    const body = res.body
+    // tax = 100.01 * 0.18 = 18.0018 -> 18.00 (round2)
+    // taxable = 100.01 -> tax = 18.00
+    expect(body.taxInWords).toBe('Rupees Eighteen Only')
+  })
+
   it('rejects a malformed draft with 4xx', async () => {
     const app = createApp()
     await request(app)

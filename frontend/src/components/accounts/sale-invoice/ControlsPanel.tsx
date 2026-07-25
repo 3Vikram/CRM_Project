@@ -25,6 +25,27 @@ export function ControlsPanel({ entities }: Props) {
       <Section title="Invoice">
         <Grid>
           <Field label="Invoice No.">
+            <div className="flex gap-1">
+              <input
+                className="form-input flex-1"
+                value={draft.invoiceNo}
+                onChange={(e) => dispatch({ type: 'SET', patch: { invoiceNo: e.target.value } })}
+                placeholder="3VT/177/2026-27"
+              />
+              {seller?.invoicePrefix && (
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'SET', patch: { invoiceNo: seller.invoicePrefix ?? '' } })}
+                  title="Use seller prefix"
+                  className="px-2 h-[var(--input-h,2.5rem)] rounded-md border border-gray-300 bg-gray-50 text-xs text-gray-700 whitespace-nowrap"
+                >
+                  {seller.invoicePrefix}
+                </button>
+              )}
+            </div>
+            <span className="block text-[10px] text-gray-400 mt-1">
+              Seller prefix suggested: {seller?.invoicePrefix ?? '—'} · add the running number after it
+            </span>
             <input
               className="form-input"
               value={draft.invoiceNo}
