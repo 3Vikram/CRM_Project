@@ -84,6 +84,7 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
       taxInWords: amountInWords(0),
       placeOfSupply: draft.buyer.stateCode,
       taxType: 'NONE',
+      suggestedTaxType: 'NONE',
       mixedCompany: true,
       mixedCompanyWarning:
         'The dropped rows contain mixed COMPANY values. Split into two invoices before generating.',
@@ -193,6 +194,7 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
     taxInWords: amountInWords(totalTax),
     placeOfSupply: draft.buyer.stateCode,
     taxType: effectiveTaxType,
+    suggestedTaxType: suggestTaxType(sellerEntity.stateCode, draft.buyer.stateCode, draft.gstApplicable),
     resolvedFooter: Object.keys(resolvedFooter).length > 0 ? resolvedFooter : undefined,
   }
 }

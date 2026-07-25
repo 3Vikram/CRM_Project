@@ -97,6 +97,11 @@ export const ComputedInvoiceSchema = z.object({
     .optional(),
   placeOfSupply: z.string(),
   taxType: z.enum(['CGST_SGST', 'IGST', 'NONE']),
+  /** Tax type the backend would suggest given seller↔buyer state (and
+   *  `gstApplicable`). The frontend uses this to pre-fill the toggle, the
+   *  operator may override — the effective `taxType` field above follows the
+   *  override. Equal to `taxType` when no override. */
+  suggestedTaxType: z.enum(['CGST_SGST', 'IGST', 'NONE']).optional(),
   /** When true, the dropped rows mixed companies and compute is blocked. */
   mixedCompany: z.boolean().optional(),
   mixedCompanyWarning: z.string().optional(),

@@ -69,6 +69,70 @@ export function ControlsPanel({ entities }: Props) {
         </Grid>
       </Section>
 
+      <Section title="Buyer (Bill to)">
+        <Grid>
+          <Field label="Name">
+            <input className="form-input" value={draft.buyer.name}
+              onChange={(e) =>
+                dispatch({ type: 'SET_BUYER_WITH_SUGGEST', patch: { name: e.target.value }, entities })
+              } placeholder="Flatworld Solutions Pvt.Ltd." />
+          </Field>
+          <Field label="GSTIN / UIN">
+            <input className="form-input uppercase" value={draft.buyer.gstin}
+              onChange={(e) => dispatch({ type: 'SET_BUYER', patch: { gstin: e.target.value.toUpperCase() } })} />
+          </Field>
+          <Field label="Address" className="col-span-2">
+            <textarea className="form-input" rows={2} value={draft.buyer.address}
+              onChange={(e) => dispatch({ type: 'SET_BUYER', patch: { address: e.target.value } })} />
+          </Field>
+          <Field label="State">
+            <input className="form-input" value={draft.buyer.stateName}
+              onChange={(e) => dispatch({ type: 'SET_BUYER_WITH_SUGGEST', patch: { stateName: e.target.value }, entities })} placeholder="Karnataka" />
+          </Field>
+          <Field label="State code">
+            <input className="form-input" value={draft.buyer.stateCode}
+              onChange={(e) => dispatch({ type: 'SET_BUYER_WITH_SUGGEST', patch: { stateCode: e.target.value.trim() }, entities })} placeholder="29" />
+          </Field>
+        </Grid>
+        <div className="mt-3 flex items-center gap-4">
+          <ToggleField
+            label="Shipping same as billing"
+            checked={draft.shippingSameAsBilling}
+            onChange={(v) => dispatch({ type: 'SET_SHIPPING_SAME', value: v })}
+          />
+          <div className="text-[11px] text-gray-500">
+            Place of Supply: {draft.buyer.stateCode || '—'}
+          </div>
+        </div>
+        {!draft.shippingSameAsBilling && (
+          <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-3">
+            <div className="text-xs font-semibold text-gray-500 col-span-2">
+              Consignee (Ship to)
+            </div>
+            <Field label="Name">
+              <input className="form-input" value={draft.consignee?.name ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_CONSIGNEE', patch: { name: e.target.value } })} />
+            </Field>
+            <Field label="GSTIN">
+              <input className="form-input uppercase" value={draft.consignee?.gstin ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_CONSIGNEE', patch: { gstin: e.target.value.toUpperCase() } })} />
+            </Field>
+            <Field label="Address" className="col-span-2">
+              <textarea className="form-input" rows={2} value={draft.consignee?.address ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_CONSIGNEE', patch: { address: e.target.value } })} />
+            </Field>
+            <Field label="State">
+              <input className="form-input" value={draft.consignee?.stateName ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_CONSIGNEE', patch: { stateName: e.target.value } })} />
+            </Field>
+            <Field label="State code">
+              <input className="form-input" value={draft.consignee?.stateCode ?? ''}
+                onChange={(e) => dispatch({ type: 'SET_CONSIGNEE', patch: { stateCode: e.target.value } })} />
+            </Field>
+          </div>
+        )}
+      </Section>
+
       <Section title="Seller">
         <Field label="Seller legal entity">
           <select
@@ -207,9 +271,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3">{children}</div>
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <label className="block">
+    <label className={`block ${className ?? ''}`}>
       <span className="block text-xs font-medium text-gray-600 mb-1">{label}</span>
       {children}
     </label>

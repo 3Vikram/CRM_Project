@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Entity, InvoiceDraft, LineItem, TaxType } from '@crm/shared'
+import { suggestTaxTypeFor } from '@/lib/tax-suggest'
 import { todayISO, previousFullMonth } from '@/lib/dates'
 
 /**
@@ -54,6 +55,7 @@ export type DraftAction =
   | { type: 'SET'; patch: Partial<InvoiceDraft> }
   | { type: 'SET_SELLER'; entity: Entity; invoiceNo?: string }
   | { type: 'SET_BUYER'; patch: Partial<InvoiceDraft['buyer']> }
+  | { type: 'SET_BUYER_WITH_SUGGEST'; patch: Partial<InvoiceDraft['buyer']>; entities: Entity[] }
   | { type: 'SET_CONSIGNEE'; patch: Partial<NonNullable<InvoiceDraft['consignee']>> }
   | { type: 'SET_SHIPPING_SAME'; value: boolean }
   | { type: 'SET_TOGGLE'; key: keyof InvoiceDraft['toggles']; value: boolean }
@@ -92,6 +94,12 @@ function reducer(state: InvoiceDraft, action: DraftAction): InvoiceDraft {
       }
     case 'SET_BUYER':
       return { ...state, buyer: { ...state.buyer, ...action.patch } }
+    case 'SET_BUYER_WITH_SUGGEST': {
+      const buyer = { ...state.buyer, ...action.patch }
+      const seller = action.entities.find((e) => e.id === state.sellerId)
+      const suggested = suggestTaxTypeFor(seller, buyer, state.gstApplicable)
+      return { ...state, buyer, taxType: suggested }
+    }
     case 'SET_CONSIGNEE':
       return {
         ...state,

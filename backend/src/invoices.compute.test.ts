@@ -103,6 +103,22 @@ describe('POST /api/invoices/compute', () => {
     expect(body.igst).toBeUndefined()
   })
 
+  it('exposes suggestedTaxType matching the seller<->buyer state', async () => {
+    const app = createApp()
+    const intra = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ taxType: 'CGST_SGST' }))
+      .expect(200)
+    expect(intra.body.suggestedTaxType).toBe('CGST_SGST')
+    const inter = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ buyer: { ...baseDraft().buyer, stateCode: '27', stateName: 'Maharashtra' } }))
+      .expect(200)
+    expect(inter.body.suggestedTaxType).toBe('IGST')
+    // even when the operator overrides to CGST_SGST, suggested stays IGST
+    expect(inter.body.taxType).toBe('CGST_SGST')
+  })
+
   it('charges IGST as a single full-rate line when taxType is IGST', async () => {
     const app = createApp()
     const res = await request(app)
