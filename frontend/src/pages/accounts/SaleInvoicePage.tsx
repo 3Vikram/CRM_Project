@@ -1,34 +1,111 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Download, RotateCcw } from 'lucide-react'
+import type { Entity, LineItem } from '@crm/shared'
+import { fetchEntities, computeInvoice, ComputationError } from '@/lib/api'
+import { useDebounced } from '@/lib/useDebounced'
+import { ExcelDropzone } from '@/components/accounts/sale-invoice/ExcelDropzone'
+import { ControlsPanel } from '@/components/accounts/sale-invoice/ControlsPanel'
+import { InvoicePreview } from '@/components/accounts/sale-invoice/preview/InvoicePreview'
 import {
-  ExcelDropzone,
-} from '@/components/accounts/sale-invoice/ExcelDropzone'
-import { LineItemsTable } from '@/components/accounts/sale-invoice/LineItemsTable'
-import type { LineItem } from '@crm/shared'
+  DraftProvider,
+  useDraft,
+  clearStoredDraft,
+} from './sale-invoice/draft-context'
 
-/**
- * Sale Invoice generator screen (Accounts module).
- *
- * v1 shape from the PRD: left = collapsible controls panel, right = sticky
- * live preview. This slice (ISSUE-02) wires the dropzone + flat editable
- * review table. Preview + compute + toggles arrive in ISSUE-03 and onward.
- */
-export default function SaleInvoicePage() {
-  const [rows, setRows] = useState<LineItem[]>([])
-  const [fileName, setFileName] = useState<string | null>(null)
+function pickSellerFromRows(rows: LineItem[], entities: Entity[]): Entity {
+  const counts: Record<string, number> = {}
+  for (const r of rows) {
+    if (!r.company) continue
+    counts[r.company] = (counts[r.company] ?? 0) + 1
+  }
+  const majority = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+  if (majority === '3VIKRAM') return entities.find((e) => e.id === '3vikram')!
+  if (majority === 'SYNOV') return entities.find((e) => e.id === 'synov')!
+  return entities[0] ?? entities[0]
+}
 
-  // ISSUE-09 localStorage autosave resilience will hook here; for now just the
-  // table. Kept as a no-op to make the action bar visible & honest.
+function SaleInvoiceInner() {
+  const { draft, dispatch } = useDraft()
+  const [entities, setEntities] = useState<Entity[]>([])
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [computed, setComputed] = useState<import('@crm/shared').ComputedInvoice | null>(null)
+  const [compErr, setCompErr] = useState<string | null>(null)
+  const [computing, setComputing] = useState(false)
+  const [, forceTick] = useState(0)
+
+  // load seller presets once
   useEffect(() => {
-    /* placeholder for autosave in ISSUE-09 */
-  }, [rows, fileName])
+    let cancelled = false
+    fetchEntities()
+      .then((e) => {
+        if (cancelled) return
+        setEntities(e)
+        // ensure draft has a valid seller for compute from the start
+        if (!e.find((x) => x.id === draft.sellerId)) {
+          dispatch({ type: 'SET_SELLER', entity: e[0] })
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadErr(err instanceof Error ? err.message : 'failed')
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const debouncedDraft = useDebounced(draft, 350)
+
+  // recompute on every meaningful edit (debounced)
+  useEffect(() => {
+    if (draft.lines.length === 0) {
+      setComputed(null)
+      return
+    }
+    let cancelled = false
+    setComputing(true)
+    setCompErr(null)
+    computeInvoice(debouncedDraft)
+      .then((c) => {
+        if (cancelled) return
+        setComputed(c)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        if (err instanceof ComputationError)
+          setCompErr(`${err.message}` + (err.issues.length ? ' — see console' : ''))
+        else setCompErr((err as Error).message)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setComputing(false)
+        forceTick((n) => n + 1)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedDraft])
+
+  const hasRows = draft.lines.length > 0
+
+  const handleDrop = (rows: LineItem[]) => {
+    const seller = pickSellerFromRows(rows, entities)
+    dispatch({ type: 'SET_LINES_AND_SELLER', lines: rows, entity: seller })
+  }
 
   const handleReset = () => {
-    setRows([])
-    setFileName(null)
+    clearStoredDraft()
+    dispatch({ type: 'RESET', seller: entities[0] })
+    setComputed(null)
+    setCompErr(null)
   }
+
+  const mixedCompany = useMemo(() => {
+    const companies = new Set(draft.lines.map((l) => l.company).filter(Boolean))
+    return companies.size > 1
+  }, [draft.lines])
 
   return (
     <div className="space-y-6">
@@ -46,8 +123,9 @@ export default function SaleInvoicePage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled
-            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-gray-900 text-white text-sm font-medium opacity-40 cursor-not-allowed"
+            disabled={!computed}
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
           >
             <Download className="w-4 h-4" />
             Download PDF
@@ -63,32 +141,50 @@ export default function SaleInvoicePage() {
         </div>
       </div>
 
-      {/* Dropzone */}
-      {rows.length === 0 ? (
-        <ExcelDropzone
-          onRows={(parsed, name) => {
-            setRows(parsed)
-            setFileName(name)
-          }}
-        />
+      {loadErr && (
+        <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
+          Could not load seller presets from /api/entities: {loadErr}. Is the
+          backend running on port 4000?
+        </div>
+      )}
+      {mixedCompany && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
+          The dropped rows contain mixed <code>COMPANY</code> values (both
+          SYNOV and 3VIKRAM). One GSTIN cannot bill another entity's rentals
+          in a single GST invoice — split into two invoices before generating.
+        </div>
+      )}
+
+      {/* Split-pane: controls | preview */}
+      {!hasRows ? (
+        <ExcelDropzonePreview onDrop={handleDrop} />
       ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              <span className="font-medium text-gray-900">{fileName}</span>{' '}
-              <span className="text-gray-400">·</span> {rows.length} rows
-            </div>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-xs text-gray-500 hover:text-gray-900"
-            >
-              Drop a different file
-            </button>
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,540px),minmax(0,1fr)] gap-6 items-start">
+          <div className="controls-panel">
+            <ControlsPanel entities={entities} />
           </div>
-          <LineItemsTable rows={rows} onChange={setRows} />
+          <div className="preview-pane">
+            <InvoicePreview
+              invoice={computed}
+              draft={draft}
+              loading={computing}
+              error={compErr}
+            />
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+function ExcelDropzonePreview({ onDrop }: { onDrop: (r: LineItem[]) => void }) {
+  return <ExcelDropzone onRows={(rows) => onDrop(rows)} />
+}
+
+export default function SaleInvoicePage() {
+  return (
+    <DraftProvider>
+      <SaleInvoiceInner />
+    </DraftProvider>
   )
 }

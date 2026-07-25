@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EntitySchema, InvoiceDraftSchema } from './index'
+import { EntitySchema, InvoiceDraftSchema } from './index.js'
 
 describe('shared schemas', () => {
   it('parses a minimal entity', () => {

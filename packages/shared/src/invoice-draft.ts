@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { LineItemSchema } from './line-item'
-import { PartySchema } from './contact'
-import { TaxType } from './tax'
+import { LineItemSchema } from './line-item.js'
+import { PartySchema } from './contact.js'
+import { TaxType } from './tax.js'
 
 export const TaxTypeSchema = z.enum(['CGST_SGST', 'IGST', 'NONE'])
 

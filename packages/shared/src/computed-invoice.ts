@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { PartySchema } from './contact'
-import { BankDetailsSchema } from './entity'
+import { PartySchema } from './contact.js'
+import { BankDetailsSchema } from './entity.js'
 
 /** A single line after apply-time compute (taxable value, tax lines). */
 export const ComputedLineSchema = z.object({
