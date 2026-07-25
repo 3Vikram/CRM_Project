@@ -1,0 +1,242 @@
+                                                                                             Tax Invoice
+                                                                                             Tax Invoice
+
+    3Vikram Technologies - 2025-26
+
+            No.1/5 Santosh Complex Basavanagudi, Near Armugam Circle, Bengaluru - 560004
+            State Name: Karnataka Code: 29
+            GSTIN/UIN: 29APPPK7534R1ZR
+            Company's PAN: APPPK7534R
+
+                              E-Mail: pavan@3vikram.in                                                    Contact: 9901574446,9740997444
+
+Invoice No.: 3VT/177/2026-27                             Buyer (Bill to)
+
+Dated: 3-Jul-26                                          Synov IT Services Pvt Ltd
+
+Mode/Terms of Payment:                                   #18, Manish Mansion, 3rd Floor
+
+                                                         3rd Main Road, N.R. Colony
+
+                                                         Bengaluru
+
+                                                         State Name: Karnataka Code: 29
+
+                                                         GSTIN/UIN: 29ABICS1686C1Z4
+
+                                                         Consignee (Ship to)
+                                                         Synov IT Services Pvt Ltd
+                                                         #18, Manish Mansion, 3rd Floor, 3rd Main
+                                                         Road, N.R. Colony, Bengaluru
+                                                         State Name: Karnataka Code: 29
+                                                         GSTIN/UIN: 29ABICS1686C1Z4
+                 e-Invoice
+
+                 IRN: 91ee02c8a27a3b05bebc3f9158ad6c62496e9426-
+                         5f0139bc67320c789ed04e1f
+
+                 6 Ack No.: 112631351620564
+
+                 Ack Date: 8-Jul-26
+( Buyer's Order No.:
+,& Dated:
+
+Delivery Note:
+Delivery Note Date:
+
+9 Terms of Delivery:
+                                                         Dispatch Doc No.:                                        3VT/177/2026-27 dt. 3-Jul-26
+                                                         Destination:
+                                                         Dispatched through:
+                                                         Reference No. & Date.:
+                                                         Other References:
+
+                                                                        HSN/SAC
+
+                                                                       997315
+Sl5 No.
+                                         Description of                                                           Quantity  Rate          per   Amount
+    ( Core:I5/11THGEN/16GBRAM/512GBSSD/WIN11/ADAPTER/                                                                                              10,000.00
+                                         Services
+                                                                                                                                                          2.00
+    1 Rental-Laptops/Desktops/Servers                                                                             4 Pcs 2,500.00 Pcs
+    6 ' ENCRYPTION, EMAIL PROTECTION/BAG                                                                                                               250.00
+    LENOVOL14                                                                                                                                          417.00
+                                                                                                                                                    1,250.00
+    7 PG0340CT
+    MICROSOFT OFFICE 365 BASIC/SOPHOSE END POINT,                                                                                                   2,417.00
+                                                                                                                                                   14,336.00
+    ,7 From 01/06/2026 to 30/06/2026                                                                                                                1,290.24
+    / 2 Rental-Laptops/Desktops/Servers                                                                                                             1,290.24
+    S/N:PG02K07Y/PG02K04X/PG02W3NK
+
+    9 7 MICROSOFT OFFICE 365 BASIC/SOPHOSE END POINT                                                      997315  2 Pcs     1.00 Pcs
+
+    LENOVOL14
+
+    Core:I5/11THGEN/16GBRAM/512GBSSD/WIN11/ADAPTER/
+    2 9 S/N:PG02W3WV/PG02W728
+    ENCRYPTION, EMAIL PROTECTION/BAG
+    3 3 Rental-Laptops/Desktops/Servers
+    1 LENOVOL14
+    From 01/06/2026 to 01/06/2026
+
+    (Returned Billing 2500/- Per Month)
+
+    < S/N:PG02W3WE                                                                                        997315  1 Pcs     250.00 Pcs
+
+    Core:I5/11THGEN/16GB/512GBSSD/WIN11/ADAPTER/BAG
+    6 4 Rental-Laptops/Desktops/Servers
+    From 01/06/2026 to 03/06/2026
+
+    (Returned Billing 2500/- Per Month)
+
+                                                                                                          997315  1 Pcs     417.00 Pcs
+
+    LENOVOL14
+
+    Core:I5/11THGEN/16GB/512GBSSD/WIN11P/ADAPTER/BAG
+
+    S/N:PG030LKK
+
+    From 01/06/2026 to 05/06/2026
+
+    (Returned Billing 2500/- Per Month)
+
+    5 Rental-Laptops/Desktops/Servers                                                                     997315  1 Pcs 1,250.00 Pcs
+
+    LENOVOL14
+
+    Core:I5/11THGEN/16GBRAM/512GBSSD/WIN11/ADAPTER/
+
+    I5/11THGEN/16GBRAM/512GBSSD/WIN11/ADAPTER/
+
+    ENCRYPTION, EMAIL PROTECTION/BAG
+
+    S/N:PG02W3SQ
+
+    From 01/06/2026 to 15/06/2026
+
+    (Returned Billing 2500/- Per Month)
+
+    6 Rental-Laptops/Desktops/Servers                                                                     997315  1 Pcs 2,417.00 Pcs
+
+    LENOVOL14
+
+    Core:I5/11THGEN/16GB/512GBSSD/WIN11/ADAPTER/BAG
+
+    S/N:PG02YJHT
+
+    From 01/06/2026 to 29/06/2026
+
+    (Returned Billing 2500/- Per Month)
+
+                                                         OUTPUT CGST 9%                                                           9%
+                                                         OUTPUT SGST 9%                                                           9%
+
+                                                                                                                                  continued to page number 2
+
+                                                         This is a Computer Generated Invoice
+                                                                                  Tax Invoice(Page 2)
+                                                                                         Tax Invoice
+
+3Vikram Technologies - 2025-26
+
+        No.1/5 Santosh Complex Basavanagudi, Near Armugam Circle, Bengaluru - 560004
+        State Name: Karnataka Code: 29
+        GSTIN/UIN: 29APPPK7534R1ZR
+        Company's PAN: APPPK7534R
+
+                               E-Mail: pavan@3vikram.in                                                Contact: 9901574446,9740997444
+
+Invoice No.: 3VT/177/2026-27                                              Buyer (Bill to)
+
+Dated: 3-Jul-26                                                           Synov IT Services Pvt Ltd
+
+Mode/Terms of Payment:                                                    #18, Manish Mansion, 3rd Floor
+
+                                                                          3rd Main Road, N.R. Colony
+
+                                                                          Bengaluru
+
+                                                                          State Name: Karnataka Code: 29
+
+                                                                          GSTIN/UIN: 29ABICS1686C1Z4
+                                                                          GSTIN/UIN: 29ABICS1686C1Z4
+Consignee (Ship to)
+Synov IT Services Pvt Ltd
+#18, Manish Mansion, 3rd Floor, 3rd Main
+
+6 Road, N.R. Colony, Bengaluru
+
+State Name: Karnataka Code: 29
+
+( Buyer's Order No.:
+
+Dated:
+Delivery Note:
+
+,& Delivery Note Date:
+
+Terms of Delivery:
+                                                                          Dispatch Doc No.:
+                                                                          Destination:
+                                                                          Dispatched through:
+                                                                          Reference No. & Date.:
+                                                                          Other References:
+
+                                                                                         HSN/SAC
+Sl                                                                                                             3VT/177/2026-27 dt. 3-Jul-26
+
+9 No.
+      Less :
+129,73967(5/7' Amount Chargeable (in words):Description of                                                       Quantity      Rate    per       Amount
+                                  Services                                                                                                               (-)0.48
+
+                                                                          Rounded Off                                                             16,916.00
+                                                                                                                                                      E. & O.E
+6< 997315                                                                                       Total            10 Pcs
+                               INR Sixteen Thousand Nine Hundred Sixteen Only                                                                      Total
+                                                                                                                                               Tax Amount
+                                                                        Tax Analysis
+                                                                                                                                                      2,580.48
+                 HSN/SAC                                       Taxable                 CGST                                SGST/UTGST                 2,580.48
+
+                                                               Value      Rate                         Amount    Rate          Amount
+
+                                                               14,336.00        9%                     1,290.24            9%        1,290.24
+
+                               Total                           14,336.00                               1,290.24                      1,290.24
+
+Tax Amount (in words): INR Two Thousand Five Hundred Eighty and Forty Eight paise Only
+
+Remarks                                                                                                Company's Bank Details
+Being Rental Invoice Raised for the Month of June 2026 (KVAS)                                          A/c Holder's Name: 3VIKRAM TECHNOLOGIES -17-18 - (From
+
+                                                                                                                            1-Apr-2017)
+                                                                                                       Bank Name: HDFC BANK 04462000005256
+                                                                                                       A/c No.: 04462000005256
+                                                                                                       Branch & IFS Code: BASAVANAGUDI, GANDHI BAZAAR &
+
+                                                                                                                             HDFC0000446
+
+Declaration                                                                                                                                                                         - 2025-26
+
+We declare that this invoice shows the actual price of the
+goods described and that all particulars are true and correct.
+Terms and Conditions
+1.Interest @24% p.a will be charged on delayed
+Payments, outstanding payment made only in
+
+The form of Demand Draft/ RTGS.
+2.Goods once sold cannot be returned or
+Exchanged short shipment of materials
+Should be bought to our notice immediately.
+3.Our company is under MSME category. kindly release the payment with in the due date .MSME:UDYAM-KR-03-0029793.
+
+                                                                                                                                                          for 3Vikram Technologies
+
+Customer's Seal and Signature                                                                                                                Authorised Signatory
+
+                                               This is a Computer Generated Invoice
+

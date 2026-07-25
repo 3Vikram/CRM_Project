@@ -1,0 +1,10 @@
+packages:
+  - 'frontend'
+  - 'backend'
+  - 'packages/*'
+
+dangerouslyAllowAllBuilds: true
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: set this to true or false

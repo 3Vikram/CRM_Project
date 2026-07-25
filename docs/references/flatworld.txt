@@ -1,0 +1,161 @@
+                                             Tax Invoice
+
+                                               Tax Invoice
+
+SYNOV IT SERVICES PRIVATE LIMITED - (23-24)                                        Invoice No.                    Dated
+91 Springboard Business Hub Pvt Ltd,                                               SISPL/403/25-26                31-Dec-25
+Gopala Krishna Complex, No. 45/3                                                   Delivery Note                  Mode/Terms of Payment
+Residency Road, MG Road, Bengaluru-560025
+GSTIN/UIN: 29ABICS1686C1Z4                                                         Reference No. & Date.          Other References
+State Name : Karnataka, Code : 29                                                  SISPL/403/25-26 dt. 31-Dec-25
+CIN: U72900KA2022PTC159475                                                         Buyer's Order No.              Dated
+E-Mail : Pk.k@synov.in/sales@synov.in
+                                                                                   Dispatch Doc No.               Delivery Note Date
+Consignee (Ship to)
+                                                                                   Dispatched through             Destination
+Flatworld Solutions Pvt.Ltd.
+                                                                                   Terms of Delivery
+No.6. Opp. BPCL Petrol Bunk.
+
+Dodda Banasawadi.
+
+Bengaluru-560001
+
+GSTIN/UIN        : 29AAACF9405D1ZS
+
+State Name : Karnataka, Code : 29
+
+Buyer (Bill to)
+
+Flatworld Solutions Pvt.Ltd.
+
+No.6. Opp. BPCL Petrol Bunk.
+
+Dodda Banasawadi.
+
+Bengaluru-560001
+
+GSTIN/UIN        : 29AAACF9405D1ZS
+
+State Name : Karnataka, Code : 29
+
+Sl                   Description of                         HSN/SAC                Quantity  Rate                 per  Amount
+
+No.                           Services                                                                                  16,500.00
+                                                                                                                        58,500.00
+1 Laptops/Desktops/Server/Rental 1                          997315                 5 Pcs     3,300.00 Pcs
+        DELLPRO 14                                                                                                        8,600.00
+        Core:I5 - 120U/16GB/512GBSSD/ADAPTER/BAG/BOXPIECE   997315                 15 Pcs    3,900.00 Pcs
+        S/N:8VT8XC4/5XT8XC4/7YT8XC4                                                                                     83,600.00
+        FXT8XC4/1YT8XC4                                     997315                 1 Pcs     8,600.00 Pcs
+        From 01/12/2025 to 31/12/2025                                                                                     7,524.00
+
+2 Laptops/Desktops/Server/Rental 1
+        DELL LATITUDE5450
+        Core:INTELCORE ULTRA 7/165H VPRO/16GB DDR5/
+        512GB SSD/WINDOWS 11PRO/BAG/BOXPIECE
+        S/N:CQHRXC4/DKGRXC4/7VHRXC4
+        7YJRXC4/HWHRXC4/7SHRXC4
+        9BNRXC4/DRHRXC4/1RHRXC4
+        HTHRXC4/BLGRXC4/6LGRXC4
+        FLGRXC4/3LGRXC4/4JPRXC4
+        From 01/12/2025 to 31/12/2025
+
+3 Laptops/Desktops/Server/Rental 1
+        DELL MOBILE PRECISION 3591
+        Core:ULTRA 9-185H VPRO/32GBRAM/1TBSSD/
+        WINDOWS 11 PRO/BAG/BOXPIECE
+        S/N:9MQP2C4
+        From 01/12/2025 to 31/12/2025
+
+                                        OUTPUT CGST 9%                                                            9%
+
+                                                                                                                  continued to page number 2
+
+                                             This is a Computer Generated Invoice
+                                                     Tax Invoice(Page 2)
+
+                                                                Tax Invoice
+
+SYNOV IT SERVICES PRIVATE LIMITED - (23-24)                                        Invoice No.                        Dated
+91 Springboard Business Hub Pvt Ltd,                                               SISPL/403/25-26                    31-Dec-25
+Gopala Krishna Complex, No. 45/3                                                   Delivery Note                      Mode/Terms of Payment
+Residency Road, MG Road, Bengaluru-560025
+GSTIN/UIN: 29ABICS1686C1Z4                                                         Reference No. & Date.              Other References
+State Name : Karnataka, Code : 29                                                  SISPL/403/25-26 dt. 31-Dec-25
+CIN: U72900KA2022PTC159475                                                         Buyer's Order No.                  Dated
+E-Mail : Pk.k@synov.in/sales@synov.in
+                                                                                   Dispatch Doc No.                   Delivery Note Date
+Consignee (Ship to)
+                                                                                   Dispatched through                 Destination
+Flatworld Solutions Pvt.Ltd.
+
+No.6. Opp. BPCL Petrol Bunk.
+
+Dodda Banasawadi.                                                                  Terms of Delivery
+
+Bengaluru-560001
+
+GSTIN/UIN        : 29AAACF9405D1ZS
+
+State Name : Karnataka, Code : 29
+
+Buyer (Bill to)
+
+Flatworld Solutions Pvt.Ltd.
+
+No.6. Opp. BPCL Petrol Bunk.
+
+Dodda Banasawadi.
+
+Bengaluru-560001
+
+GSTIN/UIN        : 29AAACF9405D1ZS
+
+State Name : Karnataka, Code : 29
+
+Sl                   Description of                                      HSN/SAC       Quantity        Rate           per       Amount
+
+No.                           Services
+
+                                        OUTPUT SGST 9%                                                                9%        7,524.00
+
+                                                                Total                  21 Pcs                                 98,648.00
+
+Amount Chargeable (in words)                                                                                                            E. & O.E
+
+INR Ninety Eight Thousand Six Hundred Forty Eight Only
+
+                                                                Taxable            CGST                SGST/UTGST                     Total
+                                                                  Value                                                         Tax Amount
+                                                                             Rate      Amount         Rate            Amount
+                                                                                                                                    15,048.00
+                                                                83,600.00          9%  7,524.00                   9%  7,524.00      15,048.00
+                                                                83,600.00
+                                                     Total:                            7,524.00                       7,524.00
+
+Tax Amount (in words) : INR Fifteen Thousand Forty Eight Only
+
+Remarks:
+Being Rental Invoice for the Month of December 2025
+
+Company's PAN        : ABICS1686C
+
+Declaration
+
+We declare that this invoice shows the actual price of the      Company's Bank Details
+goods described and that all particulars are true and correct.
+Terms and Conditions                                            A/c Holder's Name : SYNOV IT SERVICES PRIVATE LIMITED - (23-24)
+1.Interest @24% p.a will be charged on delayed
+Payments, outstanding payment made only in                      Bank Name              : ICICI- CA-473205000166
+The form of Demand Draft/ RTGS.
+2.Goods once sold cannot be returned or                         A/c No.                : 473205000166
+Exchanged short shipment of materials
+Should be bought to our notice immediately.                     Branch & IFS Code : ICIC0004732
+3.Our company is registered under MSME Category. kindly
+release the Payment within due date. MSME:UDYAM-KR-03                                  for SYNOV IT SERVICES PRIVATE LIMITED - (23-24)
+
+                                                                                                                           Authorised Signatory
+
+                                             This is a Computer Generated Invoice
+
