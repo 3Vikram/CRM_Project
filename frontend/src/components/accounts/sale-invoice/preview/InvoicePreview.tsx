@@ -72,8 +72,6 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
 
       <PreviewLineTable invoice={invoice} />
 
-      <PreviewTaxSummary invoice={invoice} draft={draft} />
-
       {invoice.mixedCompany && (
         <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
           <div className="font-semibold">{invoice.mixedCompanyWarning}</div>
@@ -86,7 +84,12 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
         </div>
       )}
 
-      {!invoice.mixedCompany && <PreviewFooter invoice={invoice} draft={draft} />}
+      {!invoice.mixedCompany && (
+        <div className="preview-summary-block">
+          <PreviewTaxSummary invoice={invoice} draft={draft} />
+          <PreviewFooter invoice={invoice} draft={draft} />
+        </div>
+      )}
 
       <div className="mt-12 text-[10px] text-gray-400 text-right">
         Billing month: {billingMonthLabel(draft.billingMonth)} ·

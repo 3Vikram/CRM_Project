@@ -167,3 +167,55 @@
     @apply w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors;
   }
 }
+
+/* ----------------------------------------------------------------
+ * ISSUE-09 — print stylesheet. The controls panel, sidebar, action bar,
+ * warnings and any chrome are hidden; only the live preview prints.
+ * A4 portrait, header row of the line-items table repeats on every page,
+ * the summary footer block stays together on the final page.
+ * ------------------------------------------------------------ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 14mm;
+    /* Browser-supporting page counter; Chrome ignores this margin-box
+       and adds its own via the print dialog. */
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 9pt;
+      color: #6b7280;
+    }
+  }
+  html, body { background: #fff !important; }
+  body * { visibility: hidden; }
+
+  /* Reveal only the preview root and its descendants. */
+  .preview-root, .preview-root * { visibility: visible; }
+  .preview-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    font-size: 12pt;
+    color: #111827 !important;
+  }
+
+  /* Hide the whole controls pane / action bar / warnings / dropzone. */
+  .controls-panel,
+  .preview-pane > .no-print,
+  [data-no-print] { display: none !important; }
+
+  /* Line rows avoid mid-row splits. */
+  .preview-root table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+  .preview-root table thead { display: table-header-group; }
+
+  /* Summary footer block stays together on the final page. */
+  .preview-summary-block { break-inside: avoid; page-break-inside: avoid; }
+}
+

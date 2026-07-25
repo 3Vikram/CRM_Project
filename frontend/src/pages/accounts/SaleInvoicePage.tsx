@@ -110,7 +110,7 @@ function SaleInvoiceInner() {
   return (
     <div className="space-y-6">
       {/* Action bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-no-print>
         <div>
           <h1 className="text-4xl font-serif font-bold text-gray-900 mb-1">
             Sale Invoice
@@ -121,6 +121,9 @@ function SaleInvoiceInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <span className="hidden sm:inline-flex items-center px-2.5 h-8 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs">
+            Autosaves locally
+          </span>
           <button
             type="button"
             disabled={!computed}
@@ -142,13 +145,13 @@ function SaleInvoiceInner() {
       </div>
 
       {loadErr && (
-        <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
+        <div data-no-print className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
           Could not load seller presets from /api/entities: {loadErr}. Is the
           backend running on port 4000?
         </div>
       )}
       {mixedCompany && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
+        <div data-no-print className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
           <div className="font-semibold">
             The dropped rows contain mixed <code>COMPANY</code> values — split
             into two invoices before generating.
