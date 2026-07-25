@@ -245,7 +245,10 @@ describe('POST /api/invoices/compute', () => {
     const body = res.body
     expect(body.mixedCompany).toBe(true)
     expect(body.mixedCompanyWarning).toBeTruthy()
-    expect(body.lines).toEqual([])
+    // Mixed-company blocks totals/tax, but still returns line rows so the
+    // operator can see what needs splitting in the preview.
+    expect(body.lines).toHaveLength(2)
+    expect(body.lines[0].description).toContain('LENOVO')
     expect(body.taxableTotal).toBe(0)
     expect(body.companyBreakdown.map((c: any) => c.company).sort()).toEqual(['3VIKRAM', 'SYNOV'])
   })
