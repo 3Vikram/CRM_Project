@@ -30,10 +30,14 @@ export function PreviewTaxSummary({
       {/* Total / Rounded-Off / Grand Total — bottom right */}
       <div className="flex justify-end text-sm mt-3">
         <div className="w-64">
-          <div className="flex justify-between border-t border-gray-300 border-b border-[#EFECE5] py-1">
+          <div className="flex justify-between border-t border-gray-300 border-b border-[#EFECE5] py-1 text-xs text-gray-700">
+            <span>No. of Items</span>
+            <span>{totalPcs} Pcs</span>
+          </div>
+          <div className="flex justify-between border-b border-[#EFECE5] py-1">
             <span className="font-medium">Total</span>
             <span className="font-semibold">
-              {totalPcs} Pcs · {invoice.grandTotal.toFixed(2)}
+              {invoice.grandTotal.toFixed(2)}
             </span>
           </div>
           {invoice.roundOff && (
