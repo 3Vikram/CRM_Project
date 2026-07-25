@@ -73,7 +73,13 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
       amount: line.amount,
       discount: line.discount,
       isReturned: line.isReturned,
-      subLines: [],
+      subLines: (line.members ?? []).map((m) => ({
+        serial: m.serial,
+        configuration: m.configuration,
+        from: m.from,
+        to: m.to,
+        isReturned: m.isReturned,
+      })),
     }
   })
 

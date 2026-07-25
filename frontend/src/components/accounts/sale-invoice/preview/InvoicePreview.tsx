@@ -57,7 +57,7 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
         </div>
       </div>
 
-      <PreviewLineTable invoice={invoice} draft={draft} />
+      <PreviewLineTable invoice={invoice} />
 
       <PreviewTaxSummary invoice={invoice} draft={draft} />
 

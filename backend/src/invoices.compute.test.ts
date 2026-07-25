@@ -184,6 +184,38 @@ describe('POST /api/invoices/compute', () => {
     expect(body.roundedGrandTotal).toBeCloseTo(100.48, 2)
   })
 
+  it('carries stacked sub-lines for grouped members and sums their amount/tax', async () => {
+    const app = createApp()
+    const groupedLines = [
+      {
+        rowRef: 1,
+        make: 'LENOVO',
+        model: 'L14',
+        serial: ['S1', 'S2'],
+        configuration: 'WIN11 / WIN11PRO',
+        price: 3650,
+        quantity: 2,
+        isReturned: false,
+        amount: 7300,
+        company: '3VIKRAM',
+        members: [
+          { rowRef: 1, serial: 'S1', configuration: 'WIN11', from: '2025-12-01', to: '2025-12-31', isReturned: false },
+          { rowRef: 2, serial: 'S2', configuration: 'WIN11PRO', from: '2025-12-01', to: '2025-12-31', isReturned: false },
+        ],
+      },
+    ]
+    const res = await request(app)
+      .post('/api/invoices/compute')
+      .send(baseDraft({ lines: groupedLines as any }))
+      .expect(200)
+    const body = res.body
+    expect(body.lines[0].quantity).toBe(2)
+    expect(body.lines[0].subLines.length).toBe(2)
+    expect(body.lines[0].subLines[0].serial).toBe('S1')
+    expect(body.taxableTotal).toBe(7300)
+    expect(body.totalTax).toBeCloseTo((18 / 100) * 7300, 2)
+  })
+
   it('rejects a malformed draft with 4xx', async () => {
     const app = createApp()
     await request(app)

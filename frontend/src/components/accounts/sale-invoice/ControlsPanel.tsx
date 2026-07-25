@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useDraft } from '@/pages/accounts/sale-invoice/draft-context'
 import { LineItemsTable } from './LineItemsTable'
 import type { Entity, TaxType } from '@crm/shared'
@@ -16,6 +17,7 @@ interface Props {
  */
 export function ControlsPanel({ entities }: Props) {
   const { draft, dispatch } = useDraft()
+  const [grouped, setGrouped] = useState(false)
 
   return (
     <div className="space-y-4">
@@ -143,9 +145,21 @@ export function ControlsPanel({ entities }: Props) {
       </Section>
 
       <Section title="Line items">
+        <div className="mb-3 flex items-center gap-4">
+          <ToggleField
+            label="Per-line discount"
+            checked={draft.toggles.lineDiscount}
+            onChange={(v) => dispatch({ type: 'SET_TOGGLE', key: 'lineDiscount', value: v })}
+          />
+        </div>
         <LineItemsTable
           rows={draft.lines}
           onChange={(lines) => dispatch({ type: 'SET_LINES', lines })}
+          returnedBillingRate={draft.returnedBillingRate}
+          billingMonthFrom={draft.billingMonth.from}
+          showDiscount={draft.toggles.lineDiscount}
+          grouped={grouped}
+          onToggleGrouped={setGrouped}
         />
       </Section>
     </div>

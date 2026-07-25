@@ -1,14 +1,11 @@
 'use client'
 
-import type { ComputedInvoice, InvoiceDraft } from '@crm/shared'
-import { formatDDMonYY } from '@/lib/dates'
+import type { ComputedInvoice } from '@crm/shared'
 
 export function PreviewLineTable({
   invoice,
-  draft,
 }: {
   invoice: ComputedInvoice
-  draft: InvoiceDraft
 }) {
   return (
     <table className="w-full text-xs mt-8 border-collapse">
@@ -29,7 +26,34 @@ export function PreviewLineTable({
             <td className="py-2 px-2">{i + 1}</td>
             <td className="py-2 px-2 whitespace-pre-line">
               <div className="font-semibold text-gray-900">{l.description}</div>
-              {/* stacked sub-line detail (grouped in ISSUE-04) */}
+              {l.subLines && l.subLines.length > 0 && (
+                <div className="mt-1 space-y-0.5 text-gray-700">
+                  {l.subLines.map((s, j) => (
+                    <div key={j} className="leading-relaxed">
+                      {s.configuration && <div>{s.configuration}</div>}
+                      <div className="font-mono">
+                        S/N: {s.serial}
+                        {s.isReturned && (
+                          <span className="ml-2 text-amber-700">
+                            (Returned Billing{' '}
+                            {s.from && s.to ? `${s.from}→${s.to}` : ''})
+                          </span>
+                        )}
+                      </div>
+                      {s.from && s.to && (
+                        <div className="text-gray-500">
+                          From {fmt(s.from)} to {fmt(s.to)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {l.isReturned && !l.subLines?.length && (
+                <div className="text-amber-700 mt-0.5">
+                  (Returned Billing){l.from && l.to ? ` ${l.from}→${l.to}` : ''}
+                </div>
+              )}
             </td>
             <td className="py-2 px-2 text-center">{l.hsn}</td>
             <td className="py-2 px-2 text-right">{l.quantity} Pcs</td>
@@ -48,4 +72,8 @@ export function PreviewLineTable({
       </tbody>
     </table>
   )
+}
+
+function fmt(iso: string) {
+  return iso
 }

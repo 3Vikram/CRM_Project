@@ -14,6 +14,16 @@ import { z } from 'zod'
  * by ISSUE-05 for seller auto-selection and mixed-company detection. The
  * privacy-sensitive PERSON / COURIER / CONTACT NO columns are never carried.
  */
+export const LineItemMemberSchema = z.object({
+  rowRef: z.number(),
+  serial: z.string(),
+  configuration: z.string(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  isReturned: z.boolean(),
+})
+export type LineItemMember = z.infer<typeof LineItemMemberSchema>
+
 export const LineItemSchema = z.object({
   rowRef: z.number(),
   make: z.string(),
@@ -29,5 +39,7 @@ export const LineItemSchema = z.object({
   discount: z.number().optional(),
   months: z.number().optional(),
   company: z.string().optional(),
+  /** When grouped, the constituent units stacked beneath the "N Pcs" line. */
+  members: z.array(LineItemMemberSchema).optional(),
 })
 export type LineItem = z.infer<typeof LineItemSchema>
