@@ -17,7 +17,7 @@ export function PreviewParties({
   const buyer = invoice.buyer
   const consignee = draft.shippingSameAsBilling ? buyer : (invoice.consignee ?? buyer)
   return (
-    <div className="grid grid-cols-2 gap-x-8">
+    <div className="invoice-parties">
       <Block title="Consignee (Ship to)" party={consignee} />
       <Block title="Buyer (Bill to)" party={buyer} />
     </div>
@@ -32,23 +32,23 @@ function Block({
   party: NonNullable<ComputedInvoice['buyer']>
 }) {
   return (
-    <div>
-      <div className="font-serif font-bold text-sm text-gray-900">{title}</div>
+    <div className="invoice-party-block">
+      <div className="invoice-party-title">{title}</div>
       {party.name ? (
         <>
-          <div className="text-sm text-gray-800 mt-0.5">{party.name}</div>
-          <div className="text-sm text-gray-700 whitespace-pre-line">{party.address}</div>
+          <div className="invoice-party-name">{party.name}</div>
+          <div className="invoice-party-address">{party.address}</div>
           {party.stateName && (
-            <div className="text-xs text-gray-600 mt-1">
+            <div className="invoice-party-detail">
               State Name: {party.stateName} Code: {party.stateCode}
             </div>
           )}
           {party.gstin && (
-            <div className="text-xs text-gray-600">GSTIN/UIN: {party.gstin}</div>
+            <div className="invoice-party-detail">GSTIN/UIN: {party.gstin}</div>
           )}
         </>
       ) : (
-        <div className="text-xs text-gray-400 mt-1">—</div>
+        <div className="invoice-party-detail">—</div>
       )}
     </div>
   )

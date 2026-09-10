@@ -11,8 +11,10 @@ import PurchaseOrdersPage from '@/pages/PurchaseOrdersPage'
 import DCTrackingPage from '@/pages/DCTrackingPage'
 import BillSalePage from '@/pages/BillSalePage'
 import PlaceholderPage from '@/pages/PlaceholderPage'
-import AccountsBlankPage from '@/pages/accounts/AccountsBlankPage'
 import SaleInvoicePage from '@/pages/accounts/SaleInvoicePage'
+import { AccountingProvider } from '@/components/accounts/accounting-context'
+import { PurchaseInvoicePage, JournalRegisterPage, BankPaymentsPage, LedgerPage, ProfitLossPage, ReportsPage } from '@/pages/accounts/AccountingPages'
+import BalanceSheetPage from '@/pages/accounts/BalanceSheetPage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -28,13 +30,15 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
 
 function AccountsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex">
-      <AccountsSidebar />
-      <div className="flex-1 ml-56">
-        <TopBar searchPlaceholder="Search invoices, ledger, reports..." userRole="Accounts · Finance" userInitials="AC" />
-        <main className="mt-16 p-8">{children}</main>
+    <AccountingProvider>
+      <div className="flex">
+        <AccountsSidebar />
+        <div className="flex-1 ml-56">
+          <TopBar searchPlaceholder="Search invoices, ledger, reports..." userRole="Accounts · Finance" userInitials="AC" />
+          <main className="mt-16 p-8">{children}</main>
+        </div>
       </div>
-    </div>
+    </AccountingProvider>
   )
 }
 
@@ -138,32 +142,24 @@ export default function App() {
           path="/accounts/purchase-invoice"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="Purchase Invoice"
-                description="Record and review purchase invoices."
-              />
+              <PurchaseInvoicePage />
             </AccountsLayout>
           }
         />
         <Route
-          path="/accounts/general-voucher"
+          path="/accounts/journal-register"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="General Voucher"
-                description="Post general accounting vouchers."
-              />
+              <JournalRegisterPage />
             </AccountsLayout>
           }
         />
+        <Route path="/accounts/general-voucher" element={<Navigate to="/accounts/journal-register" replace />} />
         <Route
           path="/accounts/bank-payments"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="Bank Payments"
-                description="Manage bank payment transactions."
-              />
+              <BankPaymentsPage />
             </AccountsLayout>
           }
         />
@@ -171,10 +167,7 @@ export default function App() {
           path="/accounts/ledger"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="Ledger"
-                description="View account ledgers and balances."
-              />
+              <LedgerPage />
             </AccountsLayout>
           }
         />
@@ -182,10 +175,15 @@ export default function App() {
           path="/accounts/profit-loss"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="P & L"
-                description="Profit and loss statement overview."
-              />
+              <ProfitLossPage />
+            </AccountsLayout>
+          }
+        />
+        <Route
+          path="/accounts/balance-sheet"
+          element={
+            <AccountsLayout>
+              <BalanceSheetPage />
             </AccountsLayout>
           }
         />
@@ -193,10 +191,7 @@ export default function App() {
           path="/accounts/reports"
           element={
             <AccountsLayout>
-              <AccountsBlankPage
-                title="Reports"
-                description="Financial reports and statements."
-              />
+              <ReportsPage />
             </AccountsLayout>
           }
         />

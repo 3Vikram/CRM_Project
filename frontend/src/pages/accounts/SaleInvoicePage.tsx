@@ -8,6 +8,7 @@ import { useDebounced } from '@/lib/useDebounced'
 import { ExcelDropzone } from '@/components/accounts/sale-invoice/ExcelDropzone'
 import { ControlsPanel } from '@/components/accounts/sale-invoice/ControlsPanel'
 import { InvoicePreview } from '@/components/accounts/sale-invoice/preview/InvoicePreview'
+import { groupIdentical } from '@/lib/groupLines'
 import {
   DraftProvider,
   useDraft,
@@ -92,7 +93,9 @@ function SaleInvoiceInner() {
 
   const handleDrop = (rows: LineItem[]) => {
     const seller = pickSellerFromRows(rows, entities)
-    dispatch({ type: 'SET_LINES_AND_SELLER', lines: rows, entity: seller })
+    // The invoice itself is configuration-based: one configuration line with
+    // all of its device serial numbers beneath it.
+    dispatch({ type: 'SET_LINES_AND_SELLER', lines: groupIdentical(rows), entity: seller })
   }
 
   const handleReset = () => {
@@ -106,6 +109,14 @@ function SaleInvoiceInner() {
     const companies = new Set(draft.lines.map((l) => l.company).filter(Boolean))
     return companies.size > 1
   }, [draft.lines])
+
+  const splitByCompany = (company: string) => {
+    const entityId = company === 'SYNOV' ? 'synov' : company === '3VIKRAM' ? '3vikram' : draft.sellerId
+    const seller = entities.find((entity) => entity.id === entityId)
+    const lines = draft.lines.filter((line) => (line.company ?? '').toUpperCase() === company)
+    if (seller) dispatch({ type: 'SET_LINES_AND_SELLER', lines, entity: seller })
+    else dispatch({ type: 'SET_LINES', lines })
+  }
 
   return (
     <div className="space-y-6">
@@ -126,7 +137,8 @@ function SaleInvoiceInner() {
           </span>
           <button
             type="button"
-            disabled={!computed}
+            disabled={!computed || Boolean(computed?.mixedCompany)}
+            title={computed?.mixedCompany ? 'Split SYNOV and 3VIKRAM rows into separate invoices before printing.' : undefined}
             onClick={() => window.print()}
             className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
           >
@@ -161,6 +173,13 @@ function SaleInvoiceInner() {
               {computed.companyBreakdown.map((c) => `${c.company}: ${c.count}`).join(' · ')}
             </div>
           )}
+          <div className="mt-2 flex gap-2">
+            {['SYNOV', '3VIKRAM'].filter((company) => draft.lines.some((line) => line.company === company)).map((company) => (
+              <button key={company} type="button" onClick={() => splitByCompany(company)} className="rounded border border-amber-400 bg-white px-2 py-1 text-xs font-medium hover:bg-amber-100">
+                Create {company} invoice
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

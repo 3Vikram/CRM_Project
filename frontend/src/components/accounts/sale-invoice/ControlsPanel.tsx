@@ -17,7 +17,7 @@ interface Props {
  */
 export function ControlsPanel({ entities }: Props) {
   const { draft, dispatch } = useDraft()
-  const [grouped, setGrouped] = useState(false)
+  const [grouped, setGrouped] = useState(true)
   const seller = entities.find((e) => e.id === draft.sellerId)
 
   return (

@@ -1,30 +1,26 @@
 import type { LineItem, LineItemMember } from '@crm/shared'
 
 /**
- * Grouping key: (MAKE, MODEL, PRICE). `CONFIGURATION` is intentionally
- * excluded — it drifts by trim (WIN11 vs WIN11PRO, BOXPIECE present/absent)
- * and would otherwise prevent legitimate groups.
+ * Grouping key: (MAKE, MODEL, CONFIGURATION, PRICE). The configuration is
+ * normalized for whitespace/case only, so one configuration can contain many
+ * serial numbers without merging genuinely different configurations.
  */
 function groupKey(r: LineItem): string {
-  return `${r.make.trim().toLowerCase()}|${r.model.trim().toLowerCase()}|${r.price}`
+  const config = r.configuration.trim().replace(/\s+/g, ' ').toLowerCase()
+  return `${(r.company ?? '').trim().toLowerCase()}|${r.make.trim().toLowerCase()}|${r.model.trim().toLowerCase()}|${config}|${r.price}`
 }
 
 /**
- * Collapse **non-returned** rows whose `(MAKE, MODEL, PRICE)` match into one
- * "N Pcs @ PRICE" line. Returned rows stay as individual lines so a return
- * is always visible (never absorbed into a "N Pcs" total). Each grouped line
- * stacks its constituent units' serial / configuration / From-To as
- * `members`, rendered as sub-lines beneath the group.
+ * Collapse rows whose `(MAKE, MODEL, CONFIGURATION, PRICE)` match into one
+ * configuration line. Each member keeps its own amount and returned state, so
+ * a returned serial can be part-billed inside the same configuration group.
  *
  * Pure: no React, no DOM.
  */
 export function groupIdentical(rows: LineItem[]): LineItem[] {
-  const returned = rows.filter((r) => r.isReturned)
-  const nonReturned = rows.filter((r) => !r.isReturned)
-
   const buckets = new Map<string, LineItem[]>()
   const order: string[] = []
-  for (const r of nonReturned) {
+  for (const r of flattenLines(rows)) {
     const k = groupKey(r)
     if (!buckets.has(k)) {
       buckets.set(k, [])
@@ -36,9 +32,6 @@ export function groupIdentical(rows: LineItem[]): LineItem[] {
   const grouped: LineItem[] = order.map((k) => {
     const members = buckets.get(k)!
     const first = members[0]
-    if (members.length === 1) {
-      return { ...first, members: toMembers(members) }
-    }
     const serials = members.map((m) => String(m.serial))
     const amount = round2(members.reduce((a, m) => a + m.amount, 0))
     const discount = members.reduce((a, m) => a + (m.discount ?? 0), 0)
@@ -47,12 +40,12 @@ export function groupIdentical(rows: LineItem[]): LineItem[] {
       make: first.make,
       model: first.model,
       serial: serials,
-      configuration: members.map((m) => m.configuration).join(' / '),
+      configuration: first.configuration,
       price: first.price,
       quantity: members.length,
       from: first.from,
       to: first.to,
-      isReturned: false,
+      isReturned: members.some((m) => m.isReturned),
       amount,
       discount: discount > 0 ? discount : undefined,
       months: undefined,
@@ -61,19 +54,22 @@ export function groupIdentical(rows: LineItem[]): LineItem[] {
     }
   })
 
-  // Stable order: keep the returned rows in their original positions relative
-  // to the grouped buckets by rowRef. Simplest sane order: grouped first by
-  // rowRef, then returned by rowRef — preserves a stable appearance.
-  returned.sort((a, b) => a.rowRef - b.rowRef)
   grouped.sort((a, b) => a.rowRef - b.rowRef)
-  return [...grouped, ...returned]
+  return grouped
 }
 
 function toMembers(rows: LineItem[]): LineItemMember[] {
   return rows.map((r) => ({
     rowRef: r.rowRef,
+    make: r.make,
+    model: r.model,
     serial: String(r.serial),
     configuration: r.configuration,
+    price: r.price,
+    amount: r.amount,
+    discount: r.discount,
+    months: r.months,
+    company: r.company,
     from: r.from,
     to: r.to,
     isReturned: r.isReturned,
@@ -84,21 +80,23 @@ function toMembers(rows: LineItem[]): LineItemMember[] {
 export function flattenLines(rows: LineItem[]): LineItem[] {
   const out: LineItem[] = []
   for (const r of rows) {
-    if (r.members && r.members.length > 1) {
+    if (r.members && r.members.length > 0) {
       for (const m of r.members) {
         out.push({
           rowRef: m.rowRef,
-          make: r.make,
-          model: r.model,
+          make: m.make ?? r.make,
+          model: m.model ?? r.model,
           serial: m.serial,
           configuration: m.configuration,
-          price: r.price,
+          price: m.price ?? r.price,
           quantity: 1,
           from: m.from,
           to: m.to,
           isReturned: m.isReturned,
-          amount: r.price,
-          company: r.company,
+          amount: m.amount ?? r.amount / Math.max(r.quantity, 1),
+          discount: m.discount,
+          months: m.months,
+          company: m.company,
         })
       }
     } else {

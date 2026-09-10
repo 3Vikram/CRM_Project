@@ -232,6 +232,29 @@ describe('POST /api/invoices/compute', () => {
     expect(body.totalTax).toBeCloseTo((18 / 100) * 7300, 2)
   })
 
+  it('always returns the full printable configuration and serial detail for a flat line', async () => {
+    const app = createApp()
+    const res = await request(app).post('/api/invoices/compute').send(baseDraft({
+      lines: [{
+        ...line1(10000), quantity: 4, price: 2500, isReturned: false,
+        serial: 'PG02K07Y/PG02K04X/PG02W3NK/PG0340CT',
+        configuration: 'Core:I5/11THGEN/16GBRAM/512GBSSD/WIN11/ADAPTER/BAG',
+        from: '2026-06-01', to: '2026-06-30', company: 'SYNOV',
+      }] as any,
+    })).expect(200)
+    const line = res.body.lines[0]
+    expect(line.description).toContain('LENOVO L14')
+    expect(line.quantity).toBe(4)
+    expect(line.rate).toBe(2500)
+    expect(line.amount).toBe(10000)
+    expect(line.subLines[0]).toMatchObject({
+      model: 'L14',
+      configuration: 'Core:I5/11THGEN/16GBRAM/512GBSSD/WIN11/ADAPTER/BAG',
+      serial: 'PG02K07Y/PG02K04X/PG02W3NK/PG0340CT',
+      from: '2026-06-01', to: '2026-06-30',
+    })
+  })
+
   it('blocks compute when rows mix COMPANY into an empty-lines mixedCompany response', async () => {
     const app = createApp()
     const lines = [

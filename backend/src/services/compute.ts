@@ -20,8 +20,7 @@ function round2(n: number): number {
 function describeLine(line: InvoiceDraft['lines'][number]): string {
   const make = line.make?.trim()
   const model = line.model?.trim()
-  if (make && model) return `${make} ${model}`
-  return make || model || 'Rental'
+  return make && model ? `${make} ${model}` : make || model || 'Rental'
 }
 
 /** Compute the per-line taxable value = amount − discount (discount before tax). */
@@ -60,22 +59,23 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
   }
 
   const consignee = draft.consignee ?? draft.buyer
+  const invoiceLines = groupConfigurationLines(draft.lines)
 
   // Mixed COMPANY guard — one GSTIN cannot bill another entity's rentals.
   const companyKeys = new Set(
-    draft.lines.map((l) => (l.company ?? '').toUpperCase()).filter(Boolean),
+    invoiceLines.map((l) => (l.company ?? '').toUpperCase()).filter(Boolean),
   )
   if (companyKeys.size > 1) {
     const breakdown = [...companyKeys.entries()].map(([company, _i]) => ({
       company,
-      count: draft.lines.filter((l) => (l.company ?? '').toUpperCase() === company).length,
+      count: invoiceLines.filter((l) => (l.company ?? '').toUpperCase() === company).length,
     }))
     return {
       seller: entityToSeller(sellerEntity),
       buyer: draft.buyer,
       consignee,
       hsn: draft.hsn,
-      lines: draft.lines.map((line) => ({
+      lines: invoiceLines.map((line) => ({
         rowRef: line.rowRef,
         description: describeLine(line),
         hsn: draft.hsn,
@@ -85,9 +85,11 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
         amount: line.amount,
         discount: line.discount,
         isReturned: line.isReturned,
-        subLines: (line.members ?? []).map((m) => ({
+        subLines: displayMembers(line).map((m) => ({
           serial: m.serial,
+          model: m.model,
           configuration: m.configuration,
+          amount: m.amount,
           from: m.from,
           to: m.to,
           isReturned: m.isReturned,
@@ -109,7 +111,7 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
     } as ComputedInvoice
   }
 
-  const computedLines: ComputedLine[] = draft.lines.map((line) => {
+  const computedLines: ComputedLine[] = invoiceLines.map((line) => {
     const taxable = lineTaxableValue(line)
     return {
       rowRef: line.rowRef,
@@ -121,9 +123,11 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
       amount: line.amount,
       discount: line.discount,
       isReturned: line.isReturned,
-      subLines: (line.members ?? []).map((m) => ({
+      subLines: displayMembers(line).map((m) => ({
         serial: m.serial,
+        model: m.model,
         configuration: m.configuration,
+        amount: m.amount,
         from: m.from,
         to: m.to,
         isReturned: m.isReturned,
@@ -214,6 +218,58 @@ export function computeInvoice(draft: InvoiceDraft): ComputedInvoice {
     suggestedTaxType: suggestTaxType(sellerEntity.stateCode, draft.buyer.stateCode, draft.gstApplicable),
     resolvedFooter: Object.keys(resolvedFooter).length > 0 ? resolvedFooter : undefined,
   }
+}
+
+/** Every computed invoice line must carry printable device detail. Grouped
+ * drafts use their member records; old flat drafts get an equivalent member
+ * synthesized from their own make/model/configuration/serial fields. */
+function displayMembers(line: InvoiceDraft['lines'][number]) {
+  if (line.members?.length) return line.members
+  return [{
+    rowRef: line.rowRef,
+    make: line.make,
+    model: line.model,
+    serial: Array.isArray(line.serial) ? line.serial.join('/') : line.serial,
+    configuration: line.configuration,
+    price: line.price,
+    amount: line.amount,
+    discount: line.discount,
+    months: line.months,
+    company: line.company,
+    from: line.from,
+    to: line.to,
+    isReturned: line.isReturned,
+  }]
+}
+
+function groupConfigurationLines(lines: InvoiceDraft['lines']): InvoiceDraft['lines'] {
+  // A legacy grouped line remains intact: older drafts may deliberately hold
+  // more than one configuration in its serial-member list.
+  const flat = lines.filter((line) => !line.members?.length)
+  const alreadyGrouped = lines.filter((line) => line.members?.length)
+  const groups = new Map<string, typeof flat>()
+  for (const line of flat) {
+    const config = line.configuration.trim().replace(/\s+/g, ' ').toLowerCase()
+    const key = `${(line.company ?? '').trim().toLowerCase()}|${line.make.trim().toLowerCase()}|${line.model.trim().toLowerCase()}|${config}|${line.price}`
+    const group = groups.get(key) ?? []
+    group.push(line)
+    groups.set(key, group)
+  }
+  const freshlyGrouped = [...groups.values()].map((members) => {
+    const first = members[0]
+    const amount = round2(members.reduce((sum, line) => sum + line.amount, 0))
+    const discount = round2(members.reduce((sum, line) => sum + (line.discount ?? 0), 0))
+    return {
+      ...first, serial: members.map((line) => String(line.serial)),
+      quantity: members.length === 1 ? first.quantity : members.length,
+      amount, discount: discount || undefined, isReturned: members.some((line) => line.isReturned),
+      members: members.map((line) => ({ rowRef: line.rowRef, make: line.make, model: line.model,
+        serial: String(line.serial), configuration: line.configuration, price: line.price, amount: line.amount,
+        discount: line.discount, months: line.months, company: line.company, from: line.from, to: line.to,
+        isReturned: line.isReturned })),
+    }
+  })
+  return [...alreadyGrouped, ...freshlyGrouped]
 }
 
 /** "Jun 2026 / Jul 2026" label spanning the billing month range. */

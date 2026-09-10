@@ -168,6 +168,41 @@
   }
 }
 
+/* Tally-style sale-invoice sheet. The invoice deliberately uses compact
+ * document typography and hard table rules instead of the application's card
+ * styling so the printed PDF matches the supplied tax-invoice reference. */
+.invoice-sheet {
+  padding: 22px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  line-height: 1.18;
+  color: #000;
+}
+.invoice-header { position: relative; border-bottom: 2px solid #111; padding: 4px 14px 0; }
+.invoice-kind { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: 700; }
+.invoice-seller-name { font-size: 17px; font-weight: 700; margin-top: 23px; }
+.invoice-address { font-style: normal; margin-top: 3px; max-width: 70%; }
+.invoice-seller-detail { font-size: 9px; line-height: 1.25; }
+.invoice-contact { position: static; margin: 5px -14px 0; border-top: 1px solid #111; text-align: center; padding: 2px 14px; }
+.invoice-einvoice { margin-top: 8px; width: 180px; border: 1px solid #111; padding: 4px; font-size: 8px; }
+.invoice-party-row { display: grid; grid-template-columns: minmax(0, 1fr) 245px; border-bottom: 1px solid #111; min-height: 112px; }
+.invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 6px; }
+.invoice-party-block { min-width: 0; }
+.invoice-party-title { font-size: 9px; font-weight: 700; }
+.invoice-party-name { margin-top: 2px; font-weight: 700; }
+.invoice-party-address { white-space: pre-line; }
+.invoice-party-detail { font-size: 9px; }
+.invoice-meta { border-left: 1px solid #111; padding: 8px 6px; font-size: 9px !important; }
+.invoice-meta > div { border-color: #111 !important; padding: 2px 0 !important; }
+.invoice-meta span:first-child { width: 120px !important; color: #000 !important; }
+.invoice-line-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-family: Arial, Helvetica, sans-serif; font-size: 10px; }
+.invoice-line-table th, .invoice-line-table td { border: 1px solid #111; padding: 2px 4px; vertical-align: top; color: #000; }
+.invoice-line-table th { background: #f9e8d8; text-align: center; font-size: 10px; line-height: 1.02; font-weight: 400; }
+.invoice-line-table .col-sl { width: 28px; }.invoice-line-table .col-hsn { width: 72px; }.invoice-line-table .col-qty { width: 78px; }.invoice-line-table .col-rate { width: 78px; }.invoice-line-table .col-per { width: 48px; }.invoice-line-table .col-amount { width: 96px; }
+.invoice-sl { text-align: right; }.invoice-description { line-height: 1.27; padding-left: 5px !important; }.invoice-description strong { display: block; font-size: 11px; }.invoice-hsn { text-align: center; }.invoice-qty, .invoice-rate, .invoice-per, .invoice-amount { text-align: right; }.invoice-qty, .invoice-amount { font-weight: 700; }.invoice-per { text-align: center; }.invoice-empty { padding: 16px; text-align: center; }
+.invoice-sheet .preview-summary-block { font-size: 10px; }.invoice-sheet .preview-summary-block * { border-radius: 0 !important; }
+.invoice-computer-note { margin-top: 5px; text-align: center; font-size: 8px; color: #222; }
+
 /* ----------------------------------------------------------------
  * ISSUE-09 — print stylesheet. The controls panel, sidebar, action bar,
  * warnings and any chrome are hidden; only the live preview prints.
@@ -177,7 +212,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm 14mm;
+    margin: 7mm 7mm;
     /* Browser-supporting page counter; Chrome ignores this margin-box
        and adds its own via the print dialog. */
     @bottom-right {
@@ -202,9 +237,10 @@
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
-    font-size: 12pt;
+    font-size: 10pt;
     color: #111827 !important;
   }
+  .invoice-sheet { padding: 0 !important; font-size: 9pt; }
 
   /* Hide the whole controls pane / action bar / warnings / dropzone. */
   .controls-panel,
@@ -218,4 +254,3 @@
   /* Summary footer block stays together on the final page. */
   .preview-summary-block { break-inside: avoid; page-break-inside: avoid; }
 }
-

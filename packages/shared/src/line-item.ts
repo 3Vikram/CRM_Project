@@ -16,8 +16,15 @@ import { z } from 'zod'
  */
 export const LineItemMemberSchema = z.object({
   rowRef: z.number(),
+  make: z.string().optional(),
+  model: z.string().optional(),
   serial: z.string(),
   configuration: z.string(),
+  price: z.number().optional(),
+  amount: z.number().optional(),
+  discount: z.number().optional(),
+  months: z.number().optional(),
+  company: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
   isReturned: z.boolean(),

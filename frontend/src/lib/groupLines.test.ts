@@ -24,10 +24,10 @@ function row(i: number, make: string, model: string, price: number, extra: Parti
 }
 
 describe('groupIdentical', () => {
-  it('collapses non-returned rows sharing make+model+price into one N-Pcs line', () => {
+  it('collapses rows sharing make+model+configuration+price into one configuration line', () => {
     const rows = [
       row(1, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
-      row(2, 'LENOVO', 'L14', 3650, { configuration: 'WIN11PRO' }),
+      row(2, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
       row(3, 'DELL', '5450', 3650, { configuration: 'I5' }),
     ]
     const grouped = groupIdentical(rows)
@@ -37,22 +37,19 @@ describe('groupIdentical', () => {
     expect(l14.serial).toEqual(['S1', 'S2'])
     expect(l14.amount).toBe(7300)
     expect(l14.members).toHaveLength(2)
-    // configuration drift does NOT prevent grouping
-    expect(l14.members!.map((m) => m.configuration)).toEqual(['WIN11', 'WIN11PRO'])
+    expect(l14.configuration).toBe('WIN11')
   })
 
-  it('never absorbs returned rows into a group', () => {
+  it('keeps a returned serial in its configuration group with its own billing amount', () => {
     const rows = [
-      row(1, 'LENOVO', 'L14', 3650),
-      row(2, 'LENOVO', 'L14', 3650, { isReturned: true, to: '2026-06-15' }),
-      row(3, 'LENOVO', 'L14', 3650),
+      row(1, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
+      row(2, 'LENOVO', 'L14', 3650, { configuration: 'WIN11', isReturned: true, to: '2026-06-15' }),
+      row(3, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
     ]
     const grouped = groupIdentical(rows)
-    const nonReturned = grouped.filter((g) => !g.isReturned)
-    const returned = grouped.filter((g) => g.isReturned)
-    expect(nonReturned.length).toBe(1)
-    expect(nonReturned[0].quantity).toBe(2)
-    expect(returned).toHaveLength(1)
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0].quantity).toBe(3)
+    expect(grouped[0].members!.find(m => m.rowRef === 2)?.isReturned).toBe(true)
   })
 
   it('keeps a lone row as a 1-Pcs line with members preserved', () => {
@@ -65,14 +62,22 @@ describe('groupIdentical', () => {
   it('can be flattened back to one row per laptop', () => {
     const rows = [
       row(1, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
-      row(2, 'LENOVO', 'L14', 3650, { configuration: 'WIN11PRO' }),
+      row(2, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
       row(3, 'DELL', '5450', 3650),
     ]
     const grouped = groupIdentical(rows)
     const flat = flattenLines(grouped)
     expect(flat).toHaveLength(3)
     expect(flat.every((r) => r.quantity === 1)).toBe(true)
-    expect(flat.map((r) => r.configuration)).toEqual(['WIN11', 'WIN11PRO', 'cfg3'])
+    expect(flat.map((r) => r.configuration)).toEqual(['WIN11', 'WIN11', 'cfg3'])
+  })
+
+  it('does not merge different configurations', () => {
+    const grouped = groupIdentical([
+      row(1, 'LENOVO', 'L14', 3650, { configuration: 'WIN11' }),
+      row(2, 'LENOVO', 'L14', 3650, { configuration: 'WIN11 PRO' }),
+    ])
+    expect(grouped).toHaveLength(2)
   })
 })
 

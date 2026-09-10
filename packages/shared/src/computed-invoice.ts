@@ -18,7 +18,9 @@ export const ComputedLineSchema = z.object({
     .array(
       z.object({
         serial: z.string().optional(),
+        model: z.string().optional(),
         configuration: z.string().optional(),
+        amount: z.number().optional(),
         from: z.string().optional(),
         to: z.string().optional(),
         isReturned: z.boolean().optional(),

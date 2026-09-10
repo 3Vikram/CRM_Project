@@ -37,13 +37,12 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
   }
 
   return (
-    <div className="preview-root bg-white text-gray-900 rounded-xl border border-[#E7E3DA] shadow-sm px-10 py-8 max-w-[820px] mx-auto">
+    <div className="preview-root invoice-sheet bg-white text-black shadow-sm max-w-[820px] mx-auto">
       <PreviewHeader invoice={invoice} draft={draft} />
 
-      {/* Right-side meta box */}
-      <div className="mt-6 flex justify-between gap-8">
+      <div className="invoice-party-row">
         <PreviewParties invoice={invoice} draft={draft} />
-        <div className="text-xs text-gray-600 min-w-[240px]">
+        <div className="invoice-meta">
           <Row label="Invoice No." value={draft.invoiceNo || '—'} />
           <Row label="Dated" value={formatDDMonYY(draft.invoiceDate)} />
           {draft.toggles.dispatchDetails && (
@@ -91,7 +90,7 @@ export function InvoicePreview({ invoice, draft, loading, error }: Props) {
         </div>
       )}
 
-      <div className="mt-12 text-[10px] text-gray-400 text-right">
+      <div className="invoice-computer-note">
         Billing month: {billingMonthLabel(draft.billingMonth)} ·
         Place of Supply: {invoice.placeOfSupply || '—'}
       </div>
