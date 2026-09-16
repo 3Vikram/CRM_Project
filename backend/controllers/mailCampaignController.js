@@ -189,48 +189,130 @@ const normalizeCampaign = (campaign) => ({
   deliveryResults: campaign.deliveryResults || [],
 });
 
-// const getNextCampaignId = async () => {
-//   const counter = await Counter.findOneAndUpdate(
-//     { name: 'mailCampaign' },
-//     { $inc: { value: 1 } },
-//     { new: true, upsert: true, setDefaultsOnInsert: true }
-//   );
+const leadLocks = new Map();
 
-//   if (!counter || typeof counter.value !== 'number') {
-//     throw new Error('Failed to generate campaign ID sequence');
-//   }
+const createLeadId = async () => {
+  const existingLeadIds = await Lead.find({ leadId: /^LD-\d+$/ }, { leadId: 1 }).lean();
+  const highestExistingId = existingLeadIds.reduce((highest, lead) => {
+    const sequence = Number(String(lead.leadId).slice(3));
+    return Number.isSafeInteger(sequence) ? Math.max(highest, sequence) : highest;
+  }, 0);
+  await Counter.findOneAndUpdate(
+    { name: 'leadIdSequence' },
+    { $max: { value: highestExistingId } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+  const counter = await Counter.findOneAndUpdate(
+    { name: 'leadIdSequence' },
+    { $inc: { value: 1 } },
+    { new: true },
+  );
+  if (!counter || !Number.isSafeInteger(counter.value)) throw new Error('Failed to generate Lead ID sequence.');
+  return `LD-${counter.value}`;
+};
 
-//   return `CMP-${String(counter.value).padStart(6, '0')}`;
-// };
+const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
+  if (openCount < 2 && clickCount < 2) return null;
+
+  const email = String(log.recipientEmail || '').trim().toLowerCase();
+  const previous = leadLocks.get(email) || Promise.resolve();
+  const current = previous.then(async () => {
+    const contact = await Contact.findOne({ email }).lean();
+    const now = new Date();
+    const leadValues = {
+      companyName: contact?.customerName || email,
+      contactPerson: contact?.contactName || email,
+      designation: contact?.designation || '',
+      mobile: contact?.contactNumber || '0000000000',
+      email,
+      source: 'Mail Campaign',
+      sourceOfLead: 'Mail Campaign',
+      campaignId: log.campaignId,
+      campaignName: log.campaignName || '',
+      openCount,
+      emailOpenCount: openCount,
+      linkClicks: clickCount,
+      firstOpenedAt: log.firstOpenedAt || null,
+      lastOpenedAt: log.lastOpenedAt || null,
+      firstClickedAt: log.firstClickedAt || null,
+      lastClickedAt: log.lastClickedAt || null,
+      lastOpenTime: log.lastOpenedAt || null,
+      remarks: `Created from Mail Campaign ${log.campaignId}`,
+    };
+
+    let lead = await Lead.findOne({ email }).select('_id leadId').lean();
+    let created = false;
+    if (lead) {
+      await Lead.updateOne({ _id: lead._id }, {
+        $set: {
+          ...leadValues,
+          'engagement.emailOpens': openCount,
+          'engagement.linkClicks': clickCount,
+        },
+      });
+    } else {
+      try {
+        lead = await Lead.create({ ...leadValues, leadId: await createLeadId() });
+        created = true;
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+        lead = await Lead.findOne({ email }).select('_id leadId').lean();
+        if (!lead) throw error;
+        await Lead.updateOne({ _id: lead._id }, {
+          $set: {
+            ...leadValues,
+            'engagement.emailOpens': openCount,
+            'engagement.linkClicks': clickCount,
+          },
+        });
+      }
+    }
+
+    await EmailLog.updateOne(
+      { _id: log._id },
+      { $set: { leadCreated: true, leadId: lead.leadId || '' } },
+    );
+    logger.info('mail-campaign.engagement-lead.updated', {
+      campaignId: log.campaignId,
+      recipientEmail: email,
+      leadId: lead.leadId,
+      created,
+      openCount,
+      clickCount,
+    });
+    return { leadId: lead.leadId, created };
+  });
+  leadLocks.set(email, current);
+  current.finally(() => {
+    if (leadLocks.get(email) === current) leadLocks.delete(email);
+  }).catch(() => {});
+  return current;
+};
 
 const getNextCampaignId = async () => {
-  const campaignIds = await MailCampaign.find({ campaignId: /^CMP-\d+$/ }, { campaignId: 1 }).lean();
-  const highestNumber = campaignIds.reduce((highest, campaign) => Math.max(highest, Number(campaign.campaignId.slice(4)) || 0), 0);
+  const campaigns = await MailCampaign.find(
+    { campaignId: /^CMP-\d+$/ },
+    { campaignId: 1 }
+  ).lean();
+  const highestNumber = campaigns.reduce((highest, campaign) => {
+    const number = Number(String(campaign.campaignId).slice(4));
+    return Number.isSafeInteger(number) ? Math.max(highest, number) : highest;
+  }, 0);
 
-  // Get or create the counter
-  let counter = await Counter.findOne({ name: "mailCampaign" });
+  return `CMP-${highestNumber + 1}`;
+};
 
-  if (!counter) {
-    counter = await Counter.create({
-      name: "mailCampaign",
-      value: highestNumber,
-    });
+const createCampaignWithUniqueId = async (payload) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const campaignId = await getNextCampaignId();
+      return await MailCampaign.create({ ...payload, campaignId });
+    } catch (error) {
+      if (error?.code !== 11000 || attempt === 4) throw error;
+    }
   }
 
-  // If the counter is behind the database, repair it
-  if (counter.value < highestNumber) {
-    counter.value = highestNumber;
-    await counter.save();
-  }
-
-  // Generate the next ID atomically
-  counter = await Counter.findOneAndUpdate(
-    { name: "mailCampaign" },
-    { $inc: { value: 1 } },
-    { new: true }
-  );
-
-  return `CMP-${counter.value}`;
+  throw new Error('Failed to generate a unique campaign ID');
 };
 
 const isValidEmail = (value) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -368,6 +450,7 @@ exports.getCampaigns = async (req, res) => {
       scheduledDate: 1,
       scheduledTime: 1,
       opens: 1,
+      uniqueOpens: 1,
       clicks: 1,
       createdAt: 1,
       updatedAt: 1,
@@ -379,18 +462,25 @@ exports.getCampaigns = async (req, res) => {
     ]);
 
     const campaignIds = campaigns.map((campaign) => campaign.campaignId);
-    const openCounts = await EmailLog.aggregate([
-      { $match: { campaignId: { $in: campaignIds }, openedAt: { $ne: null } } },
-      { $group: { _id: '$campaignId', recipients: { $addToSet: '$recipientEmail' } } },
-      { $project: { _id: 1, count: { $size: '$recipients' } } },
+    const engagementCounts = await EmailLog.aggregate([
+      { $match: { campaignId: { $in: campaignIds } } },
+      { $group: {
+        _id: '$campaignId',
+        recipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, '$recipientEmail', null] } },
+        totalOpens: { $sum: { $ifNull: ['$openCount', 0] } },
+        totalClicks: { $sum: { $ifNull: ['$clickCount', 0] } },
+      } },
+      { $project: { _id: 1, totalOpens: 1, totalClicks: 1, unique: { $size: { $setDifference: ['$recipients', [null]] } } } },
     ]);
-    const openCountByCampaign = new Map(openCounts.map((item) => [item._id, item.count]));
+    const engagementByCampaign = new Map(engagementCounts.map((item) => [item._id, item]));
 
     res.status(200).json({
       success: true,
       data: campaigns.map((campaign) => normalizeCampaign({
         ...campaign,
-        opens: openCountByCampaign.get(campaign.campaignId) || 0,
+        opens: engagementByCampaign.get(campaign.campaignId)?.totalOpens || 0,
+        uniqueOpens: engagementByCampaign.get(campaign.campaignId)?.unique || 0,
+        clicks: engagementByCampaign.get(campaign.campaignId)?.totalClicks || 0,
       })),
       pagination: {
         total,
@@ -415,7 +505,7 @@ exports.getCampaignById = async (req, res) => {
 };
 
 const buildPublicTrackingBaseUrl = (req) => {
-  const configuredBaseUrl = process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || '';
+  const configuredBaseUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || '';
   const forwardedProto = (req.headers && req.headers['x-forwarded-proto']) || req.protocol || 'https';
   const forwardedHost = (req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || req.get('host') || '';
   const rawBaseUrl = configuredBaseUrl || `${Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto}://${Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost}`;
@@ -423,66 +513,178 @@ const buildPublicTrackingBaseUrl = (req) => {
     .replace(/\/api\/?$/, '')
     .replace(/\/$/, '');
 
+  if (!normalizedBaseUrl || /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(normalizedBaseUrl)) {
+    throw new Error('TRACKING_BASE_URL must be configured with a public URL before sending mail campaigns.');
+  }
+
   return normalizedBaseUrl;
 };
 
 const getTrackingBaseUrl = (req) => buildPublicTrackingBaseUrl(req);
 
-const buildTrackingPixelUrl = (baseUrl, trackingId) => `${baseUrl}/api/mail-campaigns/open/${trackingId}`;
+const getCompanyProfileWithLogo = () => CompanyProfile.findOne({
+  'companyLogo.filePath': { $exists: true, $nin: ['', null] },
+}).sort({ createdAt: -1 }).select('companyLogo website').lean();
 
-const buildCampaignEmailHtml = ({ htmlBody, footer, logoHtml }) => `<div style="margin: 0; padding: 0; color: #1f2937; font-family: 'Times New Roman', Times, serif !important; font-size: 16px; line-height: 1.5;"><style>div, p, h1, h2, h3, span, li { font-family: 'Times New Roman', Times, serif !important; } p { margin: 0 0 16px; min-height: 1.5em; } img { width: auto; max-width: 100%; height: auto; }</style>${logoHtml}${htmlBody}${footer ? `<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-family: 'Times New Roman', Times, serif !important;">${footer}</div>` : ''}</div>`;
+const getPublicAssetUrl = (baseUrl, filePath) => {
+  const value = String(filePath || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i.test(value)) {
+    const localUrl = new URL(value);
+    return `${baseUrl}${localUrl.pathname}${localUrl.search}`;
+  }
+  if (/^https:\/\//i.test(value)) return value;
+  return `${baseUrl}/${value.replace(/^\/+/, '')}`;
+};
+
+const rewriteEmailAssetUrls = (html, baseUrl) => String(html || '').replace(
+  /(\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
+  (_match, prefix, source, suffix) => {
+    if (/^(?:data:|cid:|https:\/\/)/i.test(source)) return `${prefix}${source}${suffix}`;
+    return `${prefix}${getPublicAssetUrl(baseUrl, source)}${suffix}`;
+  },
+);
+
+const removeCompanyLogoImages = (html, logoUrl) => String(html || '').replace(/<img\b[^>]*>/gi, (tag) => {
+  const source = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] || '';
+  const alt = tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || '';
+  return (logoUrl && source === logoUrl) || /company logo/i.test(alt) ? '' : tag;
+});
+
+const buildTrackingPixelUrl = (baseUrl, trackingId) => `${baseUrl}/api/mail-campaigns/track/open/${trackingId}`;
+
+const buildCampaignEmailHtml = ({ htmlBody, footer, logoHtml, showFooterSeparator = true }) => `<div style="margin: 0; padding: 0; color: #1f2937; font-family: 'Times New Roman', Times, serif !important; font-size: 16px; line-height: 1.5;"><style>div, p, h1, h2, h3, span, li { font-family: 'Times New Roman', Times, serif !important; } p { margin: 0 0 16px; min-height: 1.5em; } img { width: auto; max-width: 100%; height: auto; }</style>${logoHtml}${htmlBody}${footer ? `<div style="margin-top: 24px; padding-top: 16px; ${showFooterSeparator ? 'border-top: 1px solid #e5e7eb;' : ''} font-family: 'Times New Roman', Times, serif !important;">${footer}</div>` : ''}</div>`;
+
+const buildCampaignImageHtml = (imageUrl) => imageUrl
+  ? `<p style="margin: 0 0 20px; min-height: 1.5em;"><img src="${imageUrl}" alt="" style="display: block; max-width: 100%; height: auto;" /></p>`
+  : '';
+
+const normalizeEmailDestination = (destination) => {
+  let value = String(destination || '').trim().replace(/^(https?:\/\/)(?:🌐\s*)+/i, '$1');
+  if (/^https?:\/\/www\.synov\.in(?:\/|$)/i.test(value) || /^https?:\/\/synov\.in(?:\/|$)/i.test(value)) {
+    value = value.replace(/^http:\/\//i, 'https://').replace(/^https:\/\/synov\.in/i, 'https://www.synov.in');
+  }
+  return value;
+};
+
+const normalizeCompanyWebsite = (website) => {
+  let value = String(website || '').trim().replace(/^(?:https?:\/\/)?(?:🌐\s*)+/i, '');
+  value = value.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+  if (/^synov\.in(?:\/|$)/i.test(value)) return 'https://www.synov.in';
+  return normalizeEmailDestination(website);
+};
+
+const normalizeFooterWebsiteLinks = (html, websiteUrl) => String(html || '').replace(
+  /<a\b([^>]*)>([\s\S]*?)<\/a>/gi,
+  (_match, attributes, content) => {
+    const href = attributes.match(/\bhref\s*=\s*(["'])([^"']+)\1/i)?.[2] || '';
+    if (!/synov\.in/i.test(`${href} ${content}`)) return _match;
+    let normalizedAttributes = attributes.replace(/\bhref\s*=\s*(["'])([^"']*)\1/i, `href="${websiteUrl}"`);
+    if (!/\bhref\s*=/i.test(normalizedAttributes)) normalizedAttributes += ` href="${websiteUrl}"`;
+    if (!/\btarget\s*=/i.test(normalizedAttributes)) normalizedAttributes += ' target="_blank"';
+    normalizedAttributes = normalizedAttributes.replace(/\brel\s*=\s*(["'])([^"']*)\1/i, 'rel="noopener noreferrer"');
+    if (!/\brel\s*=/i.test(normalizedAttributes)) normalizedAttributes += ' rel="noopener noreferrer"';
+    return `<a${normalizedAttributes}>${content}</a>`;
+  },
+);
+
+const isDirectSynovLink = (destination) => {
+  const value = String(destination || '');
+  if (normalizeEmailDestination(value) === 'https://www.synov.in') return true;
+  try {
+    const url = new URL(value);
+    const originalUrl = url.searchParams.get('url') || '';
+    return normalizeEmailDestination(originalUrl) === 'https://www.synov.in';
+  } catch (_error) {
+    return false;
+  }
+};
 
 const addEmailTracking = (html, campaignId, trackingId, baseUrl) => {
   const trackedHtml = String(html || '').replace(/href\s*=\s*(["'])(https?:\/\/[^"']+)\1/gi, (_match, quote, destination) => (
-    `href=${quote}${baseUrl}/api/mail-campaigns/tracking/click/${trackingId}?url=${encodeURIComponent(destination)}${quote}`
+    isDirectSynovLink(destination) || /\/api\/mail-campaigns\/(?:track|tracking)\/click\//i.test(destination)
+      ? `href=${quote}${destination}${quote}`
+      : `href=${quote}${baseUrl}/api/mail-campaigns/tracking/click/${trackingId}?url=${encodeURIComponent(normalizeEmailDestination(destination))}${quote}`
   ));
   const trackingPixelUrl = buildTrackingPixelUrl(baseUrl, trackingId);
-  return `${trackedHtml}<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px;" />`;
+  // Open tracking depends on remote images being loaded; clients that block images
+  // or proxy/cache them can prevent or alter open events, so tracking is best-effort.
+  const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px;" />`;
+  if (/<\/body>/i.test(trackedHtml)) return trackedHtml.replace(/<\/body>/i, `${trackingPixel}</body>`);
+  if (/<\/html>/i.test(trackedHtml)) return trackedHtml.replace(/<\/html>/i, `${trackingPixel}</html>`);
+  return `${trackedHtml}${trackingPixel}`;
 };
 
 const syncCampaignOpenCount = async (campaignId) => {
-  const openedRecipients = await EmailLog.distinct('recipientEmail', {
+  const [openSummary] = await EmailLog.aggregate([
+    { $match: { campaignId } },
+    { $group: {
+      _id: null,
+      uniqueOpens: { $addToSet: '$recipientEmail' },
+      opens: { $sum: { $ifNull: ['$openCount', 0] } },
+      clicks: { $sum: { $ifNull: ['$clickCount', 0] } },
+    } },
+  ]);
+  const updateResult = await MailCampaign.updateOne(
+    { campaignId },
+    { $set: {
+      opens: openSummary?.opens || 0,
+      uniqueOpens: openSummary?.uniqueOpens?.length || 0,
+      clicks: openSummary?.clicks || 0,
+    } },
+  );
+  logger.info('mail-campaign.opens.updated', {
     campaignId,
-    openedAt: { $ne: null },
+    opensTotal: openSummary?.opens || 0,
+    uniqueOpens: openSummary?.uniqueOpens?.length || 0,
+    matchedCount: updateResult.matchedCount,
+    modifiedCount: updateResult.modifiedCount,
   });
-  await MailCampaign.updateOne({ campaignId }, { $set: { opens: openedRecipients.length } });
+  return {
+    opensTotal: openSummary?.opens || 0,
+    uniqueOpens: openSummary?.uniqueOpens?.length || 0,
+    clicksTotal: openSummary?.clicks || 0,
+  };
 };
 
 exports.trackOpen = async (req, res) => {
   const trackingId = String(req.params.trackingId || req.params.token || '').trim();
+  logger.info('mail-campaign.open.requested', { trackingId });
+  console.log(`OPEN TRACKING REQUEST: trackingId=${trackingId}`);
 
   try {
     const log = await EmailLog.findOne({
       $or: [{ trackingId }, { trackingToken: trackingId }],
-    }).select('campaignId campaignName recipientEmail openedAt trackingId trackingToken').lean();
+    }).select('_id campaignId campaignName recipientEmail trackingId trackingToken openCount clickCount firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt leadCreated leadId').lean();
 
     if (log) {
-      const wasAlreadyOpened = !!log.openedAt;
-      if (!wasAlreadyOpened) {
-        await EmailLog.updateOne(
-          {
-            $or: [{ trackingId }, { trackingToken: trackingId }],
-            openedAt: null,
-          },
-          {
-            $set: {
-              openedAt: new Date(),
-              trackingId: log.trackingId || trackingId,
-              trackingToken: log.trackingToken || trackingId,
-            },
-          }
-        );
-      }
-      await syncCampaignOpenCount(log.campaignId);
-      logger.info('EMAIL OPEN TRACKED', {
-        campaignId: log.campaignId,
-        campaignName: log.campaignName,
-        recipientEmail: log.recipientEmail,
-        trackingId,
-        uniqueOpen: !wasAlreadyOpened,
+      const now = new Date();
+      const updatedLog = await EmailLog.findOneAndUpdate(
+        { _id: log._id },
+        [{ $set: {
+          openCount: { $add: [{ $ifNull: ['$openCount', 0] }, 1] },
+          openedAt: { $cond: [{ $eq: [{ $ifNull: ['$openCount', 0] }, 0] }, now, '$openedAt'] },
+          firstOpenedAt: { $cond: [{ $eq: [{ $ifNull: ['$openCount', 0] }, 0] }, now, '$firstOpenedAt'] },
+          lastOpenedAt: now,
+        } }],
+        { new: true },
+      ).lean();
+      const openCountBefore = (updatedLog.openCount || 0) - 1;
+      const uniqueOpenIncrement = openCountBefore === 0 ? 1 : 0;
+      const campaignUpdate = await MailCampaign.updateOne(
+        { campaignId: updatedLog.campaignId },
+        { $inc: { opens: 1, ...(uniqueOpenIncrement ? { uniqueOpens: 1 } : {}) } },
+      );
+      const leadResult = await ensureEngagementLead({
+        log: updatedLog,
+        openCount: updatedLog.openCount || 0,
+        clickCount: updatedLog.clickCount || 0,
       });
+      console.log(`OPEN TRACKING UPDATED: campaignId=${updatedLog.campaignId} recipient=${updatedLog.recipientEmail} trackingId=${trackingId} previousOpenCount=${openCountBefore} newOpenCount=${updatedLog.openCount} campaignTotalOpensIncremented=${campaignUpdate.modifiedCount ? 1 : 0} leadThresholdReached=${Boolean(leadResult)} leadCreatedOrUpdated=${Boolean(leadResult)}`);
     } else {
-      logger.info('mail-campaign.track-open.unknown-token', { trackingId });
+      logger.info('mail-campaign.tracking-id.not-found', { trackingId });
+      console.log(`OPEN TRACKING NOT FOUND: trackingId=${trackingId}`);
+      logger.info('mail-campaign.open-trace', { trackingId, emailLogFound: false });
     }
   } catch (error) {
     logger.error('mail-campaign.track-open.failed', { trackingId, message: error?.message, stack: error?.stack });
@@ -496,22 +698,87 @@ exports.trackOpen = async (req, res) => {
   res.type('gif').send(Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64'));
 };
 
+exports.getTrackingDiagnostic = async (req, res) => {
+  if (String(process.env.TRACKING_DIAGNOSTICS).toLowerCase() !== 'true') {
+    return res.status(404).json({ success: false, message: 'Tracking diagnostics are disabled.' });
+  }
+
+  const trackingId = String(req.params.trackingId || '').trim();
+  const log = await EmailLog.findOne({ $or: [{ trackingId }, { trackingToken: trackingId }] })
+    .select('campaignId campaignName recipientEmail status trackingId trackingToken openCount openedAt clickedAt sentAt')
+    .lean();
+  if (!log) return res.status(404).json({ success: false, found: false, trackingId });
+
+  const campaign = await MailCampaign.findOne({ campaignId: log.campaignId }).select('campaignId campaignName opens uniqueOpens clicks').lean();
+  return res.status(200).json({
+    success: true,
+    found: true,
+    trackingId,
+    recipientEmail: log.recipientEmail,
+    campaignId: log.campaignId,
+    emailLog: {
+      status: log.status,
+      openCount: log.openCount || 0,
+      openedAt: log.openedAt,
+      clickedAt: log.clickedAt,
+      sentAt: log.sentAt,
+    },
+    campaign: campaign ? {
+      opens: campaign.opens || 0,
+      uniqueOpens: campaign.uniqueOpens || 0,
+      clicks: campaign.clicks || 0,
+    } : null,
+  });
+};
+
 exports.trackClick = async (req, res) => {
-  const destination = String(req.query.url || '');
-  if (!/^https?:\/\//i.test(destination)) return res.status(400).json({ success: false, message: 'Tracked destination is invalid.' });
+  const rawDestination = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
+  const originalUrl = String(rawDestination || '');
+  let destination = originalUrl;
+  if (!/^https?:\/\//i.test(destination) && /%/.test(destination)) {
+    try {
+      destination = decodeURIComponent(destination);
+    } catch (_error) {
+      return res.status(400).json({ success: false, message: 'Tracked destination is invalid.' });
+    }
+  }
+  let destinationUrl;
   try {
-    const result = await EmailLog.updateOne(
-      { trackingToken: req.params.token, clickedAt: null },
-      { $set: { clickedAt: new Date() } }
-    );
-    if (result.modifiedCount) {
-      const log = await EmailLog.findOne({ trackingToken: req.params.token }).select('campaignId').lean();
-      if (log) await MailCampaign.updateOne({ campaignId: log.campaignId }, { $inc: { clicks: 1 } });
+    destinationUrl = new URL(destination);
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: 'Tracked destination is invalid.' });
+  }
+  if (!['http:', 'https:'].includes(destinationUrl.protocol)) return res.status(400).json({ success: false, message: 'Tracked destination is invalid.' });
+  const redirectUrl = destination;
+  const trackingId = String(req.params.token || req.params.trackingId || '').trim();
+  console.log(`CLICK REDIRECT trackingId=${trackingId} originalUrl=${originalUrl} decodedUrl=${destination} redirectUrl=${redirectUrl}`);
+  try {
+    const log = await EmailLog.findOne({ $or: [{ trackingId }, { trackingToken: trackingId }] })
+      .select('_id campaignId campaignName recipientEmail openCount clickCount firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt').lean();
+    if (log) {
+      const now = new Date();
+      const updatedLog = await EmailLog.findOneAndUpdate(
+        { _id: log._id },
+        [{ $set: {
+          clickCount: { $add: [{ $ifNull: ['$clickCount', 0] }, 1] },
+          clickedAt: { $cond: [{ $eq: [{ $ifNull: ['$clickCount', 0] }, 0] }, now, '$clickedAt'] },
+          firstClickedAt: { $cond: [{ $eq: [{ $ifNull: ['$clickCount', 0] }, 0] }, now, '$firstClickedAt'] },
+          lastClickedAt: now,
+        } }],
+        { new: true },
+      ).lean();
+      const campaignUpdate = await MailCampaign.updateOne({ campaignId: updatedLog.campaignId }, { $inc: { clicks: 1 } });
+      const leadResult = await ensureEngagementLead({
+        log: updatedLog,
+        openCount: updatedLog.openCount || 0,
+        clickCount: updatedLog.clickCount || 0,
+      });
+      console.log(`CLICK TRACKING UPDATED: campaignId=${updatedLog.campaignId} recipient=${updatedLog.recipientEmail} trackingId=${trackingId} previousClickCount=${(updatedLog.clickCount || 0) - 1} newClickCount=${updatedLog.clickCount} campaignTotalClicksIncremented=${campaignUpdate.modifiedCount ? 1 : 0} originalUrl=${destination} leadThresholdReached=${Boolean(leadResult)} leadCreatedOrUpdated=${Boolean(leadResult)}`);
     }
   } catch (error) {
     logger.error('mail-campaign.track-click.failed', { message: error?.message, stack: error?.stack });
   }
-  return res.redirect(destination);
+  return res.redirect(302, redirectUrl);
 };
 
 exports.getCampaignReport = async (req, res) => {
@@ -528,8 +795,8 @@ exports.getCampaignReport = async (req, res) => {
         sentBy: log.senderEmail || process.env.EMAIL_USER || process.env.SMTP_USER || '',
         sentTo: log.recipientEmail,
         subject: campaign.subject,
-        opens: log.openedAt ? 1 : 0,
-        clicks: log.clickedAt ? 1 : 0,
+        opens: log.openCount || 0,
+        clicks: log.clickCount || 0,
       })),
     });
   } catch (error) {
@@ -542,14 +809,27 @@ exports.getCampaignPreview = async (req, res) => {
   try {
     const campaign = await MailCampaign.findOne({ _id: req.params.id, deletedAt: null }).lean();
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
-    const companyProfile = await CompanyProfile.findOne().sort({ createdAt: -1 }).select('companyLogo').lean();
-    const logoPath = companyProfile?.companyLogo?.filePath || '';
-    const logoUrl = logoPath ? `${getTrackingBaseUrl(req)}${logoPath.startsWith('/') ? logoPath : `/${logoPath}`}` : '';
-    const imageBeforeText = ['Image Before Text', 'Image Above Text'].includes(campaign.imageAlignment);
+    const companyProfile = await getCompanyProfileWithLogo();
+    const trackingBaseUrl = getTrackingBaseUrl(req);
+    const companyWebsiteUrl = normalizeCompanyWebsite(companyProfile?.website) || 'https://www.synov.in';
+    const logoUrl = getPublicAssetUrl(trackingBaseUrl, companyProfile?.companyLogo?.filePath);
+    console.log(`Company Profile logo field = ${JSON.stringify(companyProfile?.companyLogo || null)}`);
+    console.log(`Company Profile logo path = ${companyProfile?.companyLogo?.filePath || '(none)'}`);
+    console.log(`Resolved logo URL = ${logoUrl || '(none)'}`);
+    const campaignImageUrl = getPublicAssetUrl(trackingBaseUrl, campaign.image);
+    const logoBeforeText = ['Image Before Text', 'Image Above Text'].includes(campaign.imageAlignment);
+    const imageBeforeText = logoBeforeText;
     const logoHtml = logoUrl
-      ? `<p style="margin: 0 0 20px; min-height: 1.5em;"><img src="${logoUrl}" alt="Company logo" style="display: block; width: 120px; max-width: 120px; height: auto;" /></p>`
+      ? `<p style="margin: 0 0 20px; min-height: 1.5em;"><img src="${logoUrl}" alt="" style="display: block; width: 120px; max-width: 120px; height: auto;" /></p>`
       : '';
-    const htmlBody = imageBeforeText ? `${logoHtml}${campaign.campaignBody || '<p>Campaign email</p>'}` : `${campaign.campaignBody || '<p>Campaign email</p>'}${logoHtml}`;
+    const campaignImageHtml = buildCampaignImageHtml(campaignImageUrl);
+    const campaignBody = rewriteEmailAssetUrls(removeCompanyLogoImages(campaign.campaignBody || '<p>Campaign email</p>', logoUrl), trackingBaseUrl);
+    const bodyWithCampaignImage = imageBeforeText
+      ? `${campaignImageHtml}${campaignBody}`
+      : `${campaignBody}${campaignImageHtml}`;
+    const htmlBody = logoBeforeText
+      ? `${logoHtml}${bodyWithCampaignImage}`
+      : `${bodyWithCampaignImage}${logoHtml}`;
     const logs = await EmailLog.find({ campaignId: campaign.campaignId }).sort({ sentAt: -1 }).select('recipientEmail senderEmail').lean();
     res.status(200).json({
       success: true,
@@ -557,7 +837,7 @@ exports.getCampaignPreview = async (req, res) => {
         from: logs[0]?.senderEmail || process.env.EMAIL_USER || process.env.SMTP_USER || '',
         to: logs[0]?.recipientEmail || campaign.recipientEmails?.[0] || '',
         subject: campaign.subject,
-        html: buildCampaignEmailHtml({ htmlBody, footer: campaign.footer, logoHtml: '' }),
+        html: buildCampaignEmailHtml({ htmlBody, footer: rewriteEmailAssetUrls(normalizeFooterWebsiteLinks(removeCompanyLogoImages(campaign.footer, logoUrl), companyWebsiteUrl), trackingBaseUrl), logoHtml: '', showFooterSeparator: logoBeforeText }),
       },
     });
   } catch (error) {
@@ -606,9 +886,7 @@ exports.createCampaign = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Scheduled date and time are required.' });
     }
 
-    const campaignId = await getNextCampaignId();
     const payload = {
-      campaignId,
       campaignName: req.body.campaignName || '',
       subject: finalGroups[0]?.subject || req.body.subject || '',
       campaignType: req.body.campaignType || 'Promotional',
@@ -643,7 +921,8 @@ exports.createCampaign = async (req, res) => {
       recipientCount: payload.recipientEmails?.length,
     });
 
-    const campaign = await MailCampaign.create(payload);
+    const campaign = await createCampaignWithUniqueId(payload);
+    const campaignId = campaign.campaignId;
 
     logger.info('mail-campaign.created', {
       campaignId,
@@ -813,21 +1092,46 @@ exports.sendCampaign = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No recipients found for this campaign group.' });
     }
 
-    const companyProfile = await CompanyProfile.findOne().sort({ createdAt: -1 }).select('companyLogo').lean();
+    const trackingBaseUrl = getTrackingBaseUrl(req);
+    const companyProfile = await getCompanyProfileWithLogo();
     const logoPath = companyProfile?.companyLogo?.filePath || '';
     const localLogoPath = logoPath ? path.join(__dirname, '..', logoPath.replace(/^\/+/, '')) : '';
     const hasLogo = localLogoPath && fs.existsSync(localLogoPath);
-    const logoHtml = hasLogo ? '<p style="margin: 0 0 20px; min-height: 1.5em;"><img src="cid:synov-company-logo" alt="Synov company logo" style="display: block; width: 120px; max-width: 120px; height: auto;" /></p>' : '';
-    const imageBeforeText = ['Image Before Text', 'Image Above Text'].includes(campaign.imageAlignment);
-    const emailBody = imageBeforeText ? `${logoHtml}${htmlBody}` : `${htmlBody}${logoHtml}`;
-    const logoAttachment = hasLogo ? [{
-      filename: path.basename(localLogoPath),
-      path: localLogoPath,
-      cid: 'synov-company-logo',
-    }] : [];
+    const logoUrl = getPublicAssetUrl(trackingBaseUrl, logoPath);
+    const companyWebsiteUrl = normalizeCompanyWebsite(companyProfile?.website) || 'https://www.synov.in';
+    const companyLogoCid = 'company-logo@crm';
+    console.log(`Company logo stored path: ${logoPath || '(none)'}`);
+    console.log(`Company Profile logo field = ${JSON.stringify(companyProfile?.companyLogo || null)}`);
+    console.log(`Company Profile logo path = ${logoPath || '(none)'}`);
+    console.log(`Resolved logo URL = ${logoUrl || '(none)'}`);
+    console.log(`Company logo CID: ${companyLogoCid}`);
+    const logoHtml = hasLogo ? `<p style="margin: 0 0 20px; min-height: 1.5em;"><img src="cid:${companyLogoCid}" alt="" style="display: block; width: 120px; max-width: 120px; height: auto;" /></p>` : '';
+    const logoBeforeText = ['Image Before Text', 'Image Above Text'].includes(campaign.imageAlignment);
+    const imageBeforeText = logoBeforeText;
+    const campaignImageUrl = getPublicAssetUrl(trackingBaseUrl, campaign.image);
+    const localCampaignImagePath = campaign.image && !/^https?:\/\//i.test(campaign.image)
+      ? path.join(__dirname, '..', campaign.image.replace(/^\/+/, ''))
+      : '';
+    const hasCampaignImage = !campaign.image || fs.existsSync(localCampaignImagePath);
+    console.log(`Campaign image stored path: ${campaign.image || '(none)'}`);
+    const campaignImageCid = `campaign-image-${campaign._id}@crm`;
+    console.log(`Campaign image CID: ${campaignImageCid}`);
+    if (logoPath && !hasLogo) throw new Error(`Company logo file does not exist: ${localLogoPath}`);
+    if (!hasCampaignImage) throw new Error(`Campaign image file does not exist: ${localCampaignImagePath}`);
+    const campaignImageHtml = campaign.image ? buildCampaignImageHtml(`cid:${campaignImageCid}`) : '';
+    const rewrittenHtmlBody = rewriteEmailAssetUrls(removeCompanyLogoImages(htmlBody, logoUrl), trackingBaseUrl);
+    const bodyWithCampaignImage = imageBeforeText
+      ? `${campaignImageHtml}${rewrittenHtmlBody}`
+      : `${rewrittenHtmlBody}${campaignImageHtml}`;
+    const emailBody = logoBeforeText
+      ? `${logoHtml}${bodyWithCampaignImage}`
+      : `${bodyWithCampaignImage}${logoHtml}`;
+    const inlineAttachments = [
+      ...(hasLogo ? [{ filename: 'company-logo.png', path: localLogoPath, cid: companyLogoCid, contentType: companyProfile?.companyLogo?.mimeType || 'image/png' }] : []),
+      ...(campaign.image && hasCampaignImage ? [{ filename: path.basename(localCampaignImagePath), path: localCampaignImagePath, cid: campaignImageCid, contentType: 'image/png' }] : []),
+    ];
 
-    const trackingIds = new Map(normalizedRecipients.map((recipient) => [recipient, crypto.randomBytes(24).toString('hex')]));
-    const trackingBaseUrl = getTrackingBaseUrl(req);
+    const trackingIds = new Map(normalizedRecipients.map((recipient) => [recipient.toLowerCase(), crypto.randomBytes(24).toString('hex')]));
     const trackingUrlIsLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(trackingBaseUrl);
     logger.info('mail-campaign.tracking-config', {
       campaignId: campaign.campaignId,
@@ -836,7 +1140,13 @@ exports.sendCampaign = async (req, res) => {
       warning: trackingUrlIsLocal ? 'External recipients cannot reach a local tracking URL.' : '',
     });
     const emailLogs = normalizedRecipients.map((recipient) => {
-      const trackingId = trackingIds.get(recipient);
+      const trackingId = trackingIds.get(recipient.toLowerCase());
+      logger.info('mail-campaign.tracking-id.generated', {
+        campaignId: campaign.campaignId,
+        recipientEmail: recipient,
+        trackingId,
+      });
+      console.log(`TRACKING ID GENERATED: trackingId=${trackingId} recipient=${recipient} campaignId=${campaign.campaignId}`);
       return {
         campaignId: campaign.campaignId,
         campaignName: campaign.campaignName,
@@ -855,22 +1165,48 @@ exports.sendCampaign = async (req, res) => {
     const report = await sendCampaignEmails({
       subject,
       html: (recipient) => {
-        const trackingId = trackingIds.get(recipient);
-        const trackedHtml = addEmailTracking(buildCampaignEmailHtml({ htmlBody: emailBody, footer: campaign.footer, logoHtml: '' }), campaign.campaignId, trackingId, trackingBaseUrl);
+        const trackingId = trackingIds.get(recipient.toLowerCase());
+        const trackedHtml = addEmailTracking(buildCampaignEmailHtml({ htmlBody: emailBody, footer: rewriteEmailAssetUrls(normalizeFooterWebsiteLinks(removeCompanyLogoImages(campaign.footer, logoUrl), companyWebsiteUrl), trackingBaseUrl), logoHtml: '', showFooterSeparator: logoBeforeText }), campaign.campaignId, trackingId, trackingBaseUrl);
+        const trackingUrl = buildTrackingPixelUrl(trackingBaseUrl, trackingId);
+        const imageSources = [...trackedHtml.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
+        const localUrls = [...trackedHtml.matchAll(/(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?::\d+)?[^"'\s<]*/gi)].map((match) => match[0]);
+        const validation = {
+          hasTrackingPixel: trackedHtml.includes(trackingUrl),
+          hasInlineImages: (!campaign.image || imageSources.includes(`cid:${campaignImageCid}`)) && (!hasLogo || imageSources.includes(`cid:${companyLogoCid}`)),
+          hasTrackedLinks: /\/api\/mail-campaigns\/(?:tracking\/)?click\//i.test(trackedHtml),
+          containsLocalhost: localUrls.length > 0,
+          localUrls,
+          trackingBaseUrl,
+        };
+        console.log(`Final email HTML image URLs: ${imageSources.join(', ') || '(none)'}`);
+        console.log(`FINAL EMAIL VALIDATION recipient=${recipient} campaignId=${campaign.campaignId} hasTrackingPixel=${validation.hasTrackingPixel} hasInlineImages=${validation.hasInlineImages} hasTrackedLinks=${validation.hasTrackedLinks} containsLocalhost=${validation.containsLocalhost}${localUrls.length ? ` localUrls=${localUrls.join(',')}` : ''}`);
+        if (!validation.hasTrackingPixel || !validation.hasInlineImages || validation.containsLocalhost) {
+          throw new Error(`Final campaign HTML validation failed: ${JSON.stringify(validation)}`);
+        }
         logger.info('mail-campaign.tracking-pixel-injected', {
           campaignId: campaign.campaignId,
           recipientEmail: recipient,
           trackingId,
-          trackingPixelUrl: buildTrackingPixelUrl(trackingBaseUrl, trackingId),
-          trackingPixelIncluded: trackedHtml.includes(buildTrackingPixelUrl(trackingBaseUrl, trackingId)),
+          trackingPixelUrl: trackingUrl,
+          trackingPixelIncluded: validation.hasTrackingPixel,
         });
+        console.log(`TRACKING URL: ${trackingUrl}`);
+        console.log(`TRACKING PIXEL IN FINAL HTML: ${validation.hasTrackingPixel}`);
         return trackedHtml;
+      },
+      tracking: (recipient) => {
+        const trackingId = trackingIds.get(recipient.toLowerCase());
+        return {
+          campaignId: campaign.campaignId,
+          trackingId,
+          url: buildTrackingPixelUrl(trackingBaseUrl, trackingId),
+        };
       },
       text: campaign.footer || subject || 'Campaign email',
       to: normalizedRecipients,
-      attachments: (campaign.attachments || []).map((attachmentPath) => ({
+      attachments: inlineAttachments.concat((campaign.attachments || []).map((attachmentPath) => ({
         path: path.join(__dirname, '..', attachmentPath.replace(/^[\/]+/, '')),
-      })).concat(logoAttachment),
+      }))),
       fromName: process.env.MAIL_FROM_NAME || 'CRM Mail Campaign',
     });
 
@@ -878,14 +1214,14 @@ exports.sendCampaign = async (req, res) => {
     const failedCount = report.results.filter((item) => item.status === 'Failed').length;
 
     await Promise.all(report.results.map((item) => EmailLog.updateOne(
-      { $or: [{ trackingId: trackingIds.get(item.recipientEmail) }, { trackingToken: trackingIds.get(item.recipientEmail) }] },
+      { $or: [{ trackingId: trackingIds.get(item.recipientEmail.toLowerCase()) }, { trackingToken: trackingIds.get(item.recipientEmail.toLowerCase()) }] },
       {
         $set: {
           status: item.status,
           sentAt: new Date(),
           errorMessage: item.errorMessage || '',
-          trackingId: trackingIds.get(item.recipientEmail),
-          trackingToken: trackingIds.get(item.recipientEmail),
+          trackingId: trackingIds.get(item.recipientEmail.toLowerCase()),
+          trackingToken: trackingIds.get(item.recipientEmail.toLowerCase()),
         },
       }
     )));
@@ -920,6 +1256,10 @@ exports.sendCampaign = async (req, res) => {
       successfullySent: report.successfullySent,
       failed: report.failed,
       status: groupId ? (targetGroup ? targetGroup.status : campaign.status) : campaign.status,
+    });
+    report.results.forEach((item) => {
+      const trackingId = trackingIds.get(item.recipientEmail.toLowerCase());
+      console.log(`SENT TRACKING: trackingId=${trackingId} recipient=${item.recipientEmail} status=${item.status}`);
     });
 
     if (failedCount === report.totalRecipients) {

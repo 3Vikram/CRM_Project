@@ -47,10 +47,10 @@ export default function LeadDetailsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <button onClick={() => navigate('/sales/leads')} className="mb-3 flex items-center gap-2 text-sm font-medium text-[#2563EB]">
+          <button onClick={() => navigate('/sales/leads')} className="mb-3 flex items-center gap-2 text-sm font-medium text-[#111827]">
             <ArrowLeft className="h-4 w-4" /> Back to Leads
           </button>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">Lead Details</h1>
+          <h1 className="crm-page-heading">Lead Details</h1>
           <p className="text-gray-600">Track the full journey of {lead.companyName}</p>
         </div>
         <div className={`rounded-full px-3 py-1 text-sm font-semibold ${statusColors[lead.leadStatus || 'New'] || 'bg-blue-100 text-blue-700'}`}>
@@ -62,7 +62,7 @@ export default function LeadDetailsPage() {
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm lg:col-span-2">
           <div className="mb-6 flex items-start gap-4">
             <div className="rounded-2xl bg-[#F2EFE8] p-3">
-              <Building2 className="h-7 w-7 text-[#2563EB]" />
+              <Building2 className="h-7 w-7 text-[#111827]" />
             </div>
             <div>
               <h2 className="text-2xl font-serif font-semibold text-gray-900">{lead.companyName}</h2>
@@ -99,7 +99,7 @@ export default function LeadDetailsPage() {
           <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
             <h3 className="mb-4 text-lg font-serif font-semibold text-gray-900">Assigned User</h3>
             <div className="flex items-center gap-3">
-              <UserCircle2 className="h-6 w-6 text-[#2563EB]" />
+              <UserCircle2 className="h-6 w-6 text-[#111827]" />
               <div>
                 <p className="font-semibold text-gray-900">{lead.assignedTo || 'Unassigned'}</p>
                 <p className="text-sm text-gray-600">Created by {lead.createdBy || 'System'}</p>
@@ -111,7 +111,7 @@ export default function LeadDetailsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2"><StickyNote className="h-5 w-5 text-[#2563EB]" /><h3 className="text-lg font-serif font-semibold text-gray-900">Notes</h3></div>
+          <div className="mb-4 flex items-center gap-2"><StickyNote className="h-5 w-5 text-[#111827]" /><h3 className="text-lg font-serif font-semibold text-gray-900">Notes</h3></div>
           <div className="space-y-3">
             {(lead.notes && lead.notes.length > 0) ? lead.notes.map((note, index) => (
               <div key={`${note.message}-${index}`} className="rounded-lg border border-[#EFECE5] bg-[#FAF8F2] p-3 text-sm text-gray-700">
@@ -122,7 +122,7 @@ export default function LeadDetailsPage() {
           </div>
         </div>
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-[#2563EB]" /><h3 className="text-lg font-serif font-semibold text-gray-900">Activities</h3></div>
+          <div className="mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-[#111827]" /><h3 className="text-lg font-serif font-semibold text-gray-900">Activities</h3></div>
           <div className="space-y-3">
             {(lead.timeline && lead.timeline.length > 0) ? lead.timeline.slice().reverse().map((item, index) => (
               <div key={`${item.title}-${index}`} className="border-l-2 border-[#DAD5C9] pl-4">

@@ -340,13 +340,13 @@ export default function EmployeeFormPage() {
       <button
         type="button"
         onClick={() => navigate('/sales/employees')}
-        className="inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb]"
+        className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827]"
       >
         ← Back to Employee
       </button>
 
       <div className="border-b border-[#E5E7EB] pb-3">
-        <h1 className="text-2xl font-bold tracking-normal text-slate-800 ">Input Employee Details</h1>
+        <h1 className="crm-page-heading">Input Employee Details</h1>
         {/* <div className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Insert</div> */}
       </div>
 

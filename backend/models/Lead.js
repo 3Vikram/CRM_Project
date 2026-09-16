@@ -51,6 +51,10 @@ const LeadSchema = new mongoose.Schema(
     openCount: { type: Number, default: 0 },
     emailOpenCount: { type: Number, default: 0 },
     linkClicks: { type: Number, default: 0 },
+    firstOpenedAt: { type: Date, default: null },
+    lastOpenedAt: { type: Date, default: null },
+    firstClickedAt: { type: Date, default: null },
+    lastClickedAt: { type: Date, default: null },
     downloads: { type: Number, default: 0 },
     replies: { type: Number, default: 0 },
     websiteVisits: { type: Number, default: 0 },
@@ -62,6 +66,7 @@ const LeadSchema = new mongoose.Schema(
       enum: ['New', 'Contacted', 'Follow-up', 'Interested', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'Scrapped'],
       default: 'New',
     },
+    calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
     assignedTo: { type: String, trim: true, default: 'Unassigned' },
     createdBy: { type: String, trim: true, default: 'System' },
     createdDate: { type: Date, default: Date.now },
@@ -79,6 +84,7 @@ const LeadSchema = new mongoose.Schema(
     quotationId: { type: String, trim: true, unique: true, sparse: true },
     products: { type: Array, default: [] },
     quotationDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
+      customerId: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
 );

@@ -76,10 +76,10 @@ const selectStyles = {
     ...base,
     minHeight: '44px',
     borderRadius: '0.5rem',
-    borderColor: state.isFocused ? '#2563eb' : '#e2e8f0',
+    borderColor: state.isFocused ? '#111827' : '#e2e8f0',
     boxShadow: 'none',
     '&:hover': {
-      borderColor: '#2563eb',
+      borderColor: '#111827',
     },
     backgroundColor: '#ffffff',
   }),
@@ -88,7 +88,7 @@ const selectStyles = {
   menu: (base: Record<string, unknown>) => ({ ...base, zIndex: 50, borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid #EFECE5' }),
   option: (base: Record<string, unknown>, state: { isFocused: boolean; isSelected: boolean }) => ({
     ...base,
-    backgroundColor: state.isSelected ? '#2563eb' : state.isFocused ? '#eff6ff' : '#ffffff',
+    backgroundColor: state.isSelected ? '#111827' : state.isFocused ? '#F2EFE8' : '#ffffff',
     color: state.isSelected ? '#ffffff' : '#0f172a',
   }),
 }
@@ -452,11 +452,11 @@ export default function CustomerFormPage() {
     <div className="w-full rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <button onClick={() => navigate('/sales/customers')} className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#2563eb]">
+          <button onClick={() => navigate('/sales/customers')} className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#111827]">
             <ArrowLeft className="h-4 w-4" />
             Back to Customer List
           </button>
-          <h1 className="text-2xl font-semibold text-slate-800">{isEditing ? 'Edit Customer' : 'Add Customer'}</h1>
+          <h1 className="crm-page-heading">{isEditing ? 'Edit Customer' : 'Add Customer'}</h1>
         </div>
       </div>
 
@@ -583,7 +583,7 @@ export default function CustomerFormPage() {
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-700">Contact {index + 1}</span>
                   {form.contacts.length > 1 ? (
-                    <button type="button" onClick={() => removeContact(index)} className="text-sm text-[#2563eb]">Remove</button>
+                    <button type="button" onClick={() => removeContact(index)} className="text-sm text-[#111827]">Remove</button>
                   ) : null}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
@@ -610,7 +610,7 @@ export default function CustomerFormPage() {
                 </div>
               </div>
             ))}
-            <button type="button" onClick={addContact} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-semibold text-[#2563eb]">
+            <button type="button" onClick={addContact} className="flex items-center gap-2 rounded-lg border border-[#111827] bg-white px-3 py-2 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8]">
               <Plus className="h-4 w-4" />
               Add Contact
             </button>
@@ -648,7 +648,7 @@ export default function CustomerFormPage() {
             <RefreshCcw className="h-4 w-4" />
             Reset
           </button>
-          <button type="submit" disabled={isSaving} className="flex items-center gap-2 rounded-lg bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1d4ed8] disabled:opacity-60">
+          <button type="submit" disabled={isSaving} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1E293B] disabled:opacity-60">
             <Save className="h-4 w-4" />
             {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Submit'}
           </button>

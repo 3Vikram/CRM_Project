@@ -37,8 +37,8 @@ async function requestWithFallback(method: 'get' | 'post' | 'put' | 'delete', ur
 
 export interface ContactRecord {
   _id: string;
-  customerId: string;
-  customerName: string;
+  customerId?: string;
+  customerName?: string;
   contactName: string;
   designation: string;
   mail?: string;
@@ -109,6 +109,18 @@ export async function updateContact(id: string, payload: ContactPayload) {
 export async function deleteContact(id: string) {
   const response = await requestWithFallback('delete', `/contacts/${id}`);
   return response.data;
+}
+
+export async function moveContactToCustomer(id: string) {
+  try {
+    const response = await requestWithFallback('post', `/contacts/${id}/move-to-customer`);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw error;
+  }
 }
 
 export async function importContacts(file: File) {

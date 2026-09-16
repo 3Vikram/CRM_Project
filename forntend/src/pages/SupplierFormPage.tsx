@@ -178,14 +178,14 @@ export default function SupplierFormPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <button type="button" onClick={() => navigate('/sales/suppliers')} className="flex items-center gap-2 text-sm font-semibold text-[#2563eb]">
+        <button type="button" onClick={() => navigate('/sales/suppliers')} className="flex items-center gap-2 text-sm font-semibold text-[#111827]">
           <ArrowLeft className="h-4 w-4" />
           Back to Supplier List
         </button>
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <h1 className="mb-6 text-2xl font-semibold text-gray-900">{isEditing ? 'Edit Supplier' : 'INPUT SUPPLIER DETAILS'}</h1>
+        <h1 className="crm-page-heading">{isEditing ? 'Edit Supplier' : 'INPUT SUPPLIER DETAILS'}</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           {submitError ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div> : null}
           {submitSuccess ? <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{submitSuccess}</div> : null}
@@ -328,7 +328,7 @@ export default function SupplierFormPage() {
 
           <div className="flex items-center justify-end gap-3 border-t border-[#EFECE5] pt-4">
             <button type="button" onClick={handleReset} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</button>
-            <button type="submit" disabled={isSubmitting} className="rounded-lg bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1d4ed8] disabled:opacity-60">{isSubmitting ? 'Submitting...' : 'Submit'}</button>
+            <button type="submit" disabled={isSubmitting} className="rounded-lg bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1E293B] disabled:opacity-60">{isSubmitting ? 'Submitting...' : 'Submit'}</button>
           </div>
         </form>
       </div>

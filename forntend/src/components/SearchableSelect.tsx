@@ -170,9 +170,9 @@ export function SearchableSelect({
                 onMouseEnter={() => setHighlightedIndex(index)}
                 className={`w-full text-left px-3 py-2.5 text-sm transition ${
                   index === highlightedIndex
-                    ? 'bg-blue-50 text-blue-900'
+                    ? 'bg-[#F2EFE8] text-[#111827]'
                     : 'text-gray-700 hover:bg-gray-50'
-                } ${value === option ? 'bg-blue-100 font-medium' : ''}`}
+                } ${value === option ? 'bg-[#111827] text-white font-medium' : ''}`}
               >
                 {option}
               </button>

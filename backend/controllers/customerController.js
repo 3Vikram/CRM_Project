@@ -7,6 +7,29 @@
 const Customer = require('../models/Customer');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 
+const getNextCustomerId = async () => {
+  const customers = await Customer.find({ customerId: /^CI-\d+$/ }).select({ customerId: 1 }).lean();
+  const highest = customers.reduce((max, customer) => {
+    const number = Number(String(customer.customerId).slice(3));
+    return Number.isSafeInteger(number) ? Math.max(max, number) : max;
+  }, 0);
+  return `CI-${highest + 1}`;
+};
+
+const ensureCustomerIds = async () => {
+  const customers = await Customer.find({}).select({ customerId: 1, createdAt: 1 }).sort({ createdAt: 1, _id: 1 }).lean();
+  let highest = customers.reduce((max, customer) => {
+    const number = /^CI-(\d+)$/.exec(String(customer.customerId || ''))?.[1];
+    return number && Number.isSafeInteger(Number(number)) ? Math.max(max, Number(number)) : max;
+  }, 0);
+
+  for (const customer of customers) {
+    if (/^CI-\d+$/.test(String(customer.customerId || ''))) continue;
+    highest += 1;
+    await Customer.updateOne({ _id: customer._id }, { $set: { customerId: `CI-${highest}` } });
+  }
+};
+
 const resolveCreatedDateRange = (value) => {
   if (!value || value === 'all') return null;
 
@@ -79,6 +102,7 @@ const parsePayload = (body = {}) => {
 
 exports.getCustomers = async (req, res) => {
   try {
+    await ensureCustomerIds();
     const {
       page = 1,
       limit = DEFAULT_PAGE_SIZE,
@@ -114,6 +138,7 @@ exports.getCustomers = async (req, res) => {
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
       companyName: 1,
+      customerId: 1,
       customerName: 1,
       email: 1,
       phone: 1,
@@ -167,6 +192,7 @@ exports.getCustomerById = async (req, res) => {
 
 exports.createCustomer = async (req, res) => {
   try {
+    await ensureCustomerIds();
     const payload = parsePayload(req.body);
     if (req.files && req.files.length) {
       payload.documents = req.files.map((file) => ({
@@ -176,12 +202,16 @@ exports.createCustomer = async (req, res) => {
       }));
     }
 
-    const customer = await Customer.create(payload);
-    res.status(201).json({
-      success: true,
-      message: 'Customer created successfully',
-      data: customer,
-    });
+    let customer;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        customer = await Customer.create({ ...payload, customerId: await getNextCustomerId() });
+        break;
+      } catch (error) {
+        if (error.code !== 11000 || attempt === 4) throw error;
+      }
+    }
+    res.status(201).json({ success: true, message: 'Customer created successfully', data: customer });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
@@ -197,6 +227,7 @@ exports.createCustomer = async (req, res) => {
 exports.updateCustomer = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
+    delete payload.customerId;
     if (req.files && req.files.length) {
       payload.documents = req.files.map((file) => ({
         fileName: file.originalname,

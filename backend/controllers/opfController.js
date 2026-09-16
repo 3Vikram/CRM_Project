@@ -65,6 +65,32 @@ const normalizeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const calculateDerivedFinancials = (opf = {}) => {
+  const quantity = normalizeNumber(opf.quantity);
+  const unitPrice = normalizeNumber(opf.unitPrice);
+  const vendorPrice = normalizeNumber(opf.vendorPrice);
+
+  const explicitRevenue = opf.revenue !== undefined && opf.revenue !== null && opf.revenue !== ''
+    ? Number(opf.revenue)
+    : null;
+  const explicitMargin = opf.margin !== undefined && opf.margin !== null && opf.margin !== ''
+    ? Number(opf.margin)
+    : null;
+
+  const derivedRevenue = quantity * unitPrice;
+  const derivedMargin = derivedRevenue - (quantity * vendorPrice);
+
+  return {
+    revenue: Number.isFinite(explicitRevenue) ? explicitRevenue : derivedRevenue,
+    margin: Number.isFinite(explicitMargin) ? explicitMargin : derivedMargin,
+  };
+};
+
+const enrichOPFFinancials = (opf = {}) => ({
+  ...opf,
+  ...calculateDerivedFinancials(opf),
+});
+
 exports.getOPFs = async (req, res) => {
   try {
     const {
@@ -124,9 +150,11 @@ exports.getOPFs = async (req, res) => {
       OPF.countDocuments(query),
     ]);
 
+    const enrichedRecords = opfRecords.map((opf) => enrichOPFFinancials(opf));
+
     res.status(200).json({
       success: true,
-      data: opfRecords,
+      data: enrichedRecords,
       pagination: {
         total,
         page: pageNum,
@@ -143,7 +171,7 @@ exports.getOPFById = async (req, res) => {
   try {
     const opf = await OPF.findById(req.params.id).lean();
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
-    res.status(200).json({ success: true, data: opf });
+    res.status(200).json({ success: true, data: enrichOPFFinancials(opf) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

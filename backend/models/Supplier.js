@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const SupplierSchema = new mongoose.Schema(
   {
+    supplierId: { type: String, trim: true },
     createdBy: {
       type: String,
       trim: true,
@@ -118,6 +119,7 @@ const SupplierSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
   },
   { timestamps: true }
 );
@@ -133,5 +135,6 @@ SupplierSchema.index({ createdBy: 1, product: 1, createdAt: -1 });
 SupplierSchema.index({ supplierName: 1, emailId: 1, contactNumber: 1 });
 SupplierSchema.index({ supplierName: 1, contactName: 1, emailId: 1, contactNumber: 1, product: 1, createdAt: -1 });
 SupplierSchema.index({ contactName: 1, emailId: 1, contactNumber: 1, product: 1, createdAt: -1 });
+SupplierSchema.index({ supplierId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Supplier', SupplierSchema);

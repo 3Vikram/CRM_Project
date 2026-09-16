@@ -5,6 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
 
 export interface LeadRecord {
   _id: string;
+  customerId?: string;
   leadId?: string;
   quotationId?: string;
   companyName?: string;
@@ -122,8 +123,13 @@ export async function updateLead(id: string, payload: Partial<LeadRecord>) {
 }
 
 export async function deleteLead(id: string) {
-  const response = await axios.delete(`${API_BASE_URL}/leads/${id}`);
-  return response.data;
+  try {
+    const response = await axios.delete(`${API_BASE_URL}/leads/${encodeURIComponent(id)}`);
+    return response.data;
+  } catch (error) {
+    console.error('Delete lead error:', axios.isAxiosError(error) ? error.response?.data || error.message : error);
+    throw error;
+  }
 }
 
 export async function moveLeadToActivity(id: string) {

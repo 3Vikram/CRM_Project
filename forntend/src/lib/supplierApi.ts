@@ -30,6 +30,7 @@ async function requestWithFallback(method: 'get' | 'post' | 'put' | 'delete', ur
 
 export interface SupplierRecord {
   _id: string;
+  supplierId?: string;
   createdBy?: string;
   supplierName: string;
   gstNumber?: string;

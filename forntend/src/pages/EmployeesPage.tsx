@@ -133,7 +133,7 @@ export default function EmployeesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] pb-3">
-        <h1 className="text-2xl font-bold tracking-normal text-slate-800 ">Employee List</h1>
+        <h1 className="crm-page-heading">Employee List</h1>
         <div className="flex items-center gap-3">
           <button type="button" onClick={handleAddNew} className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B]">
             ADD NEW +
@@ -286,7 +286,7 @@ export default function EmployeesPage() {
               <div><span className="font-semibold text-slate-600">Modules Option:</span> {formatList(selectedEmployee.modulesOption)}</div>
             </div>
             <div className="flex justify-end gap-2 border-t border-[#E5E7EB] pt-4">
-              <button onClick={() => handleEdit(selectedEmployee)} className="rounded bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1d4ed8]">Edit Employee</button>
+              <button onClick={() => handleEdit(selectedEmployee)} className="rounded bg-[#111827] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B]">Edit Employee</button>
             </div>
           </div>
         ) : null}

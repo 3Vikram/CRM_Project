@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import { Toast } from '@/components/toast';
 import { createLead, fetchLeadById, updateLead } from '@/lib/leadApi';
+import { fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi';
 
 const initialState = {
   companyName: '',
@@ -11,7 +12,6 @@ const initialState = {
   email: '',
   mobile: '',
   followUpDate: '',
-  followUpTime: '',
   assignedTo: '',
   sourceOfLead: 'Manual',
   customerRequirements: '',
@@ -25,6 +25,7 @@ export default function LeadFormPage() {
   const [form, setForm] = useState(initialState);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
 
   const validate = useMemo(() => {
     const nextErrors: Record<string, string> = {};
@@ -36,6 +37,12 @@ export default function LeadFormPage() {
     else if (!/^\+?[0-9\s-]{7,15}$/.test(form.mobile)) nextErrors.mobile = 'Please enter a valid mobile number';
     return nextErrors;
   }, [form]);
+
+  useEffect(() => {
+    void fetchEmployees({ limit: 1000, status: 'Active' })
+      .then((response) => setEmployees(response.data || []))
+      .catch(() => setEmployees([]));
+  }, []);
 
   useEffect(() => {
     setErrors(validate);
@@ -55,7 +62,6 @@ export default function LeadFormPage() {
           email: lead.email || '',
           mobile: lead.mobile || '',
           followUpDate: lead.followUpDate || '',
-          followUpTime: lead.followUpTime || '',
           assignedTo: lead.assignedTo || '',
           sourceOfLead: lead.sourceOfLead || 'Manual',
           customerRequirements: lead.customerRequirements || '',
@@ -109,10 +115,10 @@ export default function LeadFormPage() {
   return (
     <div className="space-y-6">
       <div>
-        <button onClick={() => navigate('/sales/leads')} className="mb-3 flex items-center gap-2 text-sm font-medium text-[#2563EB]">
+        <button onClick={() => navigate('/sales/leads')} className="mb-3 flex items-center gap-2 text-sm font-medium text-[#111827]">
           <ArrowLeft className="h-4 w-4" /> Back to Leads
         </button>
-        <h1 className="text-4xl font-serif font-bold text-gray-900">{isEditMode ? 'Edit Lead' : 'Add Lead'}</h1>
+        <h1 className="crm-page-heading">{isEditMode ? 'Edit Lead' : 'Add Lead'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
@@ -120,12 +126,10 @@ export default function LeadFormPage() {
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Company Name</span>
             <input name="companyName" value={form.companyName} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
-            {errors.companyName && <p className="text-xs text-red-600">{errors.companyName}</p>}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Contact Person</span>
             <input name="contactPerson" value={form.contactPerson} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
-            {errors.contactPerson && <p className="text-xs text-red-600">{errors.contactPerson}</p>}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Designation</span>
@@ -134,24 +138,24 @@ export default function LeadFormPage() {
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Email</span>
             <input name="email" value={form.email} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
-            {errors.email && <p className="text-xs text-red-600">{errors.email}</p>}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Mobile Number</span>
             <input name="mobile" value={form.mobile} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
-            {errors.mobile && <p className="text-xs text-red-600">{errors.mobile}</p>}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Assign To</span>
-            <input name="assignedTo" value={form.assignedTo} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <select name="assignedTo" value={form.assignedTo} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+              <option value="">Select Employee</option>
+              {employees.map((employee) => {
+                const employeeName = employee.employeeName || employee.fullName || employee.email;
+                return <option key={employee._id} value={employeeName}>{employeeName}</option>;
+              })}
+            </select>
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Follow-up Date</span>
             <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Follow-up Time</span>
-            <input type="time" name="followUpTime" value={form.followUpTime} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Source Of Lead</span>
@@ -173,7 +177,7 @@ export default function LeadFormPage() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <button type="submit" className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white">
+          <button type="submit" className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
             <Save className="h-4 w-4" /> Submit
           </button>
           <button type="button" onClick={() => setForm(initialState)} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">

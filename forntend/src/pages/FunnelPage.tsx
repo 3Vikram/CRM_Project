@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Download,
-  Eye,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Download,
+  Eye,
+  FileText,
+  Pencil,
+  Plus,
+  Printer,
+  Search,
+  Trash2,
 } from 'lucide-react'
 import { Toast } from '@/components/toast'
+import { fetchCustomers } from '@/lib/customerApi'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/lib/leadApi'
 
 const entriesOptions = [10, 25, 50, 100]
@@ -35,10 +39,9 @@ const getProductNames = (products?: any[]) => {
 const calculateGrandTotal = (products?: any[]) => {
   if (!products || !Array.isArray(products) || products.length === 0) return '-'
   const total = products.reduce((sum, p) => {
-    const subtotal = (Number(p.quantity) || 0) * (Number(p.unitPrice) || 0)
-    const taxPercent = parseFloat(String(p.tax).match(/(\d+(?:\.\d+)?)/)?.[1] || '0')
-    const tax = (subtotal * taxPercent) / 100
-    return sum + subtotal + tax
+    const quantity = Number(p.quantity) || 0
+    const unitPrice = Number(p.unitPrice) || 0
+    return sum + quantity * unitPrice
   }, 0)
   return total === 0 ? '-' : new Intl.NumberFormat('en-IN', { style: 'decimal', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(total)
 }
@@ -46,146 +49,215 @@ const calculateGrandTotal = (products?: any[]) => {
 const getUniqueValues = (items: Array<string | undefined>) =>
   Array.from(new Set(items.filter(Boolean) as string[])).sort()
 
+const getAccountTypeByCompany = (companyName: string | undefined, customerMap: Record<string, string>) => {
+  if (!companyName) return '-'
+  return customerMap[companyName] || '-'
+}
+
 export default function FunnelPage() {
   const navigate = useNavigate()
-  const [quotations, setQuotations] = useState<LeadRecord[]>([])
+  const [funnels, setFunnels] = useState<LeadRecord[]>([])
+  const [customers, setCustomers] = useState<Array<{ companyName?: string; customerName?: string; accountType?: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [createdBy, setCreatedBy] = useState('all')
   const [createdDate, setCreatedDate] = useState('all')
   const [expectedClosure, setExpectedClosure] = useState('all')
   const [customerName, setCustomerName] = useState('all')
+  const [stageFilter, setStageFilter] = useState('all')
+  const [accountTypeFilter, setAccountTypeFilter] = useState('all')
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
-    const loadQuotations = async () => {
+    const loadPageData = async () => {
       setIsLoading(true)
-      setError(null)
       try {
-        const response = await fetchLeads({ limit: 1000 })
-        // Filter only records with quotationId
-        const quoteRecords = response.data.filter((lead) => lead.quotationId)
-        setQuotations(quoteRecords)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load quotations')
+        const [leadResponse, customerResponse] = await Promise.all([
+          fetchLeads({ limit: 1000 }),
+          fetchCustomers({ limit: 1000, fresh: true }),
+        ])
+
+        const funnelRecords = (leadResponse.data || []).filter((lead) => lead.quotationId || lead.leadStatus)
+        setFunnels(funnelRecords)
+        setCustomers(customerResponse.data || [])
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : 'Failed to load funnel data')
       } finally {
         setIsLoading(false)
       }
     }
 
-    void loadQuotations()
+    void loadPageData()
   }, [])
 
+  const customerAccountMap = useMemo(() => {
+    return customers.reduce<Record<string, string>>((acc, customer) => {
+      const companyName = customer.companyName || customer.customerName
+      if (companyName) acc[companyName] = customer.accountType || '-'
+      return acc
+    }, {})
+  }, [customers])
+
   const filterOptions = useMemo(() => {
-    const createdByOptions = getUniqueValues(quotations.map((quote) => quote.createdBy || 'System'))
-    const createdDateOptions = getUniqueValues(quotations.map((quote) => formatDate(quote.createdDate)))
+    const createdByOptions = getUniqueValues(funnels.map((row) => row.createdBy || 'System'))
+    const createdDateOptions = getUniqueValues(funnels.map((row) => formatDate(row.createdDate)))
     const expectedClosureOptions = getUniqueValues(
-      quotations.map((quote) => {
-        const expectedClosure = quote.quotationDetails?.expectedClosure
-        if (!expectedClosure) return undefined
-        return formatDate(expectedClosure)
+      funnels.map((row) => {
+        const value = row.quotationDetails?.expectedClosure
+        return value ? formatDate(value) : undefined
       })
     )
-    const customerNameOptions = getUniqueValues(quotations.map((quote) => quote.companyName))
+    const customerNameOptions = getUniqueValues(funnels.map((row) => row.companyName))
+    const stageOptions = getUniqueValues(funnels.map((row) => row.leadStatus || 'New'))
+    const accountTypeOptions = getUniqueValues(customers.map((customer) => customer.accountType || undefined))
+
     return {
       createdByOptions,
       createdDateOptions,
       expectedClosureOptions,
       customerNameOptions,
+      stageOptions,
+      accountTypeOptions,
     }
-  }, [quotations])
+  }, [funnels, customers])
 
-  const filteredQuotations = useMemo(() => {
-    return quotations.filter((quote) => {
-      if (createdBy !== 'all' && (quote.createdBy || 'System') !== createdBy) return false
-      if (createdDate !== 'all' && formatDate(quote.createdDate) !== createdDate) return false
+  const filteredFunnels = useMemo(() => {
+    return funnels.filter((row) => {
+      if (createdBy !== 'all' && (row.createdBy || 'System') !== createdBy) return false
+      if (createdDate !== 'all' && formatDate(row.createdDate) !== createdDate) return false
       if (expectedClosure !== 'all') {
-        const quoteDateClosure = quote.quotationDetails?.expectedClosure
-        if (formatDate(quoteDateClosure) !== expectedClosure) return false
+        const target = row.quotationDetails?.expectedClosure
+        if (formatDate(target) !== expectedClosure) return false
       }
-      if (customerName !== 'all' && (quote.companyName || '') !== customerName) return false
+      if (customerName !== 'all' && (row.companyName || '') !== customerName) return false
+      if (stageFilter !== 'all' && (row.leadStatus || 'New') !== stageFilter) return false
+      if (accountTypeFilter !== 'all' && getAccountTypeByCompany(row.companyName, customerAccountMap) !== accountTypeFilter) return false
 
       if (!searchQuery.trim()) return true
+
       const search = searchQuery.trim().toLowerCase()
       return [
-        quote.quotationId || quote.leadId,
-        quote.createdBy,
-        quote.companyName,
-        quote.contactPerson,
-        quote.email,
+        row.quotationId || row.leadId,
+        row.createdBy,
+        row.companyName,
+        row.contactPerson,
+        row.remarks,
+        row.leadStatus,
+        getProductNames(row.products),
       ]
         .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(search))
+        .some((value) => String(value).toLowerCase().includes(search))
     })
-  }, [quotations, createdBy, createdDate, expectedClosure, customerName, searchQuery])
+  }, [funnels, createdBy, createdDate, expectedClosure, customerName, stageFilter, accountTypeFilter, searchQuery, customerAccountMap])
 
-  const pageCount = Math.max(1, Math.ceil(filteredQuotations.length / entriesPerPage))
-  const pageData = filteredQuotations.slice((page - 1) * entriesPerPage, page * entriesPerPage)
+  const pageCount = Math.max(1, Math.ceil(filteredFunnels.length / entriesPerPage))
+  const pageData = filteredFunnels.slice((page - 1) * entriesPerPage, page * entriesPerPage)
 
   useEffect(() => {
-    if (page > pageCount) setPage(pageCount)
-  }, [pageCount, page])
+    setPage((currentPage) => Math.min(currentPage, pageCount))
+  }, [pageCount])
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this quotation?')) return
+    if (!window.confirm('Delete this funnel item?')) return
     try {
       await deleteLead(id)
-      setQuotations((prev) => prev.filter((quote) => quote._id !== id))
-      setToast('Quotation deleted')
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to delete quotation')
+      setFunnels((prev) => prev.filter((row) => row._id !== id))
+      setToast('Funnel item deleted')
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Failed to delete funnel item')
+    }
+  }
+
+  const copyReport = async () => {
+    const header = ['SL No', 'Created By', 'Funnel Id', 'Created Date', 'Company', 'Account Type', 'OEM', 'Products', 'SBU', 'Revenue', 'Bottom Line', 'Expected Closure', 'Stage', 'Remark']
+    const rows = filteredFunnels.map((row, index) => [
+      String(index + 1),
+      row.createdBy || 'System',
+      row.quotationId || row.leadId || '-',
+      formatDate(row.createdDate),
+      row.companyName || '-',
+      getAccountTypeByCompany(row.companyName, customerAccountMap),
+      row.products?.[0]?.productName || '-',
+      getProductNames(row.products),
+      row.quotationDetails?.serviceName || '-',
+      calculateGrandTotal(row.products),
+      calculateGrandTotal(row.products),
+      formatDate(row.quotationDetails?.expectedClosure),
+      row.leadStatus || 'New',
+      row.remarks || row.quotationDetails?.note || '-',
+    ])
+
+    const text = [header, ...rows].map((line) => line.join('\t')).join('\n')
+
+    try {
+      await navigator.clipboard.writeText(text)
+      setToast('Funnel table copied to clipboard')
+    } catch {
+      setToast('Clipboard unavailable. Please copy manually.')
     }
   }
 
   const downloadReport = () => {
-    const headers = ['Quotation ID', 'Created By', 'Customer Name', 'Contact Person', 'Products', 'Grand Total', 'Created Date', 'Expected Closure', 'Delivery']
-    const rows = filteredQuotations.map((quote) => [
-      quote.quotationId || quote.leadId,
-      quote.createdBy || 'System',
-      quote.companyName || '-',
-      quote.contactPerson || '-',
-      getProductNames(quote.products),
-      calculateGrandTotal(quote.products),
-      formatDate(quote.createdDate),
-      formatDate(quote.quotationDetails?.expectedClosure),
-      quote.quotationDetails?.delivery || '-',
+    const headers = ['SL No', 'Created By', 'Funnel Id', 'Created Date', 'Company', 'Account Type', 'OEM', 'Products', 'SBU', 'Revenue', 'Bottom Line', 'Expected Closure', 'Stage', 'Remark']
+    const rows = filteredFunnels.map((row, index) => [
+      String(index + 1),
+      row.createdBy || 'System',
+      row.quotationId || row.leadId || '-',
+      formatDate(row.createdDate),
+      row.companyName || '-',
+      getAccountTypeByCompany(row.companyName, customerAccountMap),
+      row.products?.[0]?.productName || '-',
+      getProductNames(row.products),
+      row.quotationDetails?.serviceName || '-',
+      calculateGrandTotal(row.products),
+      calculateGrandTotal(row.products),
+      formatDate(row.quotationDetails?.expectedClosure),
+      row.leadStatus || 'New',
+      row.remarks || row.quotationDetails?.note || '-',
     ])
+
     const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
       .join('\n')
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = 'quotations.csv'
+    link.href = url
+    link.download = 'funnel-report.csv'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
+  const printReport = () => window.print()
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">Funnel</h1>
-        </div>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-[28px] font-bold text-[#111827]">Funnel Dashboard</h1>
         <button
-          onClick={() => navigate('/sales/quotations/new')}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8]"
+          type="button"
+          onClick={() => navigate('/sales/funnels/new')}
+          className="inline-flex items-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f2937]"
         >
-          <Plus className="h-4 w-4" /> ADD NEW
+          <Plus className="h-4 w-4" />
+          GENERATE NEW +
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
+      <div className="h-px w-full bg-[#DAD4C7]" />
+
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <label className="space-y-1.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Created By</span>
           <select
             value={createdBy}
             onChange={(event) => { setCreatedBy(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
           >
             <option value="all">All</option>
             {filterOptions.createdByOptions.map((option) => (
@@ -194,12 +266,12 @@ export default function FunnelPage() {
           </select>
         </label>
 
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created Date</span>
+        <label className="space-y-1.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Created Date</span>
           <select
             value={createdDate}
             onChange={(event) => { setCreatedDate(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
           >
             <option value="all">All</option>
             {filterOptions.createdDateOptions.map((option) => (
@@ -208,12 +280,12 @@ export default function FunnelPage() {
           </select>
         </label>
 
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Expected Closure</span>
+        <label className="space-y-1.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Expected Closure</span>
           <select
             value={expectedClosure}
             onChange={(event) => { setExpectedClosure(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
           >
             <option value="all">All</option>
             {filterOptions.expectedClosureOptions.map((option) => (
@@ -222,12 +294,12 @@ export default function FunnelPage() {
           </select>
         </label>
 
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Customer Name</span>
+        <label className="space-y-1.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Customer Name</span>
           <select
             value={customerName}
             onChange={(event) => { setCustomerName(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
           >
             <option value="all">All</option>
             {filterOptions.customerNameOptions.map((option) => (
@@ -235,113 +307,162 @@ export default function FunnelPage() {
             ))}
           </select>
         </label>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 text-sm text-gray-700">
-          <span>Show</span>
+        <label className="space-y-1.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Stage</span>
           <select
-            value={entriesPerPage}
-            onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
-            className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            value={stageFilter}
+            onChange={(event) => { setStageFilter(event.target.value); setPage(1) }}
+            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
           >
-            {entriesOptions.map((option) => (
+            <option value="all">All</option>
+            {filterOptions.stageOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          <span>entries</span>
-        </div>
+        </label>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <label className="space-y-1.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Account Type</span>
+          <select
+            value={accountTypeFilter}
+            onChange={(event) => { setAccountTypeFilter(event.target.value); setPage(1) }}
+            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
+          >
+            <option value="all">All</option>
+            {filterOptions.accountTypeOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copyReport}
+            className="rounded-md border border-[#D9D4CA] bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-[#f7f4ef]"
+          >
+            Copy
+          </button>
           <button
             type="button"
             onClick={downloadReport}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
+            className="rounded-md border border-[#D9D4CA] bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-[#f7f4ef]"
           >
-            <Download className="h-4 w-4" /> Download Report
+            CSV
           </button>
+          <button
+            type="button"
+            onClick={printReport}
+            className="rounded-md border border-[#D9D4CA] bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-[#f7f4ef]"
+          >
+            Print
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-[13px] font-medium text-gray-600">Search:</label>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
               value={searchQuery}
               onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
               placeholder="Search"
-              className="w-72 rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              className="w-[220px] rounded-md border border-[#D9D4CA] bg-white py-1.5 pl-8 pr-2.5 text-[13px] text-gray-700 placeholder-gray-400 outline-none focus:border-[#B9B1A0]"
             />
           </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-[#EFECE5] bg-white shadow-sm">
-        <table className="min-w-full text-sm">
-          <thead className="bg-[#F2EFE8] text-left text-xs uppercase tracking-wider text-gray-600">
+      <div className="overflow-x-auto rounded-md border border-[#D9D4CA] bg-white">
+        <table className="min-w-[1500px] w-full border-collapse text-[12px] text-gray-700">
+          <thead className="bg-[#F6F3EE] text-left text-[11px] font-semibold uppercase tracking-wide text-gray-600">
             <tr>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Quotation ID</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Created By</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Customer Name</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Contact Person</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Products</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Grand Total</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Created Date</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Expected Closure</th>
-              <th className="border-r border-[#D1D5DB] px-4 py-3">Delivery</th>
-              <th className="px-4 py-3">Action</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">SL No.</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Created By</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Funnel Id</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Created Date</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Company</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Account Type</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">OEM</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Products</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">SBU</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Revenue</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Bottom Line</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Expected Closure</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Stage</th>
+              <th className="border-r border-[#D9D4CA] px-2 py-2.5">Remark</th>
+              <th className="px-2 py-2.5">Action</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
-                  Loading quotations…
+                <td colSpan={15} className="px-3 py-8 text-center text-[13px] text-gray-500">
+                  Loading funnel entries…
                 </td>
               </tr>
-            ) : filteredQuotations.length === 0 ? (
+            ) : filteredFunnels.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No quotations found.
+                <td colSpan={15} className="px-3 py-8 text-center text-[13px] text-gray-500">
+                  No funnel records found.
                 </td>
               </tr>
             ) : (
-              pageData.map((quote) => (
-                <tr key={quote._id} className="border-t border-[#EFECE5] bg-white">
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 font-medium text-gray-900">{quote.quotationId || quote.leadId || quote._id}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.createdBy || 'System'}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.companyName || '-'}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.contactPerson || '-'}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{getProductNames(quote.products)}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{calculateGrandTotal(quote.products)}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(quote.createdDate)}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(quote.quotationDetails?.expectedClosure)}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.quotationDetails?.delivery || '-'}</td>
-                  <td className="px-4 py-3 text-gray-700">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => navigate(`/sales/quotations/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => navigate(`/sales/quotations/edit/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleDelete(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              pageData.map((row, index) => {
+                const accountType = getAccountTypeByCompany(row.companyName, customerAccountMap)
+                const revenue = calculateGrandTotal(row.products)
+                const companyValue = row.companyName || '-'
+                const productValue = getProductNames(row.products)
+
+                return (
+                  <tr key={row._id} className="border-t border-[#EAE3D7] align-top">
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{(page - 1) * entriesPerPage + index + 1}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{row.createdBy || 'System'}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] font-medium text-gray-900">{row.quotationId || row.leadId || '-'}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{formatDate(row.createdDate)}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700" style={{ maxWidth: '220px', wordBreak: 'normal', overflowWrap: 'break-word' }}>{companyValue}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{accountType}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{row.products?.[0]?.productName || '-'}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700" style={{ maxWidth: '220px', wordBreak: 'normal', overflowWrap: 'break-word' }}>{productValue}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{row.quotationDetails?.serviceName || '-'}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700 whitespace-nowrap">{revenue}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700 whitespace-nowrap">{revenue}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700 whitespace-nowrap">{formatDate(row.quotationDetails?.expectedClosure)}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700">{row.leadStatus || 'New'}</td>
+                    <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700" style={{ maxWidth: '240px', wordBreak: 'normal', overflowWrap: 'break-word' }}>{row.remarks || row.quotationDetails?.note || '-'}</td>
+                    <td className="px-2 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => navigate(`/sales/quotations/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View">
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => navigate(`/sales/quotations/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={() => handleDelete(row._id)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 px-2 text-sm text-gray-600">
-        <div>{`Showing ${pageData.length} of ${filteredQuotations.length} entries`}</div>
+      <div className="flex items-center justify-between gap-4 px-1 text-[12px] text-gray-600">
+        <div>{`Showing ${pageData.length} of ${filteredFunnels.length} entries`}</div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
             disabled={page <= 1}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-[#EFECE5] bg-white px-3 text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#D9D4CA] bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -350,7 +471,7 @@ export default function FunnelPage() {
             type="button"
             onClick={() => setPage((prev) => Math.min(prev + 1, pageCount))}
             disabled={page >= pageCount}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-[#EFECE5] bg-white px-3 text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#D9D4CA] bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ChevronRight className="h-4 w-4" />
           </button>

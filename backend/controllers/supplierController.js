@@ -1,6 +1,29 @@
 const Supplier = require('../models/Supplier');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 
+const getNextSupplierId = async () => {
+  const suppliers = await Supplier.find({ supplierId: /^SL-\d+$/ }).select({ supplierId: 1 }).lean();
+  const highest = suppliers.reduce((max, supplier) => {
+    const number = Number(String(supplier.supplierId).slice(3));
+    return Number.isSafeInteger(number) ? Math.max(max, number) : max;
+  }, 0);
+  return `SL-${highest + 1}`;
+};
+
+const ensureSupplierIds = async () => {
+  const suppliers = await Supplier.find({}).select({ supplierId: 1, createdAt: 1 }).sort({ createdAt: 1, _id: 1 }).lean();
+  let highest = suppliers.reduce((max, supplier) => {
+    const number = /^SL-(\d+)$/.exec(String(supplier.supplierId || ''))?.[1];
+    return number && Number.isSafeInteger(Number(number)) ? Math.max(max, Number(number)) : max;
+  }, 0);
+
+  for (const supplier of suppliers) {
+    if (/^SL-\d+$/.test(String(supplier.supplierId || ''))) continue;
+    highest += 1;
+    await Supplier.updateOne({ _id: supplier._id }, { $set: { supplierId: `SL-${highest}` } });
+  }
+};
+
 const normalizeSupplierPayload = (payload = {}) => {
   const source = payload || {};
   return {
@@ -34,6 +57,7 @@ const normalizeSupplierRecord = (supplier = {}) => {
   const source = supplier?.toObject ? supplier.toObject() : supplier || {};
   return {
     _id: source._id ? `${source._id}` : '',
+    supplierId: source.supplierId || '',
     ...source,
     createdBy: source.createdBy || 'Admin',
     supplierName: source.supplierName || '',
@@ -63,6 +87,7 @@ const normalizeSupplierRecord = (supplier = {}) => {
 
 exports.getSuppliers = async (req, res) => {
   try {
+    await ensureSupplierIds();
     const {
       page = 1,
       limit = DEFAULT_PAGE_SIZE,
@@ -96,6 +121,7 @@ exports.getSuppliers = async (req, res) => {
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
       _id: 1,
+      supplierId: 1,
       createdBy: 1,
       supplierName: 1,
       contactName: 1,
@@ -141,6 +167,7 @@ exports.getSupplierById = async (req, res) => {
 
 exports.createSupplier = async (req, res) => {
   try {
+    await ensureSupplierIds();
     const payload = normalizeSupplierPayload(req.body);
     const { supplierName, category, paymentTerms, addressLine1, country, state } = payload;
 
@@ -148,7 +175,15 @@ exports.createSupplier = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Supplier Name, Category, Payment Terms, Address, Country, and State are required.' });
     }
 
-    const supplier = await Supplier.create(payload);
+    let supplier;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        supplier = await Supplier.create({ ...payload, supplierId: await getNextSupplierId() });
+        break;
+      } catch (error) {
+        if (error.code !== 11000 || attempt === 4) throw error;
+      }
+    }
     res.status(201).json({ success: true, message: 'Supplier created successfully', data: normalizeSupplierRecord(supplier) });
   } catch (error) {
     if (error.name === 'ValidationError') {

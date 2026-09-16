@@ -165,7 +165,7 @@ export default function RenewalsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="mb-2 text-4xl font-serif font-bold text-gray-900">Renewals</h1>
+          <h1 className="crm-page-heading">Renewals</h1>
           {/* <p className="text-sm text-slate-500">Renewal information from saved OPF records</p> */}
         </div>
         <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">

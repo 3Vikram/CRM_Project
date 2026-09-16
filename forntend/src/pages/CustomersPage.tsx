@@ -26,6 +26,7 @@ import {
 
 interface Customer {
   id: string
+  customerId: string
   companyName: string
   customerName: string
   contactName: string
@@ -57,6 +58,8 @@ export default function CustomersPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [pendingDeleteCustomer, setPendingDeleteCustomer] = useState<Customer | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const searchTimeoutRef = useRef<number | null>(null)
   const [showToast, setShowToast] = useState(false)
@@ -159,16 +162,21 @@ export default function CustomersPage() {
   const handleAddNew = useCallback(() => navigate('/customers/new'), [navigate])
   const handleEdit = useCallback((customer: Customer) => navigate(`/customers/edit/${customer.id}`), [navigate])
 
-  const handleDelete = useCallback(async (customer: Customer) => {
+  const handleDelete = useCallback(async () => {
+    if (!pendingDeleteCustomer) return
+    setIsDeleting(true)
     try {
-      await deleteCustomer(customer.id)
-      setCustomers((prev) => prev.filter((item) => item.id !== customer.id))
-      setSelectedCustomer(null)
+      await deleteCustomer(pendingDeleteCustomer.id)
+      customerCacheRef.current.clear()
+      setPendingDeleteCustomer(null)
+      await loadCustomers(page, pageSize, searchQuery, createdByFilter, statusFilter, accountTypeFilter, createdDateFilter)
       notify('Customer deleted')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Failed to delete customer', 'error')
+    } finally {
+      setIsDeleting(false)
     }
-  }, [notify])
+  }, [accountTypeFilter, createdByFilter, createdDateFilter, loadCustomers, page, pageSize, pendingDeleteCustomer, searchQuery, statusFilter, notify])
 
   const handleDownloadReport = useCallback(() => {
     const rows = customers.map((customer) => [
@@ -202,7 +210,7 @@ export default function CustomersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900 mb-2">
+          <h1 className="crm-page-heading">
             Customer List
           </h1>
           <p className="text-gray-600">
@@ -212,7 +220,7 @@ export default function CustomersPage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleAddNew}
-            className="flex items-center gap-2 rounded-lg bg-[#2563eb] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8]"
+            className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
           >
             <Plus className="h-4 w-4" />
             Add New
@@ -311,7 +319,7 @@ export default function CustomersPage() {
                         customer={customer}
                         onView={handleView}
                         onEdit={handleEdit}
-                        onDelete={handleDelete}
+                        onDelete={(customer) => setPendingDeleteCustomer(customer)}
                       />
                     ))
                   ) : (
@@ -383,12 +391,30 @@ export default function CustomersPage() {
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-              <button onClick={() => handleEdit(selectedCustomer)} className="rounded bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1d4ed8]">
+              <button onClick={() => handleEdit(selectedCustomer)} className="rounded bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1E293B]">
                 Edit Customer
               </button>
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={!!pendingDeleteCustomer}
+        onClose={() => !isDeleting && setPendingDeleteCustomer(null)}
+        title="Delete Customer"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setPendingDeleteCustomer(null)} disabled={isDeleting} className="rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">
+              Cancel
+            </button>
+            <button type="button" onClick={() => void handleDelete()} disabled={isDeleting} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        )}
+      >
+        <p className="text-sm text-gray-700">Are you sure to delete this customer?</p>
       </Modal>
 
       {showToast && <Toast message={toastMessage} type={toastType} onClose={() => setShowToast(false)} />}
@@ -400,6 +426,7 @@ function mapApiCustomer(customer: CustomerApiRecord): Customer {
   const primaryContact = customer.contacts?.[0]
   return {
     id: customer._id,
+    customerId: customer.customerId || '',
     companyName: customer.companyName || customer.customerName || 'Untitled Customer',
     customerName: customer.customerName || customer.companyName || 'Untitled Customer',
     contactName: primaryContact?.name || customer.customerName || '',
@@ -461,7 +488,7 @@ const CustomerTableRow = memo(function CustomerTableRow({
 }) {
   return (
     <tr className="border-b border-[#F2EFE8] transition-colors hover:bg-[#F2EFE8]">
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-sm font-semibold text-gray-900`}>{customer.id.slice(-6).toUpperCase()}</td>
+      <td className={`${tableCellClass.replace('py-3','py-4')} text-sm font-semibold text-gray-900`}>{customer.customerId}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.createdBy || 'Admin'}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.companyName}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.contactName}</td>

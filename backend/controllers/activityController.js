@@ -102,8 +102,12 @@ const getActivityDateRange = (preset = '', customDate = '') => {
 };
 
 const generateActivityId = async () => {
-  const total = await Activity.countDocuments({ deletedAt: null });
-  return `ACT-${String(total + 1).padStart(6, '0')}`;
+  const existingIds = await Activity.find({ deletedAt: null, activityId: /^ACT-\d+$/ }, { activityId: 1 }).lean();
+  const highest = existingIds.reduce((max, activity) => {
+    const numericPart = Number(String(activity.activityId).slice(4));
+    return Number.isSafeInteger(numericPart) ? Math.max(max, numericPart) : max;
+  }, 0);
+  return `ACT-${highest + 1}`;
 };
 
 exports.getActivities = async (req, res) => {
@@ -190,7 +194,7 @@ exports.getActivityById = async (req, res) => {
 exports.createActivity = async (req, res) => {
   try {
     const payload = {
-      activityId: req.body.activityId || (await generateActivityId()),
+      activityId: '',
       leadId: req.body.leadId || '',
       leadSource: req.body.leadSource || 'Lead',
       customerName: req.body.customerName || '',
@@ -235,7 +239,15 @@ exports.createActivity = async (req, res) => {
       });
     }
 
-    const activity = await Activity.create(payload);
+    let activity;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        activity = await Activity.create({ ...payload, activityId: payload.activityId || await generateActivityId() });
+        break;
+      } catch (error) {
+        if (error?.code !== 11000 || attempt === 4) throw error;
+      }
+    }
 
     if (payload.leadId) {
       const lead = await Lead.findOne({ leadId: payload.leadId }).lean();

@@ -7,7 +7,6 @@ import {
   ArrowUpRight,
   BarChart3,
   CalendarRange,
-  Download,
   FileText,
   RefreshCcw,
   Target,
@@ -124,6 +123,15 @@ const getPreviousMonthKey = (monthKey: string) => {
   return toMonthKey(prev)
 }
 
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+const getYearFromDateValue = (value?: string | Date | null) => {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.getFullYear()
+}
+
 const getKpiMetric = (items: Array<{ createdAt?: string; createdDate?: string }>, monthKey: string, selector: (item: any) => number) => {
   return items.reduce((sum, item) => {
     const month = getMonthKeyFromDateValue(item.createdAt ?? item.createdDate)
@@ -149,8 +157,7 @@ const activityTone = {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const defaultMonth = toMonthKey(new Date())
-  const [selectedMonth, setSelectedMonth] = useState(defaultMonth)
+  const [selectedMonth, setSelectedMonth] = useState('overall')
   const [leads, setLeads] = useState<LeadRecord[]>([])
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
   const [opfs, setOpfs] = useState<OPFRecord[]>([])
@@ -176,26 +183,105 @@ export default function DashboardPage() {
     }
   }
 
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    customers.forEach((customer) => {
+      const year = getYearFromDateValue(customer.createdAt)
+      if (year) years.add(year)
+    })
+    leads.forEach((lead) => {
+      const year = getYearFromDateValue(lead.createdDate)
+      if (year) years.add(year)
+    })
+    opfs.forEach((opf) => {
+      const year = getYearFromDateValue(opf.createdDate)
+      if (year) years.add(year)
+    })
+
+    if (years.size === 0) {
+      years.add(new Date().getFullYear())
+    }
+
+    return Array.from(years).sort((a, b) => b - a)
+  }, [customers, leads, opfs])
+
   useEffect(() => {
     void fetchDashboardData()
   }, [])
 
-  const currentMonthDate = parseMonthKey(selectedMonth)
-  const previousMonthKey = getPreviousMonthKey(selectedMonth)
+  const selectedYearNumber = availableYears[0] ?? new Date().getFullYear()
+
+  const previousMonthKey = selectedMonth === 'overall'
+    ? `${selectedYearNumber - 1}-12`
+    : getPreviousMonthKey(`${selectedYearNumber}-${selectedMonth}`)
+
+  const selectedScope = useMemo(() => {
+    const scopeCustomers = customers.filter((customer) => {
+      const year = getYearFromDateValue(customer.createdAt)
+      if (selectedMonth === 'overall') return year === selectedYearNumber
+      return getMonthKeyFromDateValue(customer.createdAt) === `${selectedYearNumber}-${selectedMonth}`
+    })
+
+    const scopeLeads = leads.filter((lead) => {
+      const year = getYearFromDateValue(lead.createdDate)
+      if (selectedMonth === 'overall') return year === selectedYearNumber
+      return getMonthKeyFromDateValue(lead.createdDate) === `${selectedYearNumber}-${selectedMonth}`
+    })
+
+    const scopeOpfs = opfs.filter((opf) => {
+      const year = getYearFromDateValue(opf.createdDate)
+      if (selectedMonth === 'overall') return year === selectedYearNumber
+      return getMonthKeyFromDateValue(opf.createdDate) === `${selectedYearNumber}-${selectedMonth}`
+    })
+
+    const previousCustomers = customers.filter((customer) => {
+      const year = getYearFromDateValue(customer.createdAt)
+      if (selectedMonth === 'overall') return year === selectedYearNumber - 1
+      return getMonthKeyFromDateValue(customer.createdAt) === previousMonthKey
+    })
+
+    const previousLeads = leads.filter((lead) => {
+      const year = getYearFromDateValue(lead.createdDate)
+      if (selectedMonth === 'overall') return year === selectedYearNumber - 1
+      return getMonthKeyFromDateValue(lead.createdDate) === previousMonthKey
+    })
+
+    const previousOpfs = opfs.filter((opf) => {
+      const year = getYearFromDateValue(opf.createdDate)
+      if (selectedMonth === 'overall') return year === selectedYearNumber - 1
+      return getMonthKeyFromDateValue(opf.createdDate) === previousMonthKey
+    })
+
+    const yearCustomers = customers.filter((customer) => getYearFromDateValue(customer.createdAt) === selectedYearNumber)
+    const yearLeads = leads.filter((lead) => getYearFromDateValue(lead.createdDate) === selectedYearNumber)
+    const yearOpfs = opfs.filter((opf) => getYearFromDateValue(opf.createdDate) === selectedYearNumber)
+
+    return {
+      scopeCustomers,
+      scopeLeads,
+      scopeOpfs,
+      previousCustomers,
+      previousLeads,
+      previousOpfs,
+      yearCustomers,
+      yearLeads,
+      yearOpfs,
+    }
+  }, [customers, leads, opfs, previousMonthKey, selectedMonth, selectedYearNumber])
 
   const dataset = useMemo(() => {
-    const activeCustomers = customers.filter((customer) => customer.status === 'Active').length
-    const quotations = leads.filter((lead) => lead.leadStatus === 'Proposal Sent' || Boolean(lead.quotationId)).length
-    const orderCloser = leads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length
+    const activeCustomers = selectedScope.scopeCustomers.filter((customer) => customer.status === 'Active').length
+    const quotations = selectedScope.scopeLeads.filter((lead) => lead.leadStatus === 'Proposal Sent' || Boolean(lead.quotationId)).length
+    const orderCloser = selectedScope.scopeLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length
 
-    const currentMonthLeads = leads.filter((lead) => getMonthKeyFromDateValue(lead.createdDate) === selectedMonth)
-    const previousMonthLeads = leads.filter((lead) => getMonthKeyFromDateValue(lead.createdDate) === previousMonthKey)
+    const currentMonthLeads = selectedScope.scopeLeads
+    const previousMonthLeads = selectedScope.previousLeads
 
-    const currentMonthOpfs = opfs.filter((opf) => getMonthKeyFromDateValue(opf.createdDate) === selectedMonth)
-    const previousMonthOpfs = opfs.filter((opf) => getMonthKeyFromDateValue(opf.createdDate) === previousMonthKey)
+    const currentMonthOpfs = selectedScope.scopeOpfs
+    const previousMonthOpfs = selectedScope.previousOpfs
 
-    const activeCustomersCurrent = customers.filter((customer) => customer.status === 'Active' && getMonthKeyFromDateValue(customer.createdAt) === selectedMonth).length
-    const activeCustomersPrevious = customers.filter((customer) => customer.status === 'Active' && getMonthKeyFromDateValue(customer.createdAt) === previousMonthKey).length
+    const activeCustomersCurrent = selectedScope.scopeCustomers.filter((customer) => customer.status === 'Active').length
+    const activeCustomersPrevious = selectedScope.previousCustomers.filter((customer) => customer.status === 'Active').length
 
     const currentRevenue = currentMonthOpfs.reduce((sum, opf) => sum + getOpfRevenue(opf), 0)
     const previousRevenue = previousMonthOpfs.reduce((sum, opf) => sum + getOpfRevenue(opf), 0)
@@ -210,8 +296,8 @@ export default function DashboardPage() {
         currentValue: activeCustomersCurrent,
         previousValue: activeCustomersPrevious,
         icon: Users,
-        iconBg: 'bg-emerald-100',
-        iconColor: 'text-emerald-700',
+        iconBg: 'bg-violet-100',
+        iconColor: 'text-violet-700',
         description: 'Customers currently active',
       },
       {
@@ -232,26 +318,26 @@ export default function DashboardPage() {
         currentValue: currentMonthLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length,
         previousValue: previousMonthLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length,
         icon: TrendingUp,
-        iconBg: 'bg-amber-100',
-        iconColor: 'text-amber-700',
+        iconBg: 'bg-indigo-100',
+        iconColor: 'text-indigo-700',
         description: 'Won sales opportunities',
       },
     ]
 
-    const pipelineLeads = leads.filter((lead) => !['Won', 'Lost', 'Scrapped'].includes(lead.leadStatus ?? ''))
+    const pipelineLeads = selectedScope.scopeLeads.filter((lead) => !['Won', 'Lost', 'Scrapped'].includes(lead.leadStatus ?? ''))
     const totalPipelineValue = pipelineLeads.reduce((sum, lead) => sum + getLeadRevenueEstimate(lead), 0)
     const totalActiveOpportunities = pipelineLeads.length
-    const wonDeals = leads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length
-    const lostDeals = leads.filter((lead) => lead.leadStatus === 'Lost' || lead.isScrapped).length
+    const wonDeals = selectedScope.scopeLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length
+    const lostDeals = selectedScope.scopeLeads.filter((lead) => lead.leadStatus === 'Lost' || lead.isScrapped).length
     const winRate = wonDeals + lostDeals === 0 ? 0 : (wonDeals / (wonDeals + lostDeals)) * 100
     const lossRate = wonDeals + lostDeals === 0 ? 0 : (lostDeals / (wonDeals + lostDeals)) * 100
 
     const stageDistribution = ['New', 'Follow-up', 'Interested', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost', 'Scrapped'].map((stage) => ({
       stage,
-      count: leads.filter((lead) => (lead.leadStatus ?? 'New') === stage).length,
+      count: selectedScope.scopeLeads.filter((lead) => (lead.leadStatus ?? 'New') === stage).length,
     }))
 
-    const sourceCounts = leads.reduce<Record<string, number>>((acc, lead) => {
+    const sourceCounts = selectedScope.scopeLeads.reduce<Record<string, number>>((acc, lead) => {
       const key = lead.sourceOfLead || lead.source || 'Other'
       acc[key] = (acc[key] ?? 0) + 1
       return acc
@@ -261,12 +347,12 @@ export default function DashboardPage() {
       .map(([source, count]) => ({
         source,
         count,
-        percentage: leads.length === 0 ? 0 : (count / leads.length) * 100,
+        percentage: selectedScope.scopeLeads.length === 0 ? 0 : (count / selectedScope.scopeLeads.length) * 100,
       }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5)
 
-    const sourceRevenue = leads.reduce<Record<string, number>>((acc, lead) => {
+    const sourceRevenue = selectedScope.scopeLeads.reduce<Record<string, number>>((acc, lead) => {
       const key = lead.sourceOfLead || lead.source || 'Other'
       acc[key] = (acc[key] ?? 0) + getLeadRevenueEstimate(lead)
       return acc
@@ -277,24 +363,15 @@ export default function DashboardPage() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 4)
 
-    const topReps = Object.entries(
-      leads.reduce<Record<string, { revenue: number; deals: number }>>((acc, lead) => {
-        const rep = lead.assignedTo || 'Unassigned'
-        const revenue = getLeadRevenueEstimate(lead)
-        acc[rep] = acc[rep] ?? { revenue: 0, deals: 0 }
-        acc[rep].revenue += revenue
-        if (lead.leadStatus === 'Won' || lead.isConverted) acc[rep].deals += 1
-        return acc
-      }, {})
-    )
-      .map(([rep, values]) => ({ rep, revenue: values.revenue, deals: values.deals }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5)
+    const trendDates = selectedMonth === 'overall'
+      ? Array.from({ length: 12 }, (_, index) => new Date(selectedYearNumber, index, 1))
+      : [parseMonthKey(`${selectedYearNumber}-${selectedMonth}`)]
 
-    const trendData = Array.from({ length: 12 }, (_, index) => {
-      const targetDate = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - (11 - index), 1)
+    const trendData = trendDates.map((targetDate) => {
       const monthKey = toMonthKey(targetDate)
-      const monthOpfs = opfs.filter((opf) => getMonthKeyFromDateValue(opf.createdDate) === monthKey)
+      const monthOpfs = selectedMonth === 'overall'
+        ? selectedScope.yearOpfs.filter((opf) => getMonthKeyFromDateValue(opf.createdDate) === monthKey)
+        : selectedScope.scopeOpfs
       const revenue = monthOpfs.reduce((sum, opf) => sum + getOpfRevenue(opf), 0)
       const margin = monthOpfs.reduce((sum, opf) => sum + (getOpfRevenue(opf) - getOpfCost(opf)), 0)
       return { month: targetDate, label: formatMonthLabel(targetDate, 'short'), monthKey, revenue, margin }
@@ -316,7 +393,6 @@ export default function DashboardPage() {
       stageDistribution,
       sourceRows,
       revenueChannelRows,
-      topReps,
       currentRevenue,
       previousRevenue,
       currentMargin,
@@ -324,13 +400,15 @@ export default function DashboardPage() {
       trendData,
       maxValue,
     }
-  }, [customers, currentMonthDate, leads, opfs, previousMonthKey, selectedMonth])
+  }, [selectedMonth, selectedScope, selectedYearNumber])
 
   const kpiCards = dataset.metrics.map((metric) => {
     const diff = metric.currentValue - metric.previousValue
     const changePercent = percentageChange(metric.currentValue, metric.previousValue)
     const isPositive = diff >= 0
-    const comparisonRange = `${monthRangeLabel(previousMonthKey)}`
+    const comparisonRange = selectedMonth === 'overall'
+      ? `vs Overall ${selectedYearNumber - 1}`
+      : `vs ${monthRangeLabel(previousMonthKey)}`
     return {
       ...metric,
       diff,
@@ -341,26 +419,6 @@ export default function DashboardPage() {
   })
 
   const handleRefresh = () => { void fetchDashboardData() }
-
-  const handleExport = () => {
-    const rows = [
-      ['Metric', 'Current Month', 'Previous Month', 'Difference', 'Change %'],
-      ...kpiCards.map((card) => [card.label, String(card.currentValue), String(card.previousValue), differenceLabel(card.currentValue, card.previousValue), `${Number(card.changePercent).toFixed(2)}%`]),
-      ['Revenue', formatCurrency(dataset.currentRevenue), formatCurrency(dataset.previousRevenue), differenceLabel(dataset.currentRevenue, dataset.previousRevenue), `${Number(percentageChange(dataset.currentRevenue, dataset.previousRevenue)).toFixed(2)}%`],
-      ['Margin', formatCurrency(dataset.currentMargin), formatCurrency(dataset.previousMargin), differenceLabel(dataset.currentMargin, dataset.previousMargin), `${Number(percentageChange(dataset.currentMargin, dataset.previousMargin)).toFixed(2)}%`],
-    ]
-
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `sales-dashboard-${selectedMonth}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-  }
 
   const chartWidth = 760
   const chartHeight = 320
@@ -380,6 +438,15 @@ export default function DashboardPage() {
 
   const revenuePath = buildLinePath('revenue')
   const marginPath = buildLinePath('margin')
+  const isSingleMonthTrend = dataset.trendData.length === 1
+  const singleMonthTrend = dataset.trendData[0]
+  const singleChartMax = Math.max(singleMonthTrend?.revenue ?? 0, singleMonthTrend?.margin ?? 0, 1)
+  const singleChartBaseline = chartHeight - padding
+  const singleBarWidth = 100
+  const singleBarGap = 28
+  const singleRevenueX = chartWidth / 2 - singleBarWidth - singleBarGap / 2
+  const singleMarginX = chartWidth / 2 + singleBarGap / 2
+  const singleBarHeight = (value: number) => (Math.max(value, 0) / singleChartMax) * (chartHeight - padding * 2)
 
   const donutSegments = (() => {
     const total = dataset.revenueChannelRows.reduce((sum, item) => sum + item.value, 0)
@@ -403,33 +470,30 @@ export default function DashboardPage() {
       <div className="flex min-h-full flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="mb-0.5 text-2xl font-serif font-bold text-gray-900">Sales Dashboard</h1>
+            <h1 className="crm-page-heading">Sales Dashboard</h1>
             {/* <p className="text-xs text-gray-600">Overview of your sales performance</p> */}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-2.5 py-1.5 text-xs text-gray-700 shadow-sm">
-              <CalendarRange className="h-3.5 w-3.5 text-gray-500" />
-              <input
-                type="month"
+            <label className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs text-gray-700 shadow-sm">
+              <CalendarRange className="h-3.5 w-3.5 text-blue-600" />
+              <select
                 value={selectedMonth}
-                onChange={(event) => setSelectedMonth(event.target.value || defaultMonth)}
+                onChange={(event) => setSelectedMonth(event.target.value || 'overall')}
                 className="bg-transparent text-xs text-gray-700 outline-none"
-              />
+              >
+                <option value="overall">Overall</option>
+                {monthNames.map((month, index) => (
+                  <option key={month} value={String(index + 1).padStart(2, '0')}>{month}</option>
+                ))}
+              </select>
             </label>
             <button
               type="button"
               onClick={handleRefresh}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-2.5 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100"
             >
               <RefreshCcw className="h-3.5 w-3.5" /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={handleExport}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#EFECE5] bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50"
-            >
-              <Download className="h-3.5 w-3.5" /> Export
             </button>
           </div>
         </div>
@@ -448,7 +512,7 @@ export default function DashboardPage() {
                   <div key={card.key} className="rounded-xl border border-[#EFECE5] bg-white p-4 shadow-sm">
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">{card.label}</p>
+                        <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">{card.label}</p>
                         <p className="mt-2 text-2xl font-bold text-gray-900">{card.value}</p>
                       </div>
                       <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${card.iconBg}`}>
@@ -456,19 +520,6 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs font-medium">
-                      {isPositive ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-emerald-700">
-                          <ArrowUpRight className="h-3 w-3" /> {card.diff} ({Math.abs(card.changePercent).toFixed(2)}%)
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-1.5 py-0.5 text-red-700">
-                          <ArrowDownRight className="h-3 w-3" /> {card.diff} ({Math.abs(card.changePercent).toFixed(2)}%)
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-2 text-[11px] text-gray-500">vs {monthRangeLabel(previousMonthKey)}</p>
                   </div>
                 )
               })}
@@ -484,8 +535,8 @@ export default function DashboardPage() {
                         <p className="text-xs text-gray-500">Monthly revenue and margin overview</p>
                       </div>
                       <div className="flex items-center gap-3 text-xs font-medium text-gray-600">
-                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" /> Revenue</span>
-                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Margin</span>
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#0B4DDA]" /> Revenue</span>
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#4B1D95]" /> Margin</span>
                       </div>
                     </div>
 
@@ -500,47 +551,60 @@ export default function DashboardPage() {
                       )
                     })}
 
-                    {dataset.trendData.map((point, index) => {
-                      const x = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
-                      return (
-                        <g key={point.monthKey}>
-                          <line x1={x} x2={x} y1={padding} y2={chartHeight - padding} stroke="#F3F4F6" />
-                          <text x={x} y={chartHeight - 6} textAnchor="middle" fontSize="10" fill="#6B7280">{point.label}</text>
-                        </g>
-                      )
-                    })}
+                    {isSingleMonthTrend && singleMonthTrend ? (
+                      <g>
+                        <line x1={padding} x2={chartWidth - padding} y1={singleChartBaseline} y2={singleChartBaseline} stroke="#9CA3AF" />
+                        <rect x={singleRevenueX} y={singleChartBaseline - singleBarHeight(singleMonthTrend.revenue)} width={singleBarWidth} height={singleBarHeight(singleMonthTrend.revenue)} rx="4" fill="#0B4DDA" />
+                        <rect x={singleMarginX} y={singleChartBaseline - singleBarHeight(singleMonthTrend.margin)} width={singleBarWidth} height={singleBarHeight(singleMonthTrend.margin)} rx="4" fill="#4B1D95" />
+                        <text x={singleRevenueX + singleBarWidth / 2} y={Math.max(singleChartBaseline - singleBarHeight(singleMonthTrend.revenue) - 10, 16)} textAnchor="middle" fontSize="12" fontWeight="600" fill="#0B4DDA">{formatCompactCurrency(singleMonthTrend.revenue)}</text>
+                        <text x={singleMarginX + singleBarWidth / 2} y={Math.max(singleChartBaseline - singleBarHeight(singleMonthTrend.margin) - 10, 16)} textAnchor="middle" fontSize="12" fontWeight="600" fill="#4B1D95">{formatCompactCurrency(singleMonthTrend.margin)}</text>
+                        <text x={chartWidth / 2} y={chartHeight - 6} textAnchor="middle" fontSize="11" fontWeight="600" fill="#6B7280">{formatMonthLabel(singleMonthTrend.month, 'full')}</text>
+                      </g>
+                    ) : (
+                      <>
+                        {dataset.trendData.map((point, index) => {
+                          const x = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
+                          return (
+                            <g key={point.monthKey}>
+                              <line x1={x} x2={x} y1={padding} y2={chartHeight - padding} stroke="#F3F4F6" />
+                              <text x={x} y={chartHeight - 6} textAnchor="middle" fontSize="10" fill="#6B7280">{point.label}</text>
+                            </g>
+                          )
+                        })}
 
-                    <path d={revenuePath} fill="none" stroke="#2563EB" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d={marginPath} fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d={revenuePath} fill="none" stroke="#0B4DDA" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d={marginPath} fill="none" stroke="#4B1D95" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 
-                    {dataset.trendData.map((point, index) => {
-                      const x = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
-                      const revenueY = chartHeight - padding - (point.revenue / dataset.maxValue) * (chartHeight - padding * 2)
-                      const marginY = chartHeight - padding - (point.margin / dataset.maxValue) * (chartHeight - padding * 2)
-                      return (
-                        <g key={`${point.monthKey}-dots`}>
-                          <circle cx={x} cy={revenueY} r="3" fill="#2563EB" />
-                          <circle cx={x} cy={marginY} r="3" fill="#10B981" />
-                        </g>
-                      )
-                    })}
+                        {dataset.trendData.map((point, index) => {
+                          const x = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
+                          const revenueY = chartHeight - padding - (point.revenue / dataset.maxValue) * (chartHeight - padding * 2)
+                          const marginY = chartHeight - padding - (point.margin / dataset.maxValue) * (chartHeight - padding * 2)
+                          return (
+                            <g key={`${point.monthKey}-dots`}>
+                              <circle cx={x} cy={revenueY} r="3" fill="#0B4DDA" />
+                              <circle cx={x} cy={marginY} r="3" fill="#4B1D95" />
+                            </g>
+                          )
+                        })}
+                      </>
+                    )}
                       </svg>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 lg:content-center">
                     <div className="rounded-lg border border-[#EFECE5] bg-slate-50 p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Revenue</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Revenue</p>
                       <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(dataset.currentRevenue)}</p>
                       <p className="mt-1 text-xs text-gray-500">vs {formatCurrency(dataset.previousRevenue)}</p>
                     </div>
                     <div className="rounded-lg border border-[#EFECE5] bg-slate-50 p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Margin</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Margin</p>
                       <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(dataset.currentMargin)}</p>
                       <p className="mt-1 text-xs text-gray-500">vs {formatCurrency(dataset.previousMargin)}</p>
                     </div>
                     <div className="rounded-lg border border-[#EFECE5] bg-slate-50 p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Margin %</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Margin %</p>
                       <p className="mt-1 text-xl font-bold text-gray-900">
                         {dataset.currentRevenue === 0 ? '0.00%' : `${((dataset.currentMargin / dataset.currentRevenue) * 100).toFixed(2)}%`}
                       </p>
@@ -553,33 +617,32 @@ export default function DashboardPage() {
               <div className="rounded-xl border border-[#EFECE5] bg-white p-3 shadow-sm">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <h2 className="text-lg font-serif font-bold text-gray-900">Pipeline Summary</h2>
-                  <Target className="h-4 w-4 text-blue-600" />
+                  <Target className="h-4 w-4 text-violet-600" />
                 </div>
 
                 <div className="space-y-2.5">
-                  <div className="rounded-lg bg-slate-50 p-2.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Total pipeline value</p>
-                    <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(dataset.totalPipelineValue)}</p>
+<div className="rounded-lg bg-violet-50 p-2.5">
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-800">Total pipeline value</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-lg border border-[#EFECE5] bg-white p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Active opps</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Active opps</p>
                       <p className="mt-1 text-lg font-bold text-gray-900">{dataset.totalActiveOpportunities}</p>
                     </div>
                     <div className="rounded-lg border border-[#EFECE5] bg-white p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Won deals</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Won deals</p>
                       <p className="mt-1 text-lg font-bold text-gray-900">{dataset.wonDeals}</p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-lg border border-[#EFECE5] bg-white p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Lost deals</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Lost deals</p>
                       <p className="mt-1 text-lg font-bold text-gray-900">{dataset.lostDeals}</p>
                     </div>
                     <div className="rounded-lg border border-[#EFECE5] bg-white p-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Win rate</p>
+                      <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Win rate</p>
                       <p className="mt-1 text-lg font-bold text-gray-900">{dataset.winRate.toFixed(1)}%</p>
                     </div>
                   </div>
@@ -595,7 +658,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="space-y-2 pt-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">Stage distribution</p>
+                    <p className="dashboard-label text-[10px] font-semibold uppercase tracking-normal text-gray-500">Stage distribution</p>
                     {dataset.stageDistribution.filter((item) => item.count > 0).map((item) => (
                       <div key={item.stage}>
                         <div className="mb-1 flex items-center justify-between text-[10px] text-gray-600">
@@ -615,18 +678,18 @@ export default function DashboardPage() {
             <div className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-2">
               <div className="rounded-xl border border-[#EFECE5] bg-white p-3 shadow-sm">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-base font-serif font-bold text-gray-900">Top Sources</h3>
+                  <h3 className="text-lg font-serif font-bold text-gray-900">Top Sources</h3>
                   <BarChart3 className="h-4 w-4 text-gray-500" />
                 </div>
                 <div className="space-y-2.5">
                   {dataset.sourceRows.map((row) => (
                     <div key={row.source}>
-                      <div className="mb-1 flex items-center justify-between text-xs text-gray-700">
+                      <div className="mb-1 flex items-center justify-between text-[11px] text-gray-700">
                         <span>{row.source}</span>
                         <span>{row.count}</span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-blue-600" style={{ width: `${row.percentage}%` }} />
+                        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-violet-600" style={{ width: `${row.percentage}%` }} />
                       </div>
                       <p className="mt-1 text-[10px] text-gray-500">{row.percentage.toFixed(1)}%</p>
                     </div>
@@ -636,7 +699,7 @@ export default function DashboardPage() {
 
               <div className="rounded-xl border border-[#EFECE5] bg-white p-3 shadow-sm">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-base font-serif font-bold text-gray-900">Revenue by Channel</h3>
+                  <h3 className="text-lg font-serif font-bold text-gray-900">Revenue by Channel</h3>
                   <TrendingUp className="h-4 w-4 text-gray-500" />
                 </div>
 
@@ -647,8 +710,8 @@ export default function DashboardPage() {
                   <div className="flex-1 space-y-2">
                     {dataset.revenueChannelRows.map((row, index) => (
                       <div key={row.source} className="flex items-center justify-between gap-2 text-[11px]">
-                        <div className="flex items-center gap-1.5 text-gray-700">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: ['#2563EB', '#10B981', '#8B5CF6', '#F59E0B'][index % 4] }} />
+                        <div className="flex items-center gap-1.5 text-[16px] text-gray-700">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: ['#0B4DDA', '#4B1D95', '#2F5DBD', '#6E7AF5'][index % 4] }} />
                           {row.source}
                         </div>
                         <span className="font-medium text-gray-700">{formatCompactCurrency(row.value)}</span>

@@ -44,12 +44,13 @@ const normalizeContactPayload = (payload = {}) => {
 
 const normalizeContactRecord = (contact = {}) => {
   const source = contact?.toObject ? contact.toObject() : contact || {};
+  const populatedCustomer = source.customerId && typeof source.customerId === 'object' ? source.customerId : null;
   const normalized = {
     _id: source._id ? `${source._id}` : source._doc?._id ? `${source._doc._id}` : '',
     ...source,
   };
-  normalized.customerId = source.customerId || source.customer || '';
-  normalized.customerName = source.customerName || '';
+  normalized.customerId = populatedCustomer?._id ? `${populatedCustomer._id}` : source.customerId || source.customer || '';
+  normalized.customerName = source.customerName || populatedCustomer?.customerName || populatedCustomer?.companyName || '';
   normalized.contactName = source.contactName || source.contactPerson || '';
   normalized.designation = source.designation || '';
   normalized.mail = source.mail || '';
@@ -97,6 +98,7 @@ exports.getContacts = async (req, res) => {
     const [contacts, total] = await Promise.all([
       Contact.find(query)
         .select(projection)
+        .populate('customerId', 'customerName companyName')
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
@@ -121,12 +123,77 @@ exports.getContacts = async (req, res) => {
 
 exports.getContactById = async (req, res) => {
   try {
-    const contact = await Contact.findById(req.params.id).select({ __v: 0 }).lean();
+    const contact = await Contact.findById(req.params.id).select({ __v: 0 }).populate('customerId', 'customerName companyName').lean();
     if (!contact) {
       return res.status(404).json({ success: false, message: 'Contact not found' });
     }
     res.status(200).json({ success: true, data: normalizeContactRecord(contact) });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.moveContactToCustomer = async (req, res) => {
+  try {
+    const contact = await Contact.findById(req.params.id);
+    if (!contact) {
+      return res.status(404).json({ success: false, message: 'Contact not found' });
+    }
+
+    let customer = contact.customerId ? await Customer.findById(contact.customerId) : null;
+    const customerName = `${contact.customerName || ''}`.trim();
+    if (!customer && customerName) {
+      const customerNamePattern = new RegExp(`^${customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      customer = await Customer.findOne({ $or: [{ customerName: customerNamePattern }, { companyName: customerNamePattern }] });
+    }
+
+    const contactData = {
+      contactType: 'Accounts',
+      name: contact.contactName,
+      email: contact.email,
+      phone: contact.contactNumber,
+      designation: contact.designation || '',
+    };
+
+    if (!customer) {
+      customer = await Customer.create({
+        companyName: customerName || contact.contactName,
+        contacts: [contactData],
+        status: 'Active',
+        accountType: 'Individual',
+        createdBy: 'Admin',
+      });
+    } else {
+      const normalizedEmail = contact.email.toLowerCase();
+      const normalizedPhone = contact.contactNumber.replace(/\D/g, '');
+      const alreadyLinked = (customer.contacts || []).some((existingContact) => (
+        existingContact.email?.toLowerCase() === normalizedEmail
+        || existingContact.phone?.replace(/\D/g, '') === normalizedPhone
+      ));
+
+      if (!alreadyLinked) {
+        customer.contacts.push(contactData);
+        await customer.save();
+      }
+    }
+
+    contact.customerId = customer._id;
+    contact.customerName = customerName || contact.customerName || customer.companyName || customer.customerName;
+    await contact.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Contact moved to customer successfully',
+      data: {
+        customer: customer.toObject ? customer.toObject() : customer,
+        contact: normalizeContactRecord(contact.toObject ? contact.toObject() : contact),
+      },
+    });
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((entry) => entry.message);
+      return res.status(400).json({ success: false, message: messages.join(', ') });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -270,6 +337,7 @@ exports.deleteContact = async (req, res) => {
 module.exports = {
   getContacts: exports.getContacts,
   getContactById: exports.getContactById,
+  moveContactToCustomer: exports.moveContactToCustomer,
   createContact: exports.createContact,
   importContacts: exports.importContacts,
   importUpload,

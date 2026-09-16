@@ -19,6 +19,7 @@ import {
   Heading2,
   Heading3,
   Image as ImageIcon,
+  ImagePlus,
   Italic,
   Link2,
   List,
@@ -67,9 +68,10 @@ interface TiptapEditorProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  companyLogoUrl?: string
 }
 
-export function TiptapEditor({ value, onChange, placeholder }: TiptapEditorProps) {
+export function TiptapEditor({ value, onChange, placeholder, companyLogoUrl }: TiptapEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const editor = useEditor({
@@ -143,16 +145,21 @@ export function TiptapEditor({ value, onChange, placeholder }: TiptapEditorProps
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
 
+  const insertCompanyLogo = () => {
+    if (!editor || !companyLogoUrl) return
+    editor.chain().focus().setImage({ src: companyLogoUrl, alt: '' }).run()
+  }
+
   return (
     <div className="overflow-hidden rounded-lg border border-[#EFECE5] bg-[#FAF8F2]">
       <div className="flex flex-wrap items-center gap-2 border-b border-[#EFECE5] bg-white p-2">
-        <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} className={`rounded p-2 ${editor?.isActive('bold') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Bold className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} className={`rounded p-2 ${editor?.isActive('italic') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Italic className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleUnderline().run()} className={`rounded p-2 ${editor?.isActive('underline') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><UnderlineIcon className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleStrike().run()} className={`rounded p-2 ${editor?.isActive('strike') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Strikethrough className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className={`rounded p-2 ${editor?.isActive('heading', { level: 1 }) ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Heading1 className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className={`rounded p-2 ${editor?.isActive('heading', { level: 2 }) ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Heading2 className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} className={`rounded p-2 ${editor?.isActive('heading', { level: 3 }) ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Heading3 className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} className={`rounded p-2 ${editor?.isActive('bold') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Bold className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} className={`rounded p-2 ${editor?.isActive('italic') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Italic className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleUnderline().run()} className={`rounded p-2 ${editor?.isActive('underline') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><UnderlineIcon className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleStrike().run()} className={`rounded p-2 ${editor?.isActive('strike') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Strikethrough className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className={`rounded p-2 ${editor?.isActive('heading', { level: 1 }) ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Heading1 className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className={`rounded p-2 ${editor?.isActive('heading', { level: 2 }) ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Heading2 className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} className={`rounded p-2 ${editor?.isActive('heading', { level: 3 }) ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Heading3 className="h-4 w-4" /></button>
 
         <select
           className="rounded border border-[#EFECE5] bg-white px-2 py-1 text-sm"
@@ -169,14 +176,15 @@ export function TiptapEditor({ value, onChange, placeholder }: TiptapEditorProps
         </select>
 
         <input type="color" onChange={(event) => editor?.chain().focus().setColor(event.target.value).run()} className="h-8 w-8 cursor-pointer rounded border border-[#EFECE5] bg-white p-0" />
-        <button type="button" onClick={() => editor?.chain().focus().toggleHighlight().run()} className={`rounded p-2 ${editor?.isActive('highlight') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Highlighter className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`rounded p-2 ${editor?.isActive('bulletList') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><List className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`rounded p-2 ${editor?.isActive('orderedList') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><ListOrdered className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={`rounded p-2 ${editor?.isActive({ textAlign: 'left' }) ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><AlignLeft className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={`rounded p-2 ${editor?.isActive({ textAlign: 'center' }) ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><AlignCenter className="h-4 w-4" /></button>
-        <button type="button" onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={`rounded p-2 ${editor?.isActive({ textAlign: 'right' }) ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><AlignRight className="h-4 w-4" /></button>
-        <button type="button" onClick={setLink} className={`rounded p-2 ${editor?.isActive('link') ? 'bg-[#2563EB] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Link2 className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleHighlight().run()} className={`rounded p-2 ${editor?.isActive('highlight') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Highlighter className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`rounded p-2 ${editor?.isActive('bulletList') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><List className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`rounded p-2 ${editor?.isActive('orderedList') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><ListOrdered className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={`rounded p-2 ${editor?.isActive({ textAlign: 'left' }) ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><AlignLeft className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={`rounded p-2 ${editor?.isActive({ textAlign: 'center' }) ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><AlignCenter className="h-4 w-4" /></button>
+        <button type="button" onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={`rounded p-2 ${editor?.isActive({ textAlign: 'right' }) ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><AlignRight className="h-4 w-4" /></button>
+        <button type="button" onClick={setLink} className={`rounded p-2 ${editor?.isActive('link') ? 'bg-[#111827] text-white' : 'text-gray-700 hover:bg-[#F2EFE8]'}`}><Link2 className="h-4 w-4" /></button>
         <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded p-2 text-gray-700 hover:bg-[#F2EFE8]"><ImageIcon className="h-4 w-4" /></button>
+        <button type="button" onClick={insertCompanyLogo} disabled={!companyLogoUrl} title="Insert Company Logo" aria-label="Insert Company Logo" className="rounded p-2 text-gray-700 hover:bg-[#F2EFE8] disabled:cursor-not-allowed disabled:opacity-40"><ImagePlus className="h-4 w-4" /></button>
         <button type="button" onClick={() => editor?.chain().focus().undo().run()} className="rounded p-2 text-gray-700 hover:bg-[#F2EFE8]"><Undo2 className="h-4 w-4" /></button>
         <button type="button" onClick={() => editor?.chain().focus().redo().run()} className="rounded p-2 text-gray-700 hover:bg-[#F2EFE8]"><Redo2 className="h-4 w-4" /></button>
       </div>

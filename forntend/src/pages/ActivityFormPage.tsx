@@ -20,6 +20,7 @@ const initialState = {
   mobileNo: '',
   activityType: '',
   activityDate: new Date().toISOString().slice(0, 10),
+  followUpDate: '',
   location: '',
   response: 'Pending',
   followUp: 'Required',
@@ -110,6 +111,7 @@ export default function ActivityFormPage() {
           mobileNo: activity.mobileNo || '',
           activityType: activity.activityType || '',
           activityDate: activity.activityDate || new Date().toISOString().slice(0, 10),
+          followUpDate: activity.followUpDate || '',
           location: activity.location || '',
           response: activity.response || 'Pending',
           followUp: activity.followUp || 'Required',
@@ -223,10 +225,10 @@ export default function ActivityFormPage() {
   return (
     <div className="space-y-6">
       <div>
-        <button onClick={() => navigate('/sales/activities')} className="mb-3 flex items-center gap-2 text-sm font-medium text-[#2563EB]">
+          <button onClick={() => navigate('/sales/activities')} className="mb-3 flex items-center gap-2 text-sm font-medium text-[#111827]">
           <ArrowLeft className="h-4 w-4" /> Back to Activities
         </button>
-        <h1 className="text-4xl font-serif font-bold text-gray-900">{isEditMode ? 'Edit Activity' : 'Add Activity'}</h1>
+        <h1 className="crm-page-heading">{isEditMode ? 'Edit Activity' : 'Add Activity'}</h1>
         {/* <p className="text-sm text-gray-600">Create and track activity records for customers, partners, and leads.</p> */}
       </div>
 
@@ -273,7 +275,10 @@ export default function ActivityFormPage() {
             <input type="date" name="activityDate" value={form.activityDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
           </label>
 
-          
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-gray-700">Follow-up Date</span>
+            <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+          </label>
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Location</span>
@@ -329,7 +334,7 @@ export default function ActivityFormPage() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-70">
+          <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B] disabled:opacity-70">
             <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Submit'}
           </button>
           <button type="button" onClick={() => setForm(initialState)} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">

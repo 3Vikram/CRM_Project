@@ -11,6 +11,8 @@ export interface OPFRecord {
   customerId?: string;
   customerName?: string;
   contactPerson?: string;
+  revenue?: number | string;
+  margin?: number | string;
   
   // Supplier/Product Details
   supplierName?: string;

@@ -27,7 +27,9 @@ import {
 import { StatCard } from '@/components/stat-card'
 import { LeadDetailsDrawer } from '@/components/LeadDetailsDrawer'
 import { Toast } from '@/components/toast'
-import { fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, type LeadRecord } from '@/lib/leadApi'
+import { fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/lib/leadApi'
+import { fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi'
+import { clearApiCache } from '@/lib/apiCache'
 
 interface LeadsPageProps {
   pageTitle?: string
@@ -50,12 +52,6 @@ const statusColors: Record<string, string> = {
   Scrapped: 'bg-gray-100 text-gray-700',
 }
 
-const priorityColors: Record<string, string> = {
-  High: 'bg-red-100 text-red-700',
-  Medium: 'bg-amber-100 text-amber-700',
-  Low: 'bg-gray-100 text-gray-700',
-}
-
 const PAGE_SIZE = 8
 const tableCellClass = 'px-4 py-3 border-r border-[#D1D5DB]'
 
@@ -72,9 +68,14 @@ export default function LeadsPage({
   const visibleLeads = leads
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<LeadRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([])
+  const [ownerTarget, setOwnerTarget] = useState<LeadRecord | null>(null)
+  const [ownerMenuPosition, setOwnerMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const [isAssigningOwner, setIsAssigningOwner] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
-  const [priorityFilter, setPriorityFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(8)
@@ -90,7 +91,7 @@ export default function LeadsPage({
   const loadLeads = useCallback(async () => {
     setIsLoading(true)
     try {
-      const params = { page, limit, search: searchQuery, status: statusFilter === 'all' ? '' : statusFilter, priority: priorityFilter === 'all' ? '' : priorityFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
+      const params = { page, limit, search: searchQuery, status: statusFilter === 'all' ? '' : statusFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
       const response = await fetchLeads(params)
       setLeads(response.data)
       setTotalPages(response.pagination.totalPages)
@@ -100,11 +101,20 @@ export default function LeadsPage({
     } finally {
       setIsLoading(false)
     }
-  }, [limit, page, searchQuery, sourceFilter, statusFilter, priorityFilter])
+  }, [limit, page, searchQuery, sourceFilter, statusFilter])
 
   useEffect(() => { void loadLeads() }, [loadLeads])
 
-  useEffect(() => { setPage(1) }, [searchQuery, statusFilter, priorityFilter, sourceFilter])
+  useEffect(() => {
+    void fetchEmployees({ limit: 1000, status: 'Active' })
+      .then((response) => setEmployees(response.data || []))
+      .catch((error) => {
+        console.error('Unable to load employees for lead assignment:', error)
+        setToast('Unable to load employees')
+      })
+  }, [])
+
+  useEffect(() => { setPage(1) }, [searchQuery, statusFilter, sourceFilter])
 
   useEffect(() => {
     setStatusFilter(initialStatusFilter)
@@ -170,20 +180,17 @@ export default function LeadsPage({
         setSelectedLead(lead)
         setIsDrawerOpen(true)
       }
+      if (action === 'delete') {
+        setDeleteTarget(lead)
+      }
       if (action === 'edit') navigate(`/sales/leads/edit/${lead._id}`)
       if (action === 'owner') {
-        const owner = window.prompt('Assign owner', lead.assignedTo || 'Unassigned')
-        if (owner !== null) {
-          setLeads((prev) => prev.map((item) => item._id === lead._id ? { ...item, assignedTo: owner || 'Unassigned' } : item))
-          setToast('Owner assigned')
+        if (menuPosition) {
+          setOwnerMenuPosition({ top: menuPosition.top, left: menuPosition.left })
         }
-      }
-      if (action === 'note') {
-        const note = window.prompt('Add a note', '')
-        if (note !== null && note.trim()) {
-          setLeads((prev) => prev.map((item) => item._id === lead._id ? { ...item, notes: [...(item.notes || []), { message: note.trim(), createdBy: 'You', createdAt: new Date().toISOString() }] } : item))
-          setToast('Note added')
-        }
+        setOwnerTarget(lead)
+        closeMenu()
+        return
       }
       if (action === 'followup') {
         const followUpDate = window.prompt('Schedule follow-up date', lead.followUpDate || '')
@@ -221,10 +228,9 @@ export default function LeadsPage({
       if (action === 'quotation') { await generateLeadQuotation(lead._id); setToast('Quotation generated'); await loadLeads() }
       if (action === 'convert') { await convertLeadToCustomer(lead._id); setToast('Lead converted to customer'); await loadLeads() }
       if (action === 'scrap') { const reason = window.prompt('Enter scrap reason', 'No reason provided') || 'No reason provided'; await scrapLead(lead._id, reason); setToast('Lead scrapped'); await loadLeads() }
-      if (action === 'delete') { await deleteLead(lead._id); setToast('Lead deleted'); await loadLeads() }
       closeMenu()
       // reload current page after actions that change state
-      if (['activity', 'funnel', 'quotation', 'convert', 'scrap', 'delete'].includes(action)) {
+      if (['activity', 'funnel', 'quotation', 'convert', 'scrap'].includes(action)) {
         await loadLeads()
       }
     } catch {
@@ -251,11 +257,11 @@ export default function LeadsPage({
       
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900 mb-2">{pageTitle}</h1>
+          <h1 className="crm-page-heading">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {showAddButton && (
-            <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8]">
+            <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> {addButtonLabel}
             </button>
           )}
@@ -270,16 +276,16 @@ export default function LeadsPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={BarChart3} label="Total Leads" value={metrics.total} description="All leads in the CRM" iconBg="bg-blue-100" iconColor="text-blue-700" />
-        <StatCard icon={Sparkles} label="New Leads Today" value={metrics.newToday} description="Freshly created today" iconBg="bg-emerald-100" iconColor="text-emerald-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={BarChart3} label="Total Leads" value={metrics.total} description="All leads in the CRM" iconBg="bg-blue-100" iconColor="text-blue-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={Sparkles} label="New Leads Today" value={metrics.newToday} description="Freshly created today" iconBg="bg-emerald-100" iconColor="text-emerald-700" />
         {/* <StatCard icon={Clock3} label="Pending Leads" value={metrics.pending} description="Awaiting attention" iconBg="bg-amber-100" iconColor="text-amber-700" /> */}
         {/* <StatCard icon={Flame} label="Hot Leads" value={metrics.hot} description="Score above 80" iconBg="bg-rose-100" iconColor="text-rose-700" /> */}
-        <StatCard icon={RefreshCw} label="Follow-ups Today" value={metrics.followUps} description="Scheduled follow ups" iconBg="bg-violet-100" iconColor="text-violet-700" />
-        <StatCard icon={Activity} label="Total Activities Generated" value={metrics.activities} description="Tracked events" iconBg="bg-sky-100" iconColor="text-sky-700" />
-        <StatCard icon={Users} label="Total Funnels Generated" value={metrics.funnels} description="Qualified pipeline" iconBg="bg-indigo-100" iconColor="text-indigo-700" />
-        <StatCard icon={FileText} label="Total Quotations Generated" value={metrics.quotations} description="Proposals sent" iconBg="bg-purple-100" iconColor="text-purple-700" />
-        <StatCard icon={CheckCircle2} label="Converted Leads" value={metrics.converted} description="Won customers" iconBg="bg-green-100" iconColor="text-green-700" />
-        <StatCard icon={XCircle} label="Scrapped Leads" value={metrics.scrapped} description="Closed as lost" iconBg="bg-gray-100" iconColor="text-gray-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={RefreshCw} label="Follow-ups Today" value={metrics.followUps} description="Scheduled follow ups" iconBg="bg-violet-100" iconColor="text-violet-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={Activity} label="Total Activities Generated" value={metrics.activities} description="Tracked events" iconBg="bg-sky-100" iconColor="text-sky-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={Users} label="Total Funnels Generated" value={metrics.funnels} description="Qualified pipeline" iconBg="bg-indigo-100" iconColor="text-indigo-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Total Quotations Generated" value={metrics.quotations} description="Proposals sent" iconBg="bg-purple-100" iconColor="text-purple-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={CheckCircle2} label="Converted Leads" value={metrics.converted} description="Won customers" iconBg="bg-green-100" iconColor="text-green-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={XCircle} label="Scrapped Leads" value={metrics.scrapped} description="Closed as lost" iconBg="bg-gray-100" iconColor="text-gray-700" />
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
@@ -289,15 +295,6 @@ export default function LeadsPage({
             <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="all">All</option>
               {Object.keys(statusColors).map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Priority</span>
-            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
-              <option value="all">All</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
             </select>
           </label>
           <label className="min-w-[180px] flex-1">
@@ -322,9 +319,6 @@ export default function LeadsPage({
                   <th className={tableCellClass}>Contact</th>
                   <th className={tableCellClass}>Email</th>
                   <th className={tableCellClass}>Source</th>
-                  <th className={tableCellClass}>Score</th>
-                  <th className={tableCellClass}>Priority</th>
-                  <th className={tableCellClass}>Status</th>
                   <th className={tableCellClass}>Assigned To</th>
                   <th className={tableCellClass}>Action</th>
                 </tr>
@@ -337,9 +331,6 @@ export default function LeadsPage({
                     <td className={`${tableCellClass} text-gray-700`}>{lead.contactPerson}</td>
                     <td className={`${tableCellClass} text-gray-700`}>{lead.email}</td>
                     <td className={`${tableCellClass} text-gray-700`}>{lead.sourceOfLead || 'Manual'}</td>
-                    <td className={`${tableCellClass} text-gray-700`}>{lead.leadScore || 0}</td>
-                    <td className={`${tableCellClass}`}><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityColors[lead.priority || 'Low'] || 'bg-gray-100 text-gray-700'}`}>{lead.priority || 'Low'}</span></td>
-                    <td className={`${tableCellClass}`}><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[lead.leadStatus || 'New'] || 'bg-blue-100 text-blue-700'}`}>{lead.leadStatus || 'New'}</span></td>
                     <td className={`${tableCellClass} text-gray-700`}>{lead.assignedTo || 'Unassigned'}</td>
                     <td className={tableCellClass}>
                       <div className="relative">
@@ -373,13 +364,13 @@ export default function LeadsPage({
                             <button onClick={() => handleAction('view', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Eye className="h-4 w-4" /> View Lead</button>
                             <button onClick={() => handleAction('edit', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /> Edit Lead</button>
                             <button onClick={() => handleAction('owner', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Users className="h-4 w-4" /> Assign Owner</button>
-                            <button onClick={() => handleAction('note', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><FileText className="h-4 w-4" /> Add Note</button>
                             <button onClick={() => handleAction('followup', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Schedule Follow-up</button>
                             <button onClick={() => handleAction('activity', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Move To Activity</button>
                             <button onClick={() => handleAction('funnel', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Users className="h-4 w-4" /> Move To Funnel</button>
                             <button onClick={() => handleAction('quotation', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><FileText className="h-4 w-4" /> Generate Quotation</button>
                             <button onClick={() => handleAction('convert', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><CheckCircle2 className="h-4 w-4" /> Convert To Customer</button>
                             <button onClick={() => handleAction('scrap', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><XCircle className="h-4 w-4" /> Scrap Lead</button>
+                            <button onClick={() => handleAction('delete', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" /> Delete</button>
                           </div>,
                           document.body
                         )}
@@ -401,6 +392,77 @@ export default function LeadsPage({
           </div>
         </div>
       </div>
+
+      {ownerTarget && ownerMenuPosition ? createPortal(
+        <div
+          className="fixed z-[9999] w-56 overflow-y-auto rounded-lg border border-[#EFECE5] bg-white p-2 shadow-xl"
+          style={{ top: ownerMenuPosition.top, left: ownerMenuPosition.left, maxHeight: '250px' }}
+        >
+          <div className="border-b border-[#EFECE5] px-3 py-2 text-sm font-semibold text-gray-700">Assign Owner</div>
+          {employees.length ? employees.map((employee) => (
+            <button
+              key={employee._id}
+              type="button"
+              disabled={isAssigningOwner}
+              onClick={async () => {
+                if (!ownerTarget) return
+                setIsAssigningOwner(true)
+                try {
+                  await updateLead(ownerTarget._id, { assignedTo: employee.employeeName || employee.fullName || employee.email })
+                  setOwnerTarget(null)
+                  setOwnerMenuPosition(null)
+                  setToast('Owner assigned')
+                  clearApiCache()
+                  await loadLeads()
+                } catch (error) {
+                  console.error('Assign owner error:', error)
+                  setToast('Unable to assign owner')
+                } finally {
+                  setIsAssigningOwner(false)
+                }
+              }}
+              className="flex w-full items-center rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8] disabled:opacity-60"
+            >
+              {employee.employeeName || employee.fullName || employee.email}
+            </button>
+          )) : <div className="px-3 py-2 text-sm text-gray-500">No active employees found.</div>}
+        </div>,
+        document.body,
+      ) : null}
+
+      <LeadDetailsDrawer
+        lead={selectedLead}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+      />
+
+      {deleteTarget ? createPortal(
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/30 p-4" onClick={() => !isDeleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-[420px] rounded-xl border border-[#EFECE5] bg-white p-6 shadow-2xl" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-lead-title">
+            <h2 id="delete-lead-title" className="text-lg font-semibold text-gray-900">Are you sure to delete this lead?</h2>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={isDeleting} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8] disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={async () => {
+                if (!deleteTarget) return
+                setIsDeleting(true)
+                try {
+                  console.log('Deleting lead with MongoDB _id:', deleteTarget._id, 'custom leadId:', deleteTarget.leadId)
+                  await deleteLead(deleteTarget._id)
+                  setDeleteTarget(null)
+                  setToast('Lead deleted')
+                  await loadLeads()
+                } catch (error) {
+                  console.error('Delete lead error:', error)
+                  setToast('Unable to delete lead')
+                } finally {
+                  setIsDeleting(false)
+                }
+              }} disabled={isDeleting} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
 
       {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
     </div>

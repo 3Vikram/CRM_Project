@@ -16,7 +16,15 @@ const emailLogSchema = new mongoose.Schema(
     trackingId: { type: String, default: '', unique: true, sparse: true, index: true },
     trackingToken: { type: String, default: '', unique: true, sparse: true, index: true },
     openedAt: { type: Date, default: null },
+    openCount: { type: Number, default: 0 },
+    firstOpenedAt: { type: Date, default: null },
+    lastOpenedAt: { type: Date, default: null },
     clickedAt: { type: Date, default: null },
+    clickCount: { type: Number, default: 0 },
+    firstClickedAt: { type: Date, default: null },
+    lastClickedAt: { type: Date, default: null },
+    leadCreated: { type: Boolean, default: false },
+    leadId: { type: String, default: '' },
   },
   { timestamps: true }
 );

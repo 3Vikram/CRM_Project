@@ -3,6 +3,7 @@ const Customer = require('../models/Customer');
 const Contact = require('../models/Contact');
 const MailCampaign = require('../models/MailCampaign');
 const Supplier = require('../models/Supplier');
+const Activity = require('../models/Activity');
 
 const priorityOrder = { High: 3, Medium: 2, Low: 1 };
 
@@ -104,16 +105,18 @@ const buildCalendarEvent = ({
   assignedTo,
   priority,
   status,
+  calendarStatus,
   description,
   referenceId,
   referenceModule,
   eventType,
+  sourceField,
 }) => {
   const normalizedDate = toISODate(date);
   if (!normalizedDate) return null;
 
   const event = {
-    id: referenceId ? `${referenceModule || module}:${referenceId}:${title}:${normalizedDate}:${time || '09:00'}` : `${module}:${title}:${normalizedDate}:${time || '09:00'}`,
+    id: referenceId ? `${referenceModule || module}:${referenceId}:${sourceField || eventType || title}:${normalizedDate}:${time || '09:00'}` : `${module}:${title}:${normalizedDate}:${time || '09:00'}`,
     title: toDisplayTitle(title),
     module,
     date: normalizedDate,
@@ -122,11 +125,12 @@ const buildCalendarEvent = ({
     contactName: contactName || '',
     assignedTo: assignedTo || 'Unassigned',
     priority: priority || 'Medium',
-    status: status || 'Pending',
+    status: calendarStatus || status || 'Pending',
     description: description || formatDescription({ title, module, customerName, contactName, assignedTo, date: normalizedDate, time: normalizeTime(time || '09:00') }),
     referenceId: referenceId || '',
     referenceModule: referenceModule || module,
     eventType: eventType || 'Schedule',
+    sourceField: sourceField || '',
     color: moduleColors[module] || 'blue',
   };
 
@@ -144,11 +148,13 @@ const collectLeadEvents = (lead) => {
       module: 'Leads',
       eventType: 'Follow-up',
       status: lead.leadStatus || 'Pending',
+      calendarStatus: lead.calendarStatus,
       priority: lead.priority || 'Medium',
       customerName: lead.companyName || lead.contactPerson || '',
       contactName: lead.contactPerson || '',
       assignedTo: lead.assignedTo || 'Unassigned',
       description: `Follow up with ${lead.companyName || lead.contactPerson || 'lead'} on the next action.`,
+      sourceField: 'followUpDate',
     },
     {
       value: lead.demoDate,
@@ -157,11 +163,13 @@ const collectLeadEvents = (lead) => {
       module: 'Leads',
       eventType: 'Demo',
       status: lead.leadStatus || 'Pending',
+      calendarStatus: lead.calendarStatus,
       priority: lead.priority || 'High',
       customerName: lead.companyName || '',
       contactName: lead.contactPerson || '',
       assignedTo: lead.assignedTo || 'Unassigned',
       description: `Demo scheduled for ${lead.companyName || lead.contactPerson || 'lead'}.`,
+      sourceField: 'demoDate',
     },
     {
       value: lead.meetingDate,
@@ -170,11 +178,13 @@ const collectLeadEvents = (lead) => {
       module: 'Leads',
       eventType: 'Meeting',
       status: lead.leadStatus || 'Pending',
+      calendarStatus: lead.calendarStatus,
       priority: lead.priority || 'High',
       customerName: lead.companyName || '',
       contactName: lead.contactPerson || '',
       assignedTo: lead.assignedTo || 'Unassigned',
       description: `Customer meeting scheduled with ${lead.companyName || lead.contactPerson || 'lead'}.`,
+      sourceField: 'meetingDate',
     },
     {
       value: lead.callbackDate,
@@ -183,11 +193,13 @@ const collectLeadEvents = (lead) => {
       module: 'Leads',
       eventType: 'Call',
       status: lead.leadStatus || 'Pending',
+      calendarStatus: lead.calendarStatus,
       priority: lead.priority || 'Medium',
       customerName: lead.companyName || '',
       contactName: lead.contactPerson || '',
       assignedTo: lead.assignedTo || 'Unassigned',
       description: `Callback scheduled for ${lead.companyName || lead.contactPerson || 'lead'}.`,
+      sourceField: 'callbackDate',
     },
     {
       value: lead.nextActionDate,
@@ -196,11 +208,13 @@ const collectLeadEvents = (lead) => {
       module: 'Leads',
       eventType: 'Task',
       status: lead.leadStatus || 'Pending',
+      calendarStatus: lead.calendarStatus,
       priority: lead.priority || 'Medium',
       customerName: lead.companyName || '',
       contactName: lead.contactPerson || '',
       assignedTo: lead.assignedTo || 'Unassigned',
       description: `Next action scheduled for ${lead.companyName || lead.contactPerson || 'lead'}.`,
+      sourceField: 'nextActionDate',
     },
   ];
 
@@ -249,7 +263,9 @@ const collectCustomerEvents = (customer) => {
         assignedTo: customer.assignedTo || customer.createdBy || 'Unassigned',
         priority: customer.priority || 'Medium',
         status: customer.status || 'Pending',
+        calendarStatus: customer.calendarStatus,
         description: `${candidate.title} for ${customer.companyName || customer.customerName || 'customer'}.`,
+        sourceField: candidate.key,
         referenceId: customer._id?.toString?.() || '',
         referenceModule: 'Customers',
         eventType: candidate.type,
@@ -283,7 +299,9 @@ const collectContactEvents = (contact) => {
         assignedTo: 'Unassigned',
         priority: 'Medium',
         status: 'Pending',
+        calendarStatus: contact.calendarStatus,
         description: `${candidate.title} for ${contact.contactName || 'contact'}.`,
+        sourceField: candidate.key,
         referenceId: contact._id?.toString?.() || '',
         referenceModule: 'Contacts',
         eventType: candidate.type,
@@ -309,10 +327,12 @@ const collectCampaignEvents = (campaign) => {
       assignedTo: campaign.createdBy || 'Unassigned',
       priority: campaign.priority || 'Medium',
       status: campaign.status || 'Pending',
+      calendarStatus: campaign.calendarStatus,
       description: `Campaign ${campaign.campaignName || 'schedule'} is planned for ${dateValue}.`,
       referenceId: campaign._id?.toString?.() || campaign.campaignId || '',
       referenceModule: 'Mail Campaigns',
       eventType: 'Mail Campaign',
+      sourceField: campaign.scheduledDate ? 'scheduledDate' : 'createdDate',
     }),
   ].filter(Boolean);
 };
@@ -340,7 +360,9 @@ const collectSupplierEvents = (supplier) => {
         assignedTo: supplier.createdBy || 'Unassigned',
         priority: 'Medium',
         status: 'Pending',
+        calendarStatus: supplier.calendarStatus,
         description: `${candidate.title} for ${supplier.supplierName || 'supplier'}.`,
+        sourceField: candidate.key,
         referenceId: supplier._id?.toString?.() || '',
         referenceModule: 'Suppliers',
         eventType: candidate.type,
@@ -351,12 +373,13 @@ const collectSupplierEvents = (supplier) => {
 
 exports.getCalendarEvents = async (_req, res) => {
   try {
-    const [leads, customers, contacts, campaigns, suppliers] = await Promise.all([
+    const [leads, customers, contacts, campaigns, suppliers, activities] = await Promise.all([
       Lead.find({}).lean(),
       Customer.find({}).lean(),
       Contact.find({}).lean(),
       MailCampaign.find({ deletedAt: null }).lean(),
       Supplier.find({}).lean(),
+      Activity.find({ deletedAt: null }).lean(),
     ]);
 
     const mergedEvents = [
@@ -365,6 +388,27 @@ exports.getCalendarEvents = async (_req, res) => {
       ...contacts.flatMap(collectContactEvents),
       ...campaigns.flatMap(collectCampaignEvents),
       ...suppliers.flatMap(collectSupplierEvents),
+      ...activities.flatMap((activity) => {
+        const date = activity.followUpDate || activity.activityDate;
+        if (!date) return [];
+        return [buildCalendarEvent({
+          title: activity.activityType || 'Activity',
+          module: 'Activities',
+          date,
+          time: '09:00',
+          customerName: activity.company || activity.customerName || '',
+          contactName: activity.contactPerson || '',
+          assignedTo: activity.assignedUser || 'Unassigned',
+          priority: activity.priority || 'Medium',
+          status: activity.status || 'Pending',
+          calendarStatus: activity.status === 'Completed' ? 'Completed' : undefined,
+          description: activity.customerRemarks || activity.customerRequirements || 'CRM activity.',
+          sourceField: activity.followUpDate ? 'followUpDate' : 'activityDate',
+          referenceId: activity._id?.toString?.() || '',
+          referenceModule: 'Activities',
+          eventType: activity.activityType || 'Activity',
+        })];
+      }),
     ]
       .filter(Boolean)
       .sort((a, b) => {
@@ -376,5 +420,57 @@ exports.getCalendarEvents = async (_req, res) => {
     res.status(200).json({ success: true, data: mergedEvents });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || 'Unable to load calendar events' });
+  }
+};
+
+const calendarSources = {
+  Leads: { model: Lead, softDelete: false, completion: { calendarStatus: 'Completed' } },
+  Customers: { model: Customer, softDelete: false, completion: { calendarStatus: 'Completed' } },
+  Contacts: { model: Contact, softDelete: false, completion: { calendarStatus: 'Completed' } },
+  'Mail Campaigns': { model: MailCampaign, softDelete: true, completion: { calendarStatus: 'Completed' } },
+  Suppliers: { model: Supplier, softDelete: false, completion: { calendarStatus: 'Completed' } },
+  Activities: { model: Activity, softDelete: true, completion: { status: 'Completed' } },
+};
+
+exports.completeCalendarEvent = async (req, res) => {
+  try {
+    const source = calendarSources[req.params.module];
+    if (!source) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
+    const event = await source.model.findOneAndUpdate(
+      { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}) },
+      { $set: source.completion },
+      { new: true, runValidators: true },
+    );
+    if (!event) return res.status(404).json({ success: false, message: 'Calendar event source not found' });
+    res.status(200).json({ success: true, message: 'Calendar event marked complete.' });
+  } catch (error) {
+    console.error('Calendar event action error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Unable to complete calendar event' });
+  }
+};
+
+exports.deleteCalendarEvent = async (req, res) => {
+  try {
+    const source = calendarSources[req.params.module];
+    if (!source) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
+    const query = { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}) };
+    const sourceField = String(req.body?.sourceField || '');
+    const allowedFields = {
+      Leads: ['followUpDate', 'demoDate', 'meetingDate', 'callbackDate', 'nextActionDate'],
+      Customers: ['meetingDate', 'renewalDate', 'contractExpiryDate', 'visitDate', 'nextActionDate'],
+      Contacts: ['meetingDate', 'callReminderDate', 'birthday', 'anniversary', 'nextActionDate'],
+      'Mail Campaigns': ['scheduledDate', 'createdDate'],
+      Suppliers: ['deliveryDate', 'paymentReminderDate', 'followUpDate'],
+      Activities: ['followUpDate', 'activityDate'],
+    }[req.params.module] || [];
+    if (!allowedFields.includes(sourceField)) return res.status(400).json({ success: false, message: 'Invalid calendar event source field' });
+    const event = source.softDelete && sourceField === 'activityDate'
+      ? await source.model.findOneAndUpdate(query, { $set: { deletedAt: new Date() } }, { new: true })
+      : await source.model.findOneAndUpdate(query, { $set: { [sourceField]: '' } }, { new: true, runValidators: true });
+    if (!event) return res.status(404).json({ success: false, message: 'Calendar event source not found' });
+    res.status(200).json({ success: true, message: 'Calendar event deleted.' });
+  } catch (error) {
+    console.error('Calendar event action error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Unable to delete calendar event' });
   }
 };

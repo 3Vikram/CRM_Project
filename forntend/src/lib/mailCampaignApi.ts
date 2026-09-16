@@ -63,6 +63,7 @@ export interface MailCampaignRecord {
   attachments: string[]
   status: string
   opens: number
+  uniqueOpens: number
   clicks: number
   createdBy: string
   createdDate: string

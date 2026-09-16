@@ -36,7 +36,7 @@ export default function BillSalePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-serif font-bold text-gray-900 mb-2">
+        <h1 className="crm-page-heading">
           Bills & Sales
         </h1>
         <p className="text-gray-600">

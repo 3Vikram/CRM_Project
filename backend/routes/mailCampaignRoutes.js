@@ -9,6 +9,7 @@ const {
   deleteCampaign,
   sendCampaign,
   trackOpen,
+  getTrackingDiagnostic,
   trackClick,
   getCampaignReport,
   getCampaignPreview,
@@ -18,6 +19,9 @@ const {
 
 router.get('/recipient-counts', getRecipientCounts);
 router.get('/recipient-data', getRecipientData);
+router.get('/track/diagnostic/:trackingId', getTrackingDiagnostic);
+router.get('/track/open/:trackingId', trackOpen);
+router.get('/track/click/:trackingId', trackClick);
 router.get('/open/:trackingId', trackOpen);
 router.get('/tracking/open/:trackingId', trackOpen);
 router.get('/tracking/open/:token', trackOpen);

@@ -31,6 +31,7 @@ import QuotationFormPage from '@/pages/QuotationFormPage'
 import QuotationEditPage from '@/pages/QuotationEditPage'
 import QuotationViewPage from '@/pages/QuotationViewPage'
 import FunnelPage from '@/pages/FunnelPage'
+import FunnelFormPage from '@/pages/FunnelFormPage'
 import OPFPage from '@/pages/OPFPage'
 import OPFGenerateFormPage from '@/pages/OPFGenerateFormPage'
 import OPFViewPage from '@/pages/OPFViewPage'
@@ -41,7 +42,7 @@ import EmployeeFormPage from '@/pages/EmployeeFormPage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-screen overflow-hidden bg-[#F8F7F3]">
+    <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
       <TopBar />
       <div className="mt-16 flex h-[calc(100vh-4rem)] overflow-hidden">
         <Sidebar />
@@ -329,6 +330,14 @@ export default function App() {
           element={
             <SalesLayout>
               <FunnelPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/funnels/new"
+          element={
+            <SalesLayout>
+              <FunnelFormPage />
             </SalesLayout>
           }
         />

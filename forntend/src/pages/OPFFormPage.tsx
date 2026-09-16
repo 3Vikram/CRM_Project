@@ -152,13 +152,13 @@ export default function OPFFormPage() {
       <button
         type="button"
         onClick={() => navigate('/sales/opf')}
-        className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline"
+        className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827] hover:underline"
       >
         <ArrowLeft className="h-4 w-4" /> Back to OPF
       </button>
 
       <div>
-        <h1 className="text-4xl font-serif font-bold text-gray-900">{isEditMode ? 'Edit OPF' : 'Create OPF'}</h1>
+        <h1 className="crm-page-heading">{isEditMode ? 'Edit OPF' : 'Create OPF'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -300,7 +300,7 @@ export default function OPFFormPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B] disabled:opacity-50"
           >
             {isLoading ? 'Saving...' : 'Save OPF'}
           </button>

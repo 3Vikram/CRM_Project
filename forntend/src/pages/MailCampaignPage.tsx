@@ -86,18 +86,18 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   return (
     <div className="space-y-8">
       {statusFilter === 'Draft' || statusFilter === 'Scheduled' ? (
-        <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#2563EB]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
+        <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
       ) : null}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="mb-2 text-3xl font-serif font-bold text-gray-900">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaign Dashboard'}</h1>
+          <h1 className="crm-page-heading">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaigns'}</h1>
         </div>
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm">
             <Download className="h-4 w-4" />
             Download Report
           </button>
-          <button onClick={() => navigate('/sales/mail-campaign/new')} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-medium text-white shadow-sm">
+          <button onClick={() => navigate('/sales/mail-campaign/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1E293B]">
             <Plus className="h-4 w-4" />
             Campaign
           </button>
@@ -106,10 +106,10 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
 
       {!statusFilter ? (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard icon={Mail} label="Total Campaigns" value={stats.total} description="All active campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-[#2563EB]" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard icon={FileText} label="Draft Campaigns" value={stats.drafts} description="Saved for later review" iconBg="bg-[#F2EFE8]" iconColor="text-gray-700" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/scheduled')} className="text-left"><StatCard icon={Clock3} label="Scheduled Campaigns" value={stats.scheduled} description="Queued for sending" iconBg="bg-[#F2EFE8]" iconColor="text-amber-700" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard icon={Send} label="Sent Campaigns" value={stats.sent} description="Completed campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-green-700" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} description="All active campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-[#111827]" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} description="Saved for later review" iconBg="bg-[#F2EFE8]" iconColor="text-gray-700" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/scheduled')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Clock3} label="Scheduled Campaigns" value={stats.scheduled} description="Queued for sending" iconBg="bg-[#F2EFE8]" iconColor="text-amber-700" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} description="Completed campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-green-700" /></button>
         </div>
       ) : null}
 
@@ -155,10 +155,10 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
                     <button type="button" onClick={() => {
                       const target = campaign.status === 'Draft' || campaign.status === 'Scheduled' ? `/sales/mail-campaign/edit/${campaign._id}` : `/sales/mail-campaign/view/${campaign._id}`
                       navigate(target, target.includes('/view/') ? { state: { from: location.pathname } } : undefined)
-                    }} className="rounded bg-[#2563EB] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#1D4ED8]">View</button>
+                    }} className="rounded bg-[#111827] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#1E293B]">View</button>
                   </td>
                   <td className={`${tableCellClass} text-center`}>
-                    <button type="button" onClick={() => navigate(`/sales/reports/mail-campaigns/${campaign._id}`)} className="rounded bg-[#2563EB] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#1D4ED8]">Report</button>
+                    <button type="button" onClick={() => navigate(`/sales/reports/mail-campaigns/${campaign._id}`)} className="rounded bg-[#111827] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#1E293B]">Report</button>
                   </td>
                   <td className={`${tableCellClass} text-center`}>{campaign.opens}</td>
                   <td className={`${tableCellClass} text-center`}>{campaign.clicks}</td>

@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { RefreshCcw } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { fetchLeadById, updateLead } from '@/lib/leadApi'
+import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
 import { clearApiCache } from '@/lib/apiCache'
 
 const taxOptions = [
@@ -21,6 +22,7 @@ const taxOptions = [
 ]
 
 const initialForm = {
+  customerId: '',
   customerName: '',
   contactPerson: '',
   email: '',
@@ -69,12 +71,40 @@ export default function QuotationEditPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false)
   const [taxSearch, setTaxSearch] = useState('')
   const [tax2DropdownOpen, setTax2DropdownOpen] = useState(false)
   const [tax2Search, setTax2Search] = useState('')
   const taxDropdownRef = useRef<HTMLDivElement | null>(null)
   const tax2DropdownRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        const response = await fetchCustomers({ limit: 100, fresh: true })
+        setCustomers(response.data || [])
+      } catch (error) {
+        console.error('Unable to load quotation customers:', error)
+        setToast('Unable to load customers')
+      }
+    }
+    void loadCustomers()
+  }, [])
+
+  useEffect(() => {
+    if (form.customerId || !form.customerName || customers.length === 0) return
+    const customer = customers.find((item) => (item.companyName || item.customerName || '') === form.customerName)
+    if (!customer) return
+    const contact = customer.contacts?.[0]
+    setForm((prev) => ({
+      ...prev,
+      customerId: customer._id,
+      contactPerson: contact?.name || prev.contactPerson,
+      email: contact?.email || prev.email,
+      mobile: contact?.phone || prev.mobile,
+    }))
+  }, [customers, form.customerId, form.customerName])
 
   const getTaxRate = (taxValue: string) => {
     const match = taxValue.match(/(\d+(?:\.\d+)?)/)
@@ -115,6 +145,8 @@ export default function QuotationEditPage() {
         const newForm = { ...initialForm }
         
         // Basic customer details
+        newForm.customerName = quotation.companyName || ''
+        newForm.customerId = quotation.customerId || ''
         newForm.customerName = quotation.companyName || ''
         newForm.contactPerson = quotation.contactPerson || ''
         newForm.email = quotation.email || ''
@@ -294,6 +326,19 @@ export default function QuotationEditPage() {
     }))
   }
 
+  const handleCustomerChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const customer = customers.find((item) => item._id === event.target.value)
+    const contact = customer?.contacts?.[0]
+    setForm((prev) => ({
+      ...prev,
+      customerId: customer?._id || '',
+      customerName: customer?.companyName || customer?.customerName || '',
+      contactPerson: contact?.name || '',
+      email: contact?.email || customer?.email || '',
+      mobile: contact?.phone || customer?.phone || '',
+    }))
+  }
+
   const handleTaxSelect = (option: string) => {
     setForm((prev) => ({ ...prev, tax: option }))
     setTaxSearch('')
@@ -350,6 +395,7 @@ export default function QuotationEditPage() {
       // Create quotation payload with all available data
       const payload = {
         companyName: form.customerName,
+        customerId: form.customerId,
         contactPerson: form.contactPerson || 'Not provided',
         email: form.email || 'noemail@noemail.com',
         mobile: form.mobile || '0000000000',
@@ -409,7 +455,7 @@ export default function QuotationEditPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">Loading Quotation...</h1>
+          <h1 className="crm-page-heading">Loading Quotation...</h1>
         </div>
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
           <p className="text-gray-500">Please wait...</p>
@@ -424,11 +470,11 @@ export default function QuotationEditPage() {
           <button
     type="button"
     onClick={() => navigate('/sales/quotations')}
-    className="mb-3 flex items-center gap-1 text-sm text-blue-600 hover:underline cursor-pointer"
+    className="mb-3 flex items-center gap-1 text-sm text-[#111827] hover:underline cursor-pointer"
   >
     ← Back to Quotation
   </button>
-        <h1 className="text-4xl font-serif font-bold text-gray-900 mb-2">Edit Quotation</h1>
+        <h1 className="crm-page-heading">Edit Quotation</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
@@ -437,13 +483,15 @@ export default function QuotationEditPage() {
           <div className="grid gap-4 md:grid-cols-3 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase text-gray-500">Customer Name *</span>
-              <input
-                name="customerName"
-                value={form.customerName}
-                onChange={handleChange}
+              <select
+                name="customerId"
+                value={form.customerId}
+                onChange={handleCustomerChange}
                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.customerName ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                placeholder="Enter customer name"
-              />
+              >
+                <option value="">Select Customer</option>
+                {customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.companyName || customer.customerName}</option>)}
+              </select>
               {errors.customerName && <p className="text-xs text-red-600">{errors.customerName}</p>}
             </label>
 
@@ -452,7 +500,7 @@ export default function QuotationEditPage() {
               <input
                 name="contactPerson"
                 value={form.contactPerson}
-                onChange={handleChange}
+                readOnly
                 className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
                 placeholder="Contact person name"
               />
@@ -1017,7 +1065,7 @@ export default function QuotationEditPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d4ed8] disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1E293B] disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Updating...' : 'Update'}
             </button>

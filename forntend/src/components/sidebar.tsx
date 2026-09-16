@@ -42,7 +42,7 @@ export function Sidebar() {
 
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden bg-[#1F2937] transition-[width] duration-300 ease-in-out shrink-0 ${
+      className={`flex h-full flex-col overflow-hidden border-r border-[#E7E3DA] bg-[#F0EEE7] transition-[width] duration-300 ease-in-out shrink-0 ${
         isExpanded ? 'w-60' : 'w-[72px]'
       }`}
       onMouseEnter={() => setIsExpanded(true)}
@@ -51,7 +51,7 @@ export function Sidebar() {
       {/* Navigation */}
       <div className="flex-1 overflow-hidden">
         <div className="px-2 py-6">
-          <div className={`mb-4 px-3 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF] transition-all duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
+          <div className={`mb-4 px-3 text-xs font-semibold uppercase tracking-wider text-[#6B6657] transition-all duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
             SALES
           </div>
           <nav className="space-y-1">
@@ -65,11 +65,11 @@ export function Sidebar() {
                   to={item.href}
                   className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-all duration-200 ${
                     isActive
-                      ? 'bg-[#2563EB] text-white'
-                      : 'text-[#E5E7EB] hover:bg-[#2F5FA8] hover:text-white'
+                      ? 'bg-[#F7F5F2] text-[#1F1D1A]'
+                      : 'text-[#6B6657] hover:bg-[#E7E3DA] hover:text-[#1F1D1A]'
                   }`}
                 >
-                  <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-[#E5E7EB]'}`} />
+                  <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[#1F1D1A]' : 'text-[#6B6657]'}`} />
                   <span className={`text-sm transition-all duration-300 ${isExpanded ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0 overflow-hidden'}`}>
                     {item.label}
                   </span>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,7 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from '@/components/modal'
-import { fetchCalendarEvents, type CalendarApiEvent } from '@/lib/calendarApi'
+import { completeCalendarEvent, deleteCalendarEvent, fetchCalendarEvents, type CalendarApiEvent } from '@/lib/calendarApi'
 
 type ModuleFilter =
   | 'All'
@@ -55,6 +56,7 @@ type CalendarEvent = {
   referenceId?: string
   referenceModule?: string
   eventType?: string
+  sourceField?: string
   color?: string
 }
 
@@ -72,7 +74,7 @@ const filterOptions: ModuleFilter[] = [
 ]
 
 const moduleColorMap: Record<CalendarEvent['category'], string> = {
-  'Mail Campaign': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Mail Campaign': 'bg-[#F2EFE8] text-[#111827] border-[#111827]',
   'Lead Follow-up': 'bg-orange-100 text-orange-700 border-orange-200',
   'Customer Meeting': 'bg-green-100 text-green-700 border-green-200',
   'Quotation Reminder': 'bg-violet-100 text-violet-700 border-violet-200',
@@ -155,9 +157,13 @@ export default function CalendarPage() {
   const [selectedView, setSelectedView] = useState<'Month' | 'Week' | 'Day' | 'Agenda'>('Month')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [eventPendingDeletion, setEventPendingDeletion] = useState<CalendarEvent | null>(null)
+  const [isEventActionLoading, setIsEventActionLoading] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [dashboardDrawer, setDashboardDrawer] = useState<DashboardDrawerKey | null>(null)
   const [isAddEventOpen, setIsAddEventOpen] = useState(false)
   const [isDrawerClosing, setIsDrawerClosing] = useState(false)
+  const navigate = useNavigate()
 
   const [newEvent, setNewEvent] = useState({
     title: '',
@@ -178,16 +184,10 @@ export default function CalendarPage() {
     type: 'Meeting' as 'Meeting' | 'Call' | 'Task' | 'Reminder' | 'Demo' | 'Site Visit' | 'Personal Event' | 'Holiday',
   })
 
-  useEffect(() => {
-    let isMounted = true
-
-    const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
       try {
         setIsLoadingEvents(true)
         const data = await fetchCalendarEvents()
-
-        if (!isMounted) return
-
         const mappedEvents: CalendarEvent[] = data.map((event: CalendarApiEvent) => ({
           id: event.id,
           title: event.title,
@@ -208,23 +208,31 @@ export default function CalendarPage() {
           referenceId: event.referenceId,
           referenceModule: event.referenceModule,
           eventType: event.eventType,
+          sourceField: event.sourceField,
           color: event.color,
         }))
 
         setEvents(mappedEvents)
       } catch (error) {
         console.error('Unable to load calendar events', error)
+        setActionError('Unable to load calendar events.')
         setEvents([])
       } finally {
-        if (isMounted) setIsLoadingEvents(false)
+        setIsLoadingEvents(false)
       }
-    }
-
-    void loadEvents()
-    return () => {
-      isMounted = false
-    }
   }, [])
+
+  useEffect(() => {
+    void loadEvents()
+  }, [loadEvents])
+
+  useEffect(() => {
+    if (!actionError) return
+    const timeout = window.setTimeout(() => setActionError(null), 5000)
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [actionError])
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
@@ -265,7 +273,7 @@ export default function CalendarPage() {
         count: todaysCount,
         icon: CalendarDays,
         subtitle: 'Scheduled today',
-        accent: 'bg-blue-100 text-blue-700',
+        accent: 'bg-[#F2EFE8] text-[#111827]',
       },
       {
         key: 'upcoming-events' as DashboardDrawerKey,
@@ -367,6 +375,69 @@ export default function CalendarPage() {
     }, 250)
   }
 
+  const getModuleRoute = (event: CalendarEvent, mode: 'open' | 'edit') => {
+    const id = event.referenceId
+    if (!id) throw new Error('This calendar event has no source record ID.')
+    if (event.referenceModule === 'Leads') return mode === 'edit' ? `/sales/leads/edit/${id}` : `/sales/leads/${id}`
+    if (event.referenceModule === 'Activities') return `/sales/activities/edit/${id}`
+    if (event.referenceModule === 'Customers') return `/customers/edit/${id}`
+    if (event.referenceModule === 'Contacts') return `/sales/contacts/edit/${id}`
+    if (event.referenceModule === 'Mail Campaigns') return mode === 'edit' ? `/sales/mail-campaign/edit/${id}` : `/sales/mail-campaign/view/${id}`
+    if (event.referenceModule === 'Suppliers') return `/sales/suppliers/edit/${id}`
+    throw new Error(`No route is configured for ${event.referenceModule || event.module}.`)
+  }
+
+  const handleOpenModule = () => {
+    if (!selectedEvent) return
+    try {
+      navigate(getModuleRoute(selectedEvent, 'open'))
+    } catch (error) {
+      console.error('Calendar event action error:', error)
+      setActionError(error instanceof Error ? error.message : 'Unable to open the related module.')
+    }
+  }
+
+  const handleEditEvent = () => {
+    if (!selectedEvent) return
+    try {
+      navigate(getModuleRoute(selectedEvent, 'edit'))
+    } catch (error) {
+      console.error('Calendar event action error:', error)
+      setActionError(error instanceof Error ? error.message : 'Unable to edit this event.')
+    }
+  }
+
+  const handleMarkComplete = async () => {
+    if (!selectedEvent?.referenceId || !selectedEvent.referenceModule) return
+    setIsEventActionLoading(true)
+    try {
+      await completeCalendarEvent(selectedEvent.referenceModule, selectedEvent.referenceId)
+      await loadEvents()
+      setSelectedEvent((current) => current ? { ...current, status: 'Completed' } : current)
+    } catch (error: any) {
+      console.error('Calendar event action error:', error?.response?.data || error)
+      setActionError(error?.response?.data?.message || 'Unable to mark this event complete.')
+    } finally {
+      setIsEventActionLoading(false)
+    }
+  }
+
+  const handleDeleteEvent = async () => {
+    if (!eventPendingDeletion?.referenceId || !eventPendingDeletion.referenceModule) return
+    setIsEventActionLoading(true)
+    try {
+      await deleteCalendarEvent(eventPendingDeletion.referenceModule, eventPendingDeletion.referenceId, eventPendingDeletion.sourceField || '')
+      setEventPendingDeletion(null)
+      setSelectedEvent(null)
+      await loadEvents()
+    } catch (error: any) {
+      console.error('Calendar event action error:', error?.response?.data || error)
+      setActionError(error?.response?.data?.message || 'Unable to delete this event.')
+    } finally {
+      setIsEventActionLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!selectedEvent && !dashboardDrawer) return
 
@@ -451,7 +522,7 @@ export default function CalendarPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h1 className="mb-2 text-4xl font-serif font-bold text-gray-900">Calendar</h1>
+          <h1 className="crm-page-heading">Calendar</h1>
           {/* <p className="text-gray-600">Manage meetings, follow-ups, reminders, campaigns and business activities from one place.</p> */}
         </div>
 
@@ -468,7 +539,7 @@ export default function CalendarPage() {
               onClick={action.onClick}
               className={
                 action.primary
-                  ? 'rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[#1d4ed8]'
+                  ? 'rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[#1E293B]'
                   : 'rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#F2EFE8]'
               }
             >
@@ -513,7 +584,7 @@ export default function CalendarPage() {
                 onClick={() => setSelectedFilter(filter)}
                 className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                   selectedFilter === filter
-                    ? 'bg-[#2563EB] text-white'
+                    ? 'bg-[#111827] text-white'
                     : 'border border-[#EFECE5] bg-[#F8F7F3] text-gray-700 hover:bg-[#F2EFE8]'
                 }`}
               >
@@ -565,7 +636,7 @@ export default function CalendarPage() {
                   onClick={() => setSelectedView(view as 'Month' | 'Week' | 'Day' | 'Agenda')}
                   className={`rounded-lg px-3 py-2 text-sm font-medium ${
                     selectedView === view
-                      ? 'bg-[#2563EB] text-white'
+                      ? 'bg-[#111827] text-white'
                       : 'border border-[#EFECE5] bg-white text-gray-700 hover:bg-[#F2EFE8]'
                   }`}
                 >
@@ -596,9 +667,9 @@ export default function CalendarPage() {
                       key={`${day.toISOString()}-${day.getDate()}`}
                       className={`min-h-[120px] border-r border-b border-[#EFECE5] p-2 text-left last:border-r-0 ${
                         !isCurrentMonth ? 'bg-[#FBFAF7] text-gray-400' : 'bg-white'
-                      } ${isToday ? 'ring-1 ring-inset ring-[#2563EB]' : ''}`}
+                      } ${isToday ? 'ring-1 ring-inset ring-[#111827]' : ''}`}
                     >
-                      <div className={`mb-2 text-right text-sm ${isToday ? 'font-bold text-[#2563EB]' : 'font-medium text-gray-700'}`}>
+                      <div className={`mb-2 text-right text-sm ${isToday ? 'font-bold text-[#111827]' : 'font-medium text-gray-700'}`}>
                         {day.getDate()}
                       </div>
 
@@ -668,7 +739,7 @@ export default function CalendarPage() {
           <div className="rounded-xl border border-[#EFECE5] bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-serif font-bold text-gray-900">Today&apos;s Schedule</h3>
-              <BellRing className="h-4 w-4 text-[#2563EB]" />
+              <BellRing className="h-4 w-4 text-[#111827]" />
             </div>
 
             <div className="space-y-3">
@@ -814,10 +885,10 @@ export default function CalendarPage() {
                       </div>
 
                       <div className="flex flex-col gap-2 pt-2">
-                        <button type="button" className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-medium text-white">Open Module</button>
-                        <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700">Edit Event</button>
-                        <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700">Mark Complete</button>
-                        <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700">Delete</button>
+                        <button type="button" onClick={handleOpenModule} className="rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Open Module</button>
+                        <button type="button" onClick={handleEditEvent} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700">Edit Event</button>
+                        <button type="button" onClick={() => void handleMarkComplete()} disabled={isEventActionLoading || selectedEvent.status === 'Completed'} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">{selectedEvent.status === 'Completed' ? 'Completed' : 'Mark Complete'}</button>
+                        <button type="button" onClick={() => setEventPendingDeletion(selectedEvent)} className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700">Delete</button>
                       </div>
                     </div>
                   </>
@@ -846,7 +917,7 @@ export default function CalendarPage() {
                               </div>
 
                               <div className="mt-4 flex flex-col gap-2">
-                                <button type="button" className="rounded-lg bg-[#2563EB] px-3 py-2 text-sm font-medium text-white">Open Module</button>
+                                <button type="button" className="rounded-lg bg-[#111827] px-3 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Open Module</button>
                                 <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Edit Event</button>
                                 <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Mark Complete</button>
                                 <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">Delete</button>
@@ -907,7 +978,7 @@ export default function CalendarPage() {
                                   </div>
 
                                   <div className="mt-4 flex flex-col gap-2">
-                                    <button type="button" className="rounded-lg bg-[#2563EB] px-3 py-2 text-sm font-medium text-white">Open Module</button>
+                                    <button type="button" className="rounded-lg bg-[#111827] px-3 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Open Module</button>
                                     <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Edit</button>
                                     <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">Delete</button>
                                   </div>
@@ -942,7 +1013,7 @@ export default function CalendarPage() {
                                   </div>
 
                                   <div className="mt-4 flex flex-col gap-2">
-                                    <button type="button" className="rounded-lg bg-[#2563EB] px-3 py-2 text-sm font-medium text-white">Open Activity</button>
+                                    <button type="button" className="rounded-lg bg-[#111827] px-3 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Open Activity</button>
                                     <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Mark Complete</button>
                                     <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Reschedule</button>
                                     <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">Delete</button>
@@ -981,7 +1052,7 @@ export default function CalendarPage() {
                                   </div>
 
                                   <div className="mt-4 flex flex-col gap-2">
-                                    {isOnline && <button type="button" className="rounded-lg bg-[#2563EB] px-3 py-2 text-sm font-medium text-white">Join Meeting</button>}
+                                    {isOnline && <button type="button" className="rounded-lg bg-[#111827] px-3 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Join Meeting</button>}
                                     <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Open Customer</button>
                                     <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Edit Meeting</button>
                                     <button type="button" className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-medium text-gray-700">Mark Completed</button>
@@ -1002,6 +1073,24 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {eventPendingDeletion && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={() => !isEventActionLoading && setEventPendingDeletion(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-event-title" className="w-full max-w-md rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[#EFECE5] px-5 py-4">
+              <h2 id="delete-event-title" className="text-lg font-bold text-gray-900">Delete Event</h2>
+              <button type="button" onClick={() => setEventPendingDeletion(null)} disabled={isEventActionLoading} className="rounded-lg p-2 text-gray-500 hover:bg-[#F2EFE8] disabled:opacity-50" aria-label="Close delete event confirmation"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="px-5 py-6 text-sm text-gray-700">Are you sure to want to delete this event?</div>
+            <div className="flex justify-end gap-3 border-t border-[#EFECE5] px-5 py-4">
+              <button type="button" onClick={() => setEventPendingDeletion(null)} disabled={isEventActionLoading} className="rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={() => void handleDeleteEvent()} disabled={isEventActionLoading} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">{isEventActionLoading ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {actionError && <div className="fixed bottom-5 right-5 z-[70] max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg">{actionError}</div>}
+
       <Modal
         isOpen={isAddEventOpen}
         onClose={() => setIsAddEventOpen(false)}
@@ -1011,7 +1100,7 @@ export default function CalendarPage() {
             <button type="button" onClick={() => setIsAddEventOpen(false)} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700">
               Cancel
             </button>
-            <button type="button" onClick={handleSubmitEvent} className="rounded-lg bg-[#2563EB] px-4 py-2 text-sm font-medium text-white">
+            <button type="button" onClick={handleSubmitEvent} className="rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">
               Save
             </button>
           </div>

@@ -47,7 +47,7 @@ export default function ModuleSelectPage() {
         <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mb-4">
           <span className="text-white font-bold text-base">3V</span>
         </div>
-        <h1 className="text-5xl font-serif font-bold text-gray-900 mb-3">
+        <h1 className="crm-page-heading">
           3Vikram Technologies
         </h1>
         <p className="text-gray-600 max-w-xl text-center">

@@ -148,65 +148,169 @@ export default function OPFViewPage() {
   return (
     <div className="opf-view-root space-y-6">
       <style>{`
-        .opf-page {
-          width: calc(210mm - 12mm);
-          margin: 6mm auto;
+        .opf-view-root {
+          width: 100%;
+          min-height: 100vh;
+          background: #f3f4f6;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 20px 0;
           box-sizing: border-box;
-          --opf-inset: 10px;
-          padding: 5mm;
-          border: 0.5px solid #555 !important;
+        }
+        .opf-page {
+          width: 210mm;
+          min-height: 297mm;
+          max-width: 210mm;
+          margin: 20px auto;
+          box-sizing: border-box;
+          --opf-inset: 12px;
+          padding: 4mm;
+          border: 1px solid #333 !important;
           background: #fff;
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 10px;
+          font-size: 8px;
         }
         .opf-header { position: relative; display: flex; min-height: 68px; align-items: center; justify-content: center; border-bottom: 1px solid #333; }
         .opf-header h1 { margin: 0; font-size: 20px; font-weight: 700; text-transform: uppercase; }
         .opf-header img { position: absolute; right: 0; max-width: 190px; height: 58px; object-fit: contain; }
-        .opf-meta { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1.35fr; gap: 8px; border-bottom: 0.5px solid #333; margin: 0 calc(var(--opf-inset) * -1); padding: 7px var(--opf-inset); }
-        .opf-meta > div { min-width: 0; }
+        .opf-meta {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 12px;
+          border-bottom: 0.5px solid #333;
+          margin: 0 calc(var(--opf-inset) * -1);
+          padding: 8px var(--opf-inset);
+          box-sizing: border-box;
+          align-items: start;
+        }
+        .opf-meta > div { min-width: 0; box-sizing: border-box; }
+        .opf-meta .opf-detail-row {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          min-width: 0;
+          width: 100%;
+          gap: 2px;
+        }
+        .opf-meta .opf-detail-label {
+          font-weight: 700;
+          white-space: nowrap;
+          line-height: 1.2;
+        }
+        .opf-meta .opf-detail-row span:last-child {
+          min-width: 0;
+          line-height: 1.3;
+          word-break: normal;
+          overflow-wrap: break-word;
+          color: #111;
+        }
         .opf-section { margin-top: 13px; }
         .opf-section h3 { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
-        .opf-table { width: 100%; border: 0.5px solid #333; border-collapse: collapse; border-spacing: 0; table-layout: fixed; font-size: 9px; }
-        .opf-table th, .opf-table td { border: 0.5px solid #333; padding: 4px 5px; overflow-wrap: anywhere; vertical-align: top; }
-        .opf-table th { font-weight: 700; text-align: center; vertical-align: middle; }
-        .opf-table .opf-number { text-align: right; white-space: nowrap; }
-         { padding: 0 !important; height: 100%; }
-          .opf-gst-cell {
-  position: relative;
-  padding: 0 !important;
-}
+        .opf-table {
+          width: 100%;
+          max-width: 100%;
+          border: 0.5px solid #333;
+          border-collapse: collapse;
+          border-spacing: 0;
+          table-layout: fixed;
+          font-size: 8px;
+          line-height: 1.35;
+          box-sizing: border-box;
+        }
+        .opf-table colgroup col:nth-child(1) { width: 5%; }
+        .opf-table colgroup col:nth-child(2) { width: 15%; }
+        .opf-table colgroup col:nth-child(3) { width: 10%; }
+        .opf-table colgroup col:nth-child(4) { width: 17%; }
+        .opf-table colgroup col:nth-child(5) { width: 6%; }
+        .opf-table colgroup col:nth-child(6) { width: 5%; }
+        .opf-table colgroup col:nth-child(7) { width: 10%; }
+        .opf-table colgroup col:nth-child(8) { width: 10%; }
+        .opf-table colgroup col:nth-child(9) { width: 14%; }
+        .opf-table colgroup col:nth-child(10) { width: 8%; }
+        .opf-table th, .opf-table td {
+          border: 0.5px solid #333;
+          padding: 3px 4px;
+          overflow-wrap: break-word;
+          word-break: normal;
+          vertical-align: middle;
+          box-sizing: border-box;
+        }
+        .opf-table thead th {
+          font-weight: 700;
+          text-align: center;
+          vertical-align: middle;
+          background: rgba(0,0,0,0.02);
+        }
+        .opf-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+        .opf-table .opf-number {
+          text-align: right;
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+          padding-left: 6px;
+          padding-right: 8px;
+          vertical-align: middle;
+        }
+        .opf-table td:not(.opf-number) {
+          white-space: normal;
+        }
+        .opf-gst-cell {
+          position: relative;
+          padding: 0 !important;
+          min-width: 0;
+          text-align: center;
+        }
         .opf-gst {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  align-items: stretch;
-  overflow: hidden;
-  background: #fff;
-  position: absolute;
-  inset: 0;
-}
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          width: 100%;
+          min-height: 100%;
+          align-items: stretch;
+          overflow: visible;
+          background: #fff;
+          position: relative;
+        }
         .opf-gst > div {
           min-width: 0;
           min-height: 100%;
           display: flex;
           flex-direction: column;
+          justify-content: center;
           align-self: stretch;
+          padding: 3px 2px;
+          box-sizing: border-box;
         }
         .opf-gst > div:first-child { border-right: 0.5px solid #333; }
-        .opf-gst-label { padding: 2px 4px 0; font-size: 8px; font-weight: 700; text-align: center; white-space: nowrap; }
-        .opf-gst-line { border-top: 1px dashed #333; margin: 3px 8px 0; }
-        .opf-gst-value { padding: 3px 4px 2px; font-size: 8px; text-align: center; white-space: nowrap; }
+        .opf-gst-label {
+          padding: 0 2px 2px;
+          font-size: 7px;
+          font-weight: 700;
+          text-align: center;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .opf-gst-value {
+          padding: 2px 2px 0;
+          font-size: 8px;
+          text-align: center;
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        .opf-summary-row td { padding: 4px 6px; }
+        .opf-summary-label { text-align: right; }
+        .opf-summary-row .opf-number { padding-right: 8px; }
         .opf-bottom {
           display: grid;
           grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
           margin-top: 13px;
           border: none;
           font-size: 10px;
-          line-height: 1.5;
+          line-height: 1.45;
         }
-        .opf-bottom-details { padding: 7px 14px 7px 0; }
+        .opf-bottom-details { display: grid; gap: 3px; padding: 7px 14px 7px 0; }
+        .opf-detail-row { display: flex; align-items: flex-start; gap: 6px; }
+        .opf-detail-label { min-width: 120px; font-weight: 700; flex-shrink: 0; }
         .opf-signature {
           display: flex;
           min-height: 190px;
@@ -234,32 +338,35 @@ export default function OPFViewPage() {
           .opf-signature { min-height: 105px; padding: 5px; }
         }
         @media print {
-          @page { size: A4; margin: 0; }
-          html, body.opf-gst-cell { width: 210mm !important; height: 297mm !important; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: hidden !important; }
+          @page { size: A4 portrait; margin: 0; }
+          html, body, #root { width: auto !important; height: auto !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
           body * { visibility: hidden !important; }
-          .h-screen, .h-screen * { visibility: hidden !important; }
-          .h-screen > .fixed.inset-x-0.top-0,
-          .h-screen > div > .shrink-0,
-          .h-screen > .fixed.inset-x-0.top-0 *,
-          .h-screen > div > .shrink-0 * { display: none !important; }
           .opf-print-area, .opf-print-area * { visibility: visible !important; }
-          body > * { width: 210mm !important; min-width: 210mm !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
-          .opf-view-root { position: static !important; width: 210mm !important; min-width: 210mm !important; margin: 0 !important; padding: 0 !important; }
+          .opf-view-root { position: static !important; width: 100% !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; background: #fff !important; display: block !important; }
           .no-print { display: none !important; }
           button, [role="alert"] { display: none !important; }
-          .opf-print-area { display: block !important; position: absolute !important; left: 6mm !important; top: 6mm !important; width: calc(210mm - 12mm) !important; min-width: 0 !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 5mm !important; box-sizing: border-box !important; transform: none !important; zoom: 1 !important; background: #fff !important; overflow: hidden !important; }
+          .opf-print-area { display: block !important; position: relative !important; left: 0 !important; top: 0 !important; width: 210mm !important; min-height: 297mm !important; max-width: 210mm !important; margin: 0 auto !important; padding: 4mm !important; box-sizing: border-box !important; transform: none !important; zoom: 1 !important; background: #fff !important; border: 1px solid #333 !important; overflow: visible !important; }
+          .opf-print-area .opf-table { width: 100% !important; max-width: 100% !important; table-layout: auto !important; border-collapse: collapse !important; overflow: visible !important; }
+          .opf-print-area .opf-table thead { display: table-header-group !important; }
+          .opf-print-area .opf-table tr { break-inside: avoid; page-break-inside: avoid; }
+          .opf-print-area .opf-table th, .opf-print-area .opf-table td { overflow-wrap: break-word !important; word-break: normal !important; white-space: normal !important; }
+          .opf-print-area .opf-table .opf-number, .opf-print-area .opf-gst-value { white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; }
+          .opf-print-area .opf-gst { position: relative !important; overflow: visible !important; }
+          .opf-print-area .opf-gst-label, .opf-print-area .opf-gst-value { white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; }
+          .opf-print-area .opf-bottom { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+          .opf-print-area .opf-header, .opf-print-area .opf-meta, .opf-print-area .opf-section, .opf-print-area .opf-bottom { break-inside: avoid; page-break-inside: avoid; }
           .opf-print-area .opf-header { position: relative !important; display: flex !important; min-height: 68px !important; align-items: center !important; justify-content: center !important; border-bottom: 1px solid #333 !important; }
           .opf-print-area .opf-header h1 { margin: 0 !important; text-align: center !important; }
-          .opf-print-area .opf-header img { position: absolute !important; top: 5px !important; right: 5px !important; }
+          .opf-print-area .opf-header img { position: absolute !important; top: 5px !important; right: 5px !important; max-width: 35% !important; }
         }
       `}</style>
-      <button type="button" onClick={() => navigate('/sales/opf')} className="no-print inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline"><ArrowLeft className="h-4 w-4" /> Back to OPF</button>
+      <button type="button" onClick={() => navigate('/sales/opf')} className="no-print inline-flex items-center gap-2 text-sm font-semibold text-[#111827] hover:underline"><ArrowLeft className="h-4 w-4" /> Back to OPF</button>
       <div className="no-print flex items-center justify-between">
         <div />
         <div className="flex gap-3">
-          <button type="button" onClick={() => navigate(`/sales/opf/edit/${id}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white"><Pencil className="h-4 w-4" /> EDIT</button>
-          <button type="button" onClick={handlePrint} className="no-print inline-flex items-center gap-2 rounded-lg border border-[#2563EB] bg-white px-4 py-2.5 text-sm font-medium text-[#2563EB]"><Printer className="h-4 w-4" /> PRINT</button>
-          <button type="button" disabled={isSending} onClick={handleSendPdf} className="inline-flex items-center gap-2 rounded-lg border border-[#2563EB] bg-white px-4 py-2.5 text-sm font-medium text-[#2563EB] disabled:opacity-50"><Send className="h-4 w-4" /> View &amp; Send PDF</button>
+          <button type="button" onClick={() => navigate(`/sales/opf/edit/${id}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]"><Pencil className="h-4 w-4" /> EDIT</button>
+          <button type="button" onClick={handlePrint} className="no-print inline-flex items-center gap-2 rounded-lg border border-[#111827] bg-white px-4 py-2.5 text-sm font-medium text-[#111827] hover:bg-[#F2EFE8]"><Printer className="h-4 w-4" /> PRINT</button>
+          <button type="button" disabled={isSending} onClick={handleSendPdf} className="inline-flex items-center gap-2 rounded-lg border border-[#111827] bg-white px-4 py-2.5 text-sm font-medium text-[#111827] hover:bg-[#F2EFE8] disabled:opacity-50"><Send className="h-4 w-4" /> View &amp; Send PDF</button>
         </div>
       </div>
 
@@ -305,7 +412,7 @@ export default function OPFViewPage() {
 }
 
 function Detail({ label, value }: { label: string; value?: string | number | null }) {
-  return <div><span className="font-semibold">{label}: </span>{value || '-'}</div>
+  return <div className="opf-detail-row"><span className="opf-detail-label">{label}:</span><span>{value || '-'}</span></div>
 }
 
 function GstCell({ tax, gst }: { tax?: string; gst: { cgst: number; sgst: number; igst: number; totalGST: number } }) {
@@ -327,14 +434,69 @@ function GstCell({ tax, gst }: { tax?: string; gst: { cgst: number; sgst: number
 }
 
 function VendorDataTable({ name, product, description, partNo, quantity, unitPrice, tax, subtotal, gst, total, gp, gpPercentage }: { name?: string; product?: string; description?: string; partNo?: string; quantity: number; unitPrice: number; tax?: string; subtotal: number; gst: { cgst: number; sgst: number; igst: number; totalGST: number }; total: number; gp: number; gpPercentage: number }) {
-  return <section className="opf-section"><h3>Vendor/Supplier Details</h3><OPFTable nameLabel="Vendor Name" name={name} product={product} description={description} partNo={partNo} quantity={quantity} unitPrice={unitPrice} tax={tax} subtotal={subtotal} gst={gst} total={total} footer={<><tr className="font-semibold"><td colSpan={6} /><td>Grand Total</td><td className="opf-number">{formatCurrency(subtotal)}</td><td className="opf-number">{formatCurrency(gst.totalGST)}</td><td className="opf-number">{formatCurrency(total)}</td></tr><tr className="font-semibold"><td colSpan={8} /><td>GP</td><td className="opf-number">{formatCurrency(gp)}</td></tr><tr className="font-semibold"><td colSpan={8} /><td>GP %</td><td className="opf-number">{gpPercentage.toFixed(2)}%</td></tr></>} /></section>
+  return <section className="opf-section"><h3>Vendor/Supplier Details</h3><OPFTable nameLabel="Vendor Name" name={name} product={product} description={description} partNo={partNo} quantity={quantity} unitPrice={unitPrice} tax={tax} subtotal={subtotal} gst={gst} total={total} footer={<><tr className="font-semibold opf-summary-row"><td colSpan={7} className="opf-summary-label">Grand Total</td><td className="opf-number">{formatCurrency(subtotal)}</td><td className="opf-number">{formatCurrency(gst.totalGST)}</td><td className="opf-number">{formatCurrency(total)}</td></tr><tr className="font-semibold opf-summary-row"><td colSpan={9} className="opf-summary-label">GP</td><td className="opf-number">{formatCurrency(gp)}</td></tr><tr className="font-semibold opf-summary-row"><td colSpan={9} className="opf-summary-label">GP %</td><td className="opf-number">{gpPercentage.toFixed(2)}%</td></tr></>} /></section>
 }
 
 function DataTable({ title, name, product, description, partNo, quantity, unitPrice, tax, subtotal, gst, total }: { title: string; name?: string; product?: string; description?: string; partNo?: string; quantity: number; unitPrice: number; tax?: string; subtotal: number; gst: { cgst: number; sgst: number; igst: number; totalGST: number }; total: number }) {
   const nameLabel = title.startsWith('Vendor') ? 'Vendor Name' : 'Customer Name'
-  return <section className="opf-section"><h3>{title}</h3><OPFTable nameLabel={nameLabel} name={name} product={product} description={description} partNo={partNo} quantity={quantity} unitPrice={unitPrice} tax={tax} subtotal={subtotal} gst={gst} total={total} footer={<tr className="font-semibold"><td colSpan={7} className="text-right">Grand Total</td><td className="opf-number">{formatCurrency(subtotal)}</td><td className="opf-number">{formatCurrency(gst.totalGST)}</td><td className="opf-number">{formatCurrency(total)}</td></tr>} /></section>
+  return <section className="opf-section"><h3>{title}</h3><OPFTable nameLabel={nameLabel} name={name} product={product} description={description} partNo={partNo} quantity={quantity} unitPrice={unitPrice} tax={tax} subtotal={subtotal} gst={gst} total={total} footer={<tr className="font-semibold opf-summary-row"><td colSpan={7} className="opf-summary-label">Grand Total</td><td className="opf-number">{formatCurrency(subtotal)}</td><td className="opf-number">{formatCurrency(gst.totalGST)}</td><td className="opf-number">{formatCurrency(total)}</td></tr>} /></section>
 }
 
 function OPFTable({ nameLabel, name, product, description, partNo, quantity, unitPrice, tax, subtotal, gst, total, footer }: { nameLabel: string; name?: string; product?: string; description?: string; partNo?: string; quantity: number; unitPrice: number; tax?: string; subtotal: number; gst: { cgst: number; sgst: number; igst: number; totalGST: number }; total: number; footer: React.ReactNode }) {
-  return <table className="opf-table"><colgroup><col style={{ width: '4%' }} /><col style={{ width: '13%' }} /><col style={{ width: '11%' }} /><col style={{ width: '16%' }} /><col style={{ width: '7%' }} /><col style={{ width: '5%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /><col style={{ width: '16%' }} /><col style={{ width: '8%' }} /></colgroup><thead><tr><th>Sl. No.</th><th>{nameLabel}</th><th>Product</th><th>Description</th><th>Part No.</th><th>Qty</th><th>Unit Price(INR)</th><th>Sub Total(INR)</th><th>GST (INR)</th><th>Total Price(INR)</th></tr></thead><tbody><tr><td className="text-center">1</td><td>{name || '-'}</td><td>{product || '-'}</td><td>{description || '-'}</td><td>{partNo || '-'}</td><td className="text-center">{quantity}</td><td className="opf-number">{formatCurrency(unitPrice)}</td><td className="opf-number">{formatCurrency(subtotal)}</td><td className="opf-gst-cell"><GstCell tax={tax} gst={gst} />{gst.igst ? <div className="mt-2 text-center">IGST {formatCurrency(gst.igst)}</div> : null}</td><td className="opf-number font-semibold">{formatCurrency(total)}</td></tr>{footer}</tbody></table>
+  return (
+    <table className="opf-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+      <colgroup>
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Sl. No.</th>
+          <th>{nameLabel}</th>
+          <th>Product</th>
+          <th>Description</th>
+          <th>Part No.</th>
+          <th>Qty</th>
+          <th>Unit Price (INR)</th>
+          <th>Sub Total (INR)</th>
+          <th>GST (INR)</th>
+          <th>Total Price (INR)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="text-center">1</td>
+          <td>{name || '-'}</td>
+          <td>{product || '-'}</td>
+          <td>{description || '-'}</td>
+          <td>{partNo || '-'}</td>
+          <td className="text-center">{quantity}</td>
+          <td className="opf-number">{formatCurrency(unitPrice)}</td>
+          <td className="opf-number">{formatCurrency(subtotal)}</td>
+          <td className="opf-gst-cell">
+            <div className="opf-gst">
+              <div>
+                <div className="opf-gst-label">CGST {taxDetails(tax).percentage / 2}%</div>
+                <div className="opf-gst-value">{formatCurrency(gst.cgst)}</div>
+              </div>
+              <div>
+                <div className="opf-gst-label">SGST {taxDetails(tax).percentage / 2}%</div>
+                <div className="opf-gst-value">{formatCurrency(gst.sgst)}</div>
+              </div>
+            </div>
+          </td>
+          <td className="opf-number font-semibold">{formatCurrency(total)}</td>
+        </tr>
+        {footer}
+      </tbody>
+    </table>
+  )
 }

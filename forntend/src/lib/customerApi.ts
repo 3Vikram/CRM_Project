@@ -5,6 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
 
 export interface CustomerApiRecord {
   _id: string;
+  customerId?: string;
   companyName?: string;
   customerName?: string;
   accountType?: string;
@@ -86,7 +87,7 @@ export interface CustomerPayload {
   }>;
 }
 
-export async function fetchCustomers(params: { search?: string; page?: number; limit?: number; status?: string; createdBy?: string; accountType?: string; createdDate?: string } = {}) {
+export async function fetchCustomers(params: { search?: string; page?: number; limit?: number; status?: string; createdBy?: string; accountType?: string; createdDate?: string; fresh?: boolean } = {}) {
   const searchParams = new URLSearchParams();
   if (params.search) searchParams.set('search', params.search);
   if (params.page) searchParams.set('page', String(params.page));
@@ -97,6 +98,14 @@ export async function fetchCustomers(params: { search?: string; page?: number; l
   if (params.createdDate && params.createdDate !== 'all') searchParams.set('createdDate', params.createdDate);
 
   const cacheKey = `customers:${searchParams.toString()}`;
+  if (params.fresh) {
+    const response = await fetch(`${API_BASE_URL}/customers?${searchParams.toString()}`);
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}));
+      throw new Error(errorPayload.message || 'Failed to load customers');
+    }
+    return response.json() as Promise<CustomerListResponse>;
+  }
   return getCachedResponse<CustomerListResponse>(cacheKey, async () => {
     const response = await fetch(`${API_BASE_URL}/customers?${searchParams.toString()}`);
     if (!response.ok) {

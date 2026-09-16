@@ -1,6 +1,6 @@
+const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const CompanyProfile = require('../models/CompanyProfile');
-const Counter = require('../models/Counter');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 const { sendQuotationEmail } = require('../services/emailService');
 
@@ -23,28 +23,10 @@ const createLeadId = async () => {
   const existingLeadIds = await Lead.find({ leadId: /^LD-\d+$/ }, { leadId: 1 }).lean();
   const highestExistingId = existingLeadIds.reduce((highest, lead) => {
     const numericPart = String(lead.leadId).slice(3);
-    if (numericPart.length === 6) return highest;
     const sequence = Number(numericPart);
     return Number.isSafeInteger(sequence) ? Math.max(highest, sequence) : highest;
   }, 0);
-
-  await Counter.findOneAndUpdate(
-    { name: 'leadIdSequence' },
-    { $max: { value: highestExistingId } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  const counter = await Counter.findOneAndUpdate(
-    { name: 'leadIdSequence' },
-    { $inc: { value: 1 } },
-    { new: true }
-  );
-
-  if (!counter || !Number.isSafeInteger(counter.value)) {
-    throw new Error('Failed to generate Lead ID sequence.');
-  }
-
-  return `LD-${counter.value}`;
+  return `LD-${highestExistingId + 1}`;
 };
 
 // Calculate Indian financial year (April 1 - March 31)
@@ -249,15 +231,20 @@ exports.createLead = async (req, res) => {
   try {
     const payload = normalizeLeadPayload(req.body);
     const leadPayload = setLeadMetadata({ ...payload, createdBy: payload.createdBy || 'System' });
-    leadPayload.leadId = await createLeadId();
-    
-    // Generate quotation ID if this is a quotation
-    if (payload.leadStatus === 'Proposal Sent' && !leadPayload.quotationId) {
-      leadPayload.quotationId = await createQuotationId();
+    let lead;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const candidate = { ...leadPayload, leadId: await createLeadId() };
+        if (payload.leadStatus === 'Proposal Sent' && !candidate.quotationId) {
+          candidate.quotationId = await createQuotationId();
+        }
+        candidate.timeline = [buildTimeline('Lead created', `${candidate.companyName} entered the pipeline`, 'info')];
+        lead = await Lead.create(candidate);
+        break;
+      } catch (error) {
+        if (error?.code !== 11000 || attempt === 4) throw error;
+      }
     }
-    
-    leadPayload.timeline = [buildTimeline('Lead created', `${leadPayload.companyName} entered the pipeline`, 'info')];
-    const lead = await Lead.create(leadPayload);
     res.status(201).json({ success: true, message: 'Lead created successfully', data: lead });
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -293,10 +280,20 @@ exports.updateLead = async (req, res) => {
 
 exports.deleteLead = async (req, res) => {
   try {
-    const lead = await Lead.findByIdAndDelete(req.params.id);
-    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
-    res.status(200).json({ success: true, message: 'Lead deleted successfully' });
+    const identifier = String(req.params.id || '').trim();
+    const query = mongoose.isValidObjectId(identifier)
+      ? { $or: [{ _id: identifier }, { leadId: identifier }] }
+      : { leadId: identifier };
+    console.log('DELETE LEAD REQUEST:', { identifier, query });
+    const lead = await Lead.findOneAndDelete(query);
+    if (!lead) {
+      console.error('DELETE LEAD NOT FOUND:', { identifier });
+      return res.status(404).json({ success: false, message: `Lead not found for identifier: ${identifier}` });
+    }
+    console.log('DELETE LEAD SUCCESS:', { identifier, mongoId: lead._id.toString(), leadId: lead.leadId });
+    res.status(200).json({ success: true, message: 'Lead deleted successfully', data: { _id: lead._id, leadId: lead.leadId } });
   } catch (error) {
+    console.error('DELETE LEAD ERROR:', { identifier: req.params.id, message: error.message, stack: error.stack });
     res.status(500).json({ success: false, message: error.message });
   }
 };

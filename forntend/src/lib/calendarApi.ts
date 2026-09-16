@@ -16,6 +16,7 @@ export interface CalendarApiEvent {
   description?: string
   referenceId?: string
   referenceModule?: string
+  sourceField?: string
   eventType?: string
   color?: string
 }
@@ -23,4 +24,14 @@ export interface CalendarApiEvent {
 export const fetchCalendarEvents = async (): Promise<CalendarApiEvent[]> => {
   const { data } = await axios.get(`${API_BASE_URL}/calendar/events`)
   return Array.isArray(data?.data) ? data.data : []
+}
+
+export const completeCalendarEvent = async (module: string, id: string) => {
+  const { data } = await axios.patch(`${API_BASE_URL}/calendar/events/${encodeURIComponent(module)}/${encodeURIComponent(id)}/complete`)
+  return data
+}
+
+export const deleteCalendarEvent = async (module: string, id: string, sourceField: string) => {
+  const { data } = await axios.delete(`${API_BASE_URL}/calendar/events/${encodeURIComponent(module)}/${encodeURIComponent(id)}`, { data: { sourceField } })
+  return data
 }

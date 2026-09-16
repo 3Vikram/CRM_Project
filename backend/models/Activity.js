@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const activitySchema = new mongoose.Schema(
   {
-    activityId: { type: String, trim: true, unique: true, sparse: true, default: '' },
+    activityId: { type: String, trim: true, default: '' },
     leadId: { type: String, trim: true, default: '' },
     leadSource: { type: String, trim: true, default: '' },
     customerName: { type: String, trim: true, default: '' },
@@ -35,7 +35,10 @@ const activitySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-activitySchema.index({ activityId: 1 }, { unique: true, sparse: true });
+activitySchema.index(
+  { activityId: 1 },
+  { unique: true, partialFilterExpression: { deletedAt: null } },
+);
 activitySchema.index({ leadId: 1, status: 1, activityDate: 1 });
 activitySchema.index({ customerName: 1, contactPerson: 1, email: 1, mobileNo: 1, activityDate: 1 });
 activitySchema.index({ createdBy: 1, activityDate: 1, response: 1, followUpDate: 1, status: 1 });

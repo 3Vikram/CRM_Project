@@ -37,8 +37,8 @@ export default function MailCampaignFormPage() {
   useEffect(() => {
     const loadCampaignFormData = async () => {
       try {
-        const profileResponse = await fetchCompanyProfiles({ page: 1, limit: 1 })
-        setCompanyProfile(profileResponse.data?.[0] || null)
+        const profileResponse = await fetchCompanyProfiles({ page: 1, limit: 100 })
+        setCompanyProfile(profileResponse.data?.find((profile) => profile.companyLogo?.filePath) || null)
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign data.')
       }
@@ -54,6 +54,7 @@ export default function MailCampaignFormPage() {
       setImageAlignment(campaign.imageAlignment || alignmentOptions[0])
       setCampaignBody(campaign.campaignBody || '')
       setFooter(campaign.footer || '')
+      setImagePreviewUrl(resolveImageUrl(campaign.image))
       setScheduledDate(campaign.scheduledDate || '')
       setScheduledTime(campaign.scheduledTime || '')
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign.'))
@@ -109,11 +110,20 @@ export default function MailCampaignFormPage() {
   }
 
   const logoUrl = resolveImageUrl(companyProfile?.companyLogo?.filePath)
+  const campaignImageUrl = imagePreviewUrl
+  const campaignBodyPreview = campaignBody.replace(/<img\b[^>]*>/gi, (tag) => {
+    const source = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] || ''
+    const alt = tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || ''
+    return (logoUrl && source === logoUrl) || /company logo/i.test(alt) ? '' : tag
+  })
   const logoBeforeBody = imageAlignment === 'Image Before Text' || imageAlignment === 'Image Above Text'
+  const campaignImageBeforeBody = imageAlignment === 'Image Before Text' || imageAlignment === 'Image Above Text'
   const previewContent = (
     <div className="mx-auto max-w-2xl bg-white p-8 text-gray-800 shadow-sm" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '16px', lineHeight: 1.5 }}>
       {logoBeforeBody && logoUrl ? <img src={logoUrl} alt="Synov company logo" className="mb-5 block h-auto w-[120px] object-contain" /> : null}
-      <div className="[&_p]:m-0 [&_p]:mb-4 [&_p:empty]:min-h-[1.5em]" dangerouslySetInnerHTML={{ __html: campaignBody || '<p>Campaign body</p>' }} />
+      {campaignImageBeforeBody && campaignImageUrl ? <img src={campaignImageUrl} alt="Campaign image" className="mb-5 block max-h-80 w-full object-contain" /> : null}
+      <div className="[&_p]:m-0 [&_p]:mb-4 [&_p:empty]:min-h-[1.5em]" dangerouslySetInnerHTML={{ __html: campaignBodyPreview || '<p>Campaign body</p>' }} />
+      {!campaignImageBeforeBody && campaignImageUrl ? <img src={campaignImageUrl} alt="Campaign image" className="my-5 block max-h-80 w-full object-contain" /> : null}
       {!logoBeforeBody && logoUrl ? <img src={logoUrl} alt="Synov company logo" className="my-5 block h-auto w-[120px] object-contain" /> : null}
       <div className="mt-6 border-t border-gray-200 pt-4 [&_p]:m-0 [&_p]:mb-4 [&_p:empty]:min-h-[1.5em]" dangerouslySetInnerHTML={{ __html: footer || '<p>Footer</p>' }} />
     </div>
@@ -121,9 +131,9 @@ export default function MailCampaignFormPage() {
 
   return (
     <div className="space-y-6">
-      <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#2563EB]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
+      <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
       <div className="rounded-xl border border-[#EFECE5] bg-white p-8 shadow-sm">
-        <h1 className="mb-8 text-3xl font-serif font-bold text-gray-900">{id ? 'Edit Campaign' : 'Create Campaign'}</h1>
+        <h1 className="crm-page-heading">{id ? 'Edit Campaign' : 'Create Campaign'}</h1>
         {error ? <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
         <form onSubmit={(event) => void saveCampaign(event, 'Sent')} className="space-y-8">
           <div className="grid gap-6 md:grid-cols-2">
@@ -145,14 +155,14 @@ export default function MailCampaignFormPage() {
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">Campaign Body</label>
-            <TiptapEditor value={campaignBody} onChange={setCampaignBody} placeholder="Write your campaign body" />
+            <TiptapEditor value={campaignBody} onChange={setCampaignBody} placeholder="Write your campaign body" companyLogoUrl={logoUrl} />
           </div>
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">Image Upload</label>
             <div className="flex flex-wrap items-center gap-3">
               <input ref={imageInputRef} type="file" accept="image/*" onChange={(event) => handleImageChange(event.target.files?.[0] || null)} className="block flex-1 rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-3 py-2 text-sm text-gray-700" />
-              <button type="button" onClick={() => imageInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg border border-[#2563EB] bg-white px-4 py-2.5 text-sm font-medium text-[#2563EB]"><ImagePlus className="h-4 w-4" /> Add New Image</button>
+              <button type="button" onClick={() => imageInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg border border-[#111827] bg-white px-4 py-2.5 text-sm font-medium text-[#111827] hover:bg-[#F2EFE8]"><ImagePlus className="h-4 w-4" /> Add New Image</button>
               {image ? <span className="text-sm text-gray-500">{image.name}</span> : null}
             </div>
             {imagePreviewUrl ? <img src={imagePreviewUrl} alt="Campaign upload preview" className="mt-3 max-h-32 max-w-xs object-contain" /> : null}
@@ -160,7 +170,7 @@ export default function MailCampaignFormPage() {
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">Footer</label>
-            <TiptapEditor value={footer} onChange={setFooter} placeholder="Write your campaign footer" />
+            <TiptapEditor value={footer} onChange={setFooter} placeholder="Write your campaign footer" companyLogoUrl={logoUrl} />
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
@@ -175,10 +185,10 @@ export default function MailCampaignFormPage() {
           </div>
 
           <div className="flex justify-end gap-3 border-t border-[#EFECE5] pt-6">
-            <button type="button" onClick={() => setIsPreviewOpen(true)} className="rounded-lg border border-[#2563EB] bg-white px-6 py-3 text-sm font-semibold text-[#2563EB]">Preview</button>
-            <button type="button" onClick={(event) => void saveCampaign(event, 'Draft')} disabled={isSaving} className="rounded-lg border border-[#2563EB] bg-white px-6 py-3 text-sm font-semibold text-[#2563EB] disabled:opacity-60">Save Draft</button>
+              <button type="button" onClick={() => setIsPreviewOpen(true)} className="rounded-lg border border-[#111827] bg-white px-6 py-3 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8]">Preview</button>
+            <button type="button" onClick={(event) => void saveCampaign(event, 'Draft')} disabled={isSaving} className="rounded-lg border border-[#111827] bg-white px-6 py-3 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8] disabled:opacity-60">Save Draft</button>
             <button type="button" onClick={(event) => void saveCampaign(event, 'Scheduled')} disabled={isSaving} className="rounded-lg border border-amber-600 bg-white px-6 py-3 text-sm font-semibold text-amber-700 disabled:opacity-60">Schedule</button>
-            <button type="submit" disabled={isSaving} className="rounded-lg bg-[#2563EB] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? 'Submitting...' : 'Send'}</button>
+            <button type="submit" disabled={isSaving} className="rounded-lg bg-[#111827] px-6 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-60">{isSaving ? 'Submitting...' : 'Send'}</button>
           </div>
         </form>
       </div>

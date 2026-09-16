@@ -16,6 +16,7 @@ const locationRoutes = require('./routes/locationRoutes');
 const companyProfileRoutes = require('./routes/companyProfileRoutes');
 const opfRoutes = require('./routes/opfRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
+const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
 
 const app = express();
@@ -23,7 +24,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/customers', customerRoutes);
 app.use('/api/contacts', contactRoutes);
@@ -55,12 +56,19 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/crm_db';
 mongoose
   .connect(MONGO_URI)
   .then(() => {
-    console.log('MongoDB connected');
+    return Activity.collection.dropIndex('activityId_1').catch((error) => {
+      if (error?.codeName !== 'IndexNotFound' && error?.code !== 27) throw error;
+    }).then(() => Activity.syncIndexes()).then(() => {
+      console.log('MongoDB connected');
+    });
+  })
+  .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       const serverUrl = `http://127.0.0.1:${PORT}`;
-      void processScheduledCampaigns(serverUrl);
-      setInterval(() => void processScheduledCampaigns(serverUrl), 60 * 1000);
+      const publicApiUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
+      void processScheduledCampaigns(publicApiUrl);
+      setInterval(() => void processScheduledCampaigns(publicApiUrl), 60 * 1000);
     });
   })
   .catch((err) => {

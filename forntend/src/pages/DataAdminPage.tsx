@@ -57,11 +57,11 @@ export default function DataAdminPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="mb-2 text-4xl font-serif font-bold text-gray-900">Data Admin</h1>
+        <h1 className="crm-page-heading">Data Admin</h1>
       </div>
 
       <section className="w-full max-w-4xl rounded-lg border border-[#EFECE5] bg-white p-8 font-['Times_New_Roman',Times,serif]">
-        <h2 className="mb-8 text-xl font-semibold text-[#2563EB]">Upload Contacts Detail</h2>
+        <h2 className="mb-8 text-xl font-semibold text-[#111827]">Upload Contacts Detail</h2>
 
         {message ? <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
         {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
@@ -71,7 +71,7 @@ export default function DataAdminPage() {
             <h3 className="mb-4 text-lg font-semibold text-green-700">Upload</h3>
             <div className="flex items-center gap-2">
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setFile(event.target.files?.[0] || null)} className="w-auto text-sm text-gray-700 file:mr-2 file:rounded file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:text-gray-700" />
-              <button type="button" onClick={() => void handleUpload()} disabled={isUploading} className="inline-flex shrink-0 items-center justify-center rounded bg-[#2563EB] p-2.5 text-white disabled:opacity-60" aria-label={isUploading ? 'Uploading' : 'Upload'} title={isUploading ? 'Uploading' : 'Upload'}>
+              <button type="button" onClick={() => void handleUpload()} disabled={isUploading} className="inline-flex shrink-0 items-center justify-center rounded bg-[#111827] p-2.5 text-white hover:bg-[#1E293B] disabled:opacity-60" aria-label={isUploading ? 'Uploading' : 'Upload'} title={isUploading ? 'Uploading' : 'Upload'}>
                 <Upload className="h-4 w-4" />
               </button>
             </div>

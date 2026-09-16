@@ -166,11 +166,11 @@ export default function QuotationDashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">Quotation Dashboard</h1>
+          <h1 className="crm-page-heading">Quotation Dashboard</h1>
         </div>
         <button
           onClick={() => navigate('/sales/quotations/new')}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8]"
+          className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
         >
           <Plus className="h-4 w-4" /> ADD NEW
         </button>

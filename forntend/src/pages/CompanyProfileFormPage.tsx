@@ -214,14 +214,14 @@ export default function CompanyProfileFormPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <button type="button" onClick={() => navigate('/sales/company-profiles')} className="flex items-center gap-2 text-sm font-semibold text-[#2563eb]">
+        <button type="button" onClick={() => navigate('/sales/company-profiles')} className="flex items-center gap-2 text-sm font-semibold text-[#111827]">
           <ArrowLeft className="h-4 w-4" />
           Back to Company Profiles
         </button>
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <h1 className="mb-4 text-2xl font-semibold text-slate-900">{isEditing ? 'Edit Company Profile' : 'Add Company Profile'}</h1>
+        <h1 className="crm-page-heading">{isEditing ? 'Edit Company Profile' : 'Add Company Profile'}</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {submitError ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div> : null}
@@ -406,7 +406,7 @@ export default function CompanyProfileFormPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-4">
-            <button type="submit" disabled={isSaving} className="rounded-lg bg-[#2563eb] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={isSaving} className="rounded-lg bg-[#111827] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-60">
               {isSaving ? 'Saving...' : isEditing ? 'Update Profile' : 'Create Profile'}
             </button>
             <button type="button" onClick={() => navigate('/sales/company-profiles')} className="rounded-lg border border-[#EFECE5] bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-[#F2F2F2]">

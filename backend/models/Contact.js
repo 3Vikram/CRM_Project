@@ -39,6 +39,7 @@ const ContactSchema = new mongoose.Schema(
       required: [true, 'Email is required'],
       match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
     },
+    calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
   },
   { timestamps: true }
 );

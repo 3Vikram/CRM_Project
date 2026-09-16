@@ -344,10 +344,19 @@ export default function QuotationViewPage() {
       <style>{`
         @page {
           size: A4 portrait;
-          margin: 0;
+          margin: 8mm;
         }
 
         @media print {
+          body * {
+            visibility: hidden !important;
+          }
+
+          .quotation-view-shell,
+          .quotation-view-shell * {
+            visibility: visible !important;
+          }
+
           html,
           body,
           #root {
@@ -361,48 +370,25 @@ export default function QuotationViewPage() {
             background: #ffffff !important;
             display: block !important;
           }
-              .quotation-view-shell img[alt="Company partner logo"] {
-    height: 160px !important;
-    width: auto !important;
-    max-width: none !important;
-    object-fit: contain !important;
-  }
-
-          /* Remove app shell offsets that push the quotation off-center */
-          div[class*="h-screen"],
-          div[class*="mt-16"],
-          div[class*="calc(100vh-4rem)"],
-          main {
-            margin: 0 !important;
-            padding: 0 !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            display: block !important;
-          }
-
-          /* Hide CRM app chrome */
-          div[class*="fixed"][class*="top-0"],
-          div[class*="1F2937"][class*="flex-col"] {
-            display: none !important;
-          }
 
           .quotation-actions {
             display: none !important;
           }
 
           .quotation-view-shell {
-            width: 194mm !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 194mm !important;
             height: auto !important;
             min-height: 0 !important;
-            margin: 8mm auto !important;
-            padding: 4mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
             box-sizing: border-box !important;
-           border: 0.5px solid #000000 !important;
             background: #ffffff !important;
             box-shadow: none !important;
-            max-width: none !important;
+            max-width: 194mm !important;
             overflow: visible !important;
           }
 
@@ -418,7 +404,48 @@ export default function QuotationViewPage() {
             height: auto !important;
           }
 
-          /* Ensure footer stays in normal document flow */
+          .quotation-view-shell table {
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
+          }
+
+          .quotation-products-table {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow: visible !important;
+            box-sizing: border-box !important;
+          }
+
+          .quotation-view-shell th,
+          .quotation-view-shell td {
+            max-width: 0 !important;
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
+            white-space: normal !important;
+          }
+
+          .quotation-view-shell thead {
+            display: table-header-group !important;
+          }
+
+          .quotation-view-shell tr,
+          .quotation-view-shell .quotation-branding-block,
+          .quotation-view-shell .quotation-footer {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          .quotation-view-shell tbody tr {
+            break-inside: auto;
+            page-break-inside: auto;
+          }
+
           .quotation-branding-block {
             position: static !important;
             display: block !important;
@@ -427,12 +454,6 @@ export default function QuotationViewPage() {
             width: 100% !important;
             height: auto !important;
             max-height: none !important;
-            page-break-before: auto !important;
-            break-before: auto !important;
-            page-break-after: auto !important;
-            break-after: auto !important;
-            page-break-inside: auto !important;
-            break-inside: auto !important;
           }
 
           .quotation-footer {
@@ -443,12 +464,6 @@ export default function QuotationViewPage() {
             width: 100% !important;
             height: auto !important;
             max-height: none !important;
-            page-break-before: auto !important;
-            break-before: auto !important;
-            page-break-after: auto !important;
-            break-after: auto !important;
-            page-break-inside: auto !important;
-            break-inside: auto !important;
           }
 
           .quotation-footer div {
@@ -573,8 +588,19 @@ export default function QuotationViewPage() {
           </div>
 
          {/* <div className="mt-2 overflow-hidden" style={{ border: '0.3px solid #000000' }}> */}
-         <div className="mt-2 overflow-hidden">
-            <table className="w-full text-[10px] text-black" style={{ fontFamily: '"Times New Roman", Times, serif', borderCollapse: 'collapse' }}>
+         <div className="quotation-products-table mt-2 overflow-hidden">
+            <table className="w-full text-[10px] text-black" style={{ fontFamily: '"Times New Roman", Times, serif', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '5%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '15%' }} />
+              </colgroup>
               <thead>
                 <tr style={{ height: '22px' }}>
                   <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '5%', border: '0.3px solid #000000' }}>SL.<br />No.</th>

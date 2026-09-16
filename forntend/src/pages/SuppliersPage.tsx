@@ -6,6 +6,7 @@ import { Search, Plus, Download, Eye, Pencil, Trash2, Building2 } from 'lucide-r
 import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteSupplier, fetchSuppliers, type SupplierRecord } from '@/lib/supplierApi'
+import { clearApiCache } from '@/lib/apiCache'
 
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
 
@@ -20,6 +21,8 @@ export default function SuppliersPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierRecord | null>(null)
+  const [pendingDeleteSupplier, setPendingDeleteSupplier] = useState<SupplierRecord | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -76,14 +79,20 @@ export default function SuppliersPage() {
   const handleEdit = (supplier: SupplierRecord) => navigate(`/sales/suppliers/edit/${supplier._id}`)
   const handleView = (supplier: SupplierRecord) => setSelectedSupplier(supplier)
 
-  const handleDelete = async (supplier: SupplierRecord) => {
+  const handleDelete = async () => {
+    if (!pendingDeleteSupplier) return
+    setIsDeleting(true)
     try {
-      await deleteSupplier(supplier._id)
-      setSuppliers((prev) => prev.filter((item) => item._id !== supplier._id))
+      await deleteSupplier(pendingDeleteSupplier._id)
+      clearApiCache()
+      setPendingDeleteSupplier(null)
       setSelectedSupplier(null)
+      await loadSuppliers(page, pageSize, searchQuery, productFilter)
       notify('Supplier deleted successfully')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Failed to delete supplier', 'error')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -117,10 +126,10 @@ export default function SuppliersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="mb-2 text-4xl font-serif font-bold text-gray-900">Supplier List</h1>
+          <h1 className="crm-page-heading">Supplier List</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#2563eb] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1d4ed8]">
+          <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
             <Plus className="h-4 w-4" />
             ADD NEW
           </button>
@@ -184,7 +193,7 @@ export default function SuppliersPage() {
                   {suppliers.length > 0 ? (
                     suppliers.map((supplier) => (
                       <tr key={supplier._id} className="border-b border-[#F2EFE8] transition-colors hover:bg-[#F2EFE8]">
-                        <td className={`${tableCellClass.replace('py-3','py-4')} text-sm font-semibold text-gray-900`}>{String(supplier._id).slice(-6).toUpperCase()}</td>
+                        <td className={`${tableCellClass.replace('py-3','py-4')} text-sm font-semibold text-gray-900`}>{supplier.supplierId}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.createdBy || 'Admin'}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.supplierName}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.contactName}</td>
@@ -199,7 +208,7 @@ export default function SuppliersPage() {
                             <button type="button" onClick={() => handleEdit(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            <button type="button" onClick={() => handleDelete(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
+                            <button type="button" onClick={() => setPendingDeleteSupplier(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -257,10 +266,28 @@ export default function SuppliersPage() {
               <div><span className="font-semibold text-slate-600">Product:</span> {selectedSupplier.product}</div>
             </div>
             <div className="flex justify-end gap-2 border-t border-[#EFECE5] pt-4">
-              <button onClick={() => handleEdit(selectedSupplier)} className="rounded bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1d4ed8]">Edit Supplier</button>
+              <button onClick={() => handleEdit(selectedSupplier)} className="rounded bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1E293B]">Edit Supplier</button>
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(pendingDeleteSupplier)}
+        onClose={() => !isDeleting && setPendingDeleteSupplier(null)}
+        title="Delete Supplier"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setPendingDeleteSupplier(null)} disabled={isDeleting} className="rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">
+              Cancel
+            </button>
+            <button type="button" onClick={() => void handleDelete()} disabled={isDeleting} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        )}
+      >
+        <p className="text-sm text-gray-700">Are you sure to delete this supplier?</p>
       </Modal>
 
       {showToast ? <Toast message={toastMessage} type={toastType} onClose={() => setShowToast(false)} /> : null}

@@ -41,6 +41,7 @@ const sendCampaignEmails = async ({
   to,
   attachments = [],
   fromName = 'CRM Mail Campaign',
+  tracking,
 }) => {
   const recipients = normalizeRecipients(to);
   const config = getSmtpConfig();
@@ -106,12 +107,14 @@ const sendCampaignEmails = async ({
 
   for (const recipient of recipients) {
     try {
+      const finalHtml = (typeof html === 'function' ? html(recipient) : html) || '<p>Email from CRM Mail Campaign</p>';
+      const trackingDetails = typeof tracking === 'function' ? tracking(recipient, finalHtml) : null;
       const mailOptions = {
         from: `${fromName} <${smtpUser}>`,
         to: recipient,
         subject,
         text: text || 'Email from CRM Mail Campaign',
-        html: (typeof html === 'function' ? html(recipient) : html) || '<p>Email from CRM Mail Campaign</p>',
+        html: finalHtml,
         attachments: attachments.map((attachment) => {
           const attachmentPath = attachment.path || attachment.filename || '';
           return {
@@ -123,12 +126,51 @@ const sendCampaignEmails = async ({
         }),
       };
 
+      if (trackingDetails) {
+        const trackingPixelIncluded = Boolean(trackingDetails.url && finalHtml.includes(trackingDetails.url));
+        logger.info('mail-campaign.email.final-html', {
+          campaignId: trackingDetails.campaignId,
+          recipientEmail: recipient,
+          trackingId: trackingDetails.trackingId,
+          trackingPixelIncluded,
+          trackingUrl: trackingDetails.url,
+          htmlLength: finalHtml.length,
+          finalHtml,
+        });
+        console.log(`MAIL FINAL HTML: campaignId=${trackingDetails.campaignId} recipient=${recipient} trackingId=${trackingDetails.trackingId} trackingPixelInjected=${trackingPixelIncluded} trackingUrl=${trackingDetails.url}`);
+        if (!trackingPixelIncluded) {
+          throw new Error(`Tracking pixel missing from final HTML for campaign ${trackingDetails.campaignId}, recipient ${recipient}.`);
+        }
+      }
+      const finalImageSources = [...finalHtml.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
+      const invalidImageSources = finalImageSources.filter((source) => !/^cid:[^\s"']+$/i.test(source) && (!/^https:\/\//i.test(source) || /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(source) || /^(?:undefined|null)$/i.test(source)));
+      console.log(`FINAL HTML IMG SRC BEFORE sendMail() campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient} srcs=${JSON.stringify(finalImageSources)} invalidSrcs=${JSON.stringify(invalidImageSources)}`);
+      console.log(`FINAL HTML TRACKING URLS BEFORE sendMail() campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient} openUrls=${JSON.stringify([...finalHtml.matchAll(/https:\/\/[^"'\s>]+\/api\/mail-campaigns\/track\/open\/[^"'\s>]+/gi)].map((match) => match[0]))} clickUrls=${JSON.stringify([...finalHtml.matchAll(/https:\/\/[^"'\s>]+\/api\/mail-campaigns\/tracking\/click\/[^"'\s>]+/gi)].map((match) => match[0]))}`);
+      if (invalidImageSources.length) {
+        throw new Error(`Final email contains invalid image src values: ${invalidImageSources.join(', ')}`);
+      }
+      console.log(`FINAL HTML BEFORE sendMail() campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient}\n${finalHtml}`);
+      console.log(`MAIL SEND CONFIRMATION: recipient=${recipient}${trackingDetails ? ` campaignId=${trackingDetails.campaignId} trackingId=${trackingDetails.trackingId}` : ''} immediately before sendMail()`);
       const info = await transporter.sendMail(mailOptions);
+      const accepted = Array.isArray(info.accepted) ? info.accepted : [];
+      const rejected = Array.isArray(info.rejected) ? info.rejected : [];
+      const pending = Array.isArray(info.pending) ? info.pending : [];
+      const recipientAccepted = accepted.some((address) => String(address).toLowerCase() === recipient.toLowerCase());
+      const recipientRejected = rejected.some((address) => String(address).toLowerCase() === recipient.toLowerCase());
+      const status = recipientAccepted && !recipientRejected ? 'Sent' : 'Failed';
+      const deliveryError = status === 'Failed'
+        ? `Recipient was not accepted by SMTP. accepted=${accepted.join(',')} rejected=${rejected.join(',')} pending=${pending.join(',')}`
+        : '';
+      console.log(`CAMPAIGN SEND RESULT campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient} accepted=${JSON.stringify(accepted)} rejected=${JSON.stringify(rejected)} pending=${JSON.stringify(pending)} messageId=${info.messageId || ''} response=${info.response || ''} error=${deliveryError}`);
       results.push({
         recipientEmail: recipient,
-        status: 'Sent',
-        messageId: info.messageId,
-        errorMessage: '',
+        status,
+        accepted,
+        rejected,
+        pending,
+        response: info.response || '',
+        messageId: info.messageId || '',
+        errorMessage: deliveryError,
       });
     } catch (error) {
       logger.error('mail-campaign.email.send.failed', {
@@ -139,6 +181,10 @@ const sendCampaignEmails = async ({
       results.push({
         recipientEmail: recipient,
         status: 'Failed',
+        accepted: [],
+        rejected: [recipient],
+        pending: [],
+        response: error?.response || '',
         messageId: '',
         errorMessage: error?.response || error?.message || 'Unknown email sending error',
       });

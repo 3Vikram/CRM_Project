@@ -53,7 +53,7 @@
   --card-foreground: #1f1d1a;
   --popover: #FFFFFF;
   --popover-foreground: #1f1d1a;
-  --primary: #1f1d1a;
+  --primary: #111827;
   --primary-foreground: #F8F6F1;
   --secondary: #F0EEE7;
   --secondary-foreground: #1f1d1a;
@@ -193,6 +193,30 @@
 }
 
 @layer components {
+  .sales-module-typography {
+    font-size: 18px;
+  }
+
+  .dashboard-label {
+    letter-spacing: 0px !important;
+  }
+
+  .sales-module-typography .stat-card-label-increased {
+    font-size: 19px !important;
+  }
+
+  .sales-module-typography :where(p, span, label, td, th, button, a, input, textarea, select, option, li, dt, dd, small) {
+    font-size: 18px !important;
+  }
+
+  .sales-module-typography :where(input, textarea)::placeholder {
+    font-size: 18px !important;
+  }
+
+  .crm-page-heading {
+    @apply text-4xl font-bold text-gray-900;
+  }
+
   .form-input {
     @apply w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors;
   }

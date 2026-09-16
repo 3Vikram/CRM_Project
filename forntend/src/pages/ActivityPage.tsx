@@ -29,6 +29,8 @@ export default function ActivityPage() {
   const [totalRows, setTotalRows] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null);
+  const [activityPendingDeletion, setActivityPendingDeletion] = useState<ActivityRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [createdBy, setCreatedBy] = useState('All');
   const [customerName, setCustomerName] = useState('All');
   const [followUpPreset, setFollowUpPreset] = useState('All');
@@ -140,16 +142,21 @@ export default function ActivityPage() {
     setToast('Activity report downloaded');
   }, [activities]);
 
-  const handleDelete = useCallback(async (activityIdValue: string) => {
-    if (!window.confirm('Delete this activity record?')) return;
+  const handleDelete = useCallback(async () => {
+    if (!activityPendingDeletion) return;
+
+    setDeleting(true);
     try {
-      await deleteActivity(activityIdValue);
+      await deleteActivity(activityPendingDeletion._id);
+      setActivityPendingDeletion(null);
       setToast('Activity deleted successfully');
       await loadActivities();
     } catch {
       setToast('Unable to delete activity');
+    } finally {
+      setDeleting(false);
     }
-  }, [loadActivities]);
+  }, [activityPendingDeletion, loadActivities]);
 
   const summaryText = useMemo(() => {
     const start = (page - 1) * limit + 1;
@@ -162,7 +169,7 @@ export default function ActivityPage() {
     <div className="space-y-6" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-bold text-gray-900">Activity Dashboard</h1>
+          <h1 className="crm-page-heading">Activity Dashboard</h1>
           {/* <p className="text-sm text-gray-600">Search, filter, review, and export activity records across the CRM.</p> */}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -172,7 +179,7 @@ export default function ActivityPage() {
           <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
             <Download className="h-4 w-4" /> Download Report
           </button>
-          <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white">
+          <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
             <Plus className="h-4 w-4" /> Add New
           </button>
         </div>
@@ -267,7 +274,7 @@ export default function ActivityPage() {
                         <button type="button" onClick={() => navigate(`/sales/activities/edit/${activity._id}`)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700">
                           <Pencil className="h-3.5 w-3.5" /> Edit
                         </button>
-                        <button type="button" onClick={() => void handleDelete(activity._id)} className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                        <button type="button" onClick={() => setActivityPendingDeletion(activity)} className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
                           <Trash2 className="h-3.5 w-3.5" /> Delete
                         </button>
                       </div>
@@ -346,6 +353,28 @@ export default function ActivityPage() {
                 <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">Notes</div>
                 <div className="mt-2 text-gray-900">No notes captured for this activity.</div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activityPendingDeletion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => !deleting && setActivityPendingDeletion(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-activity-title" className="w-full max-w-md rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[#EFECE5] px-5 py-4">
+              <h2 id="delete-activity-title" className="text-lg font-bold text-gray-900">Delete Activity</h2>
+              <button type="button" onClick={() => setActivityPendingDeletion(null)} disabled={deleting} className="rounded-lg p-2 text-gray-500 hover:bg-[#F2EFE8] hover:text-gray-800 disabled:opacity-50" aria-label="Close delete confirmation">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-5 py-6 text-sm text-gray-700">Are you sure to want to delete this activity?</div>
+            <div className="flex justify-end gap-3 border-t border-[#EFECE5] px-5 py-4">
+              <button type="button" onClick={() => setActivityPendingDeletion(null)} disabled={deleting} className="rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">
+                Cancel
+              </button>
+              <button type="button" onClick={() => void handleDelete()} disabled={deleting} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>
