@@ -144,6 +144,7 @@ exports.getLeads = async (req, res) => {
       source = '',
       assignedTo = '',
       campaign = '',
+      quotationType = '',
       sortBy = 'createdDate',
       sortOrder = 'desc',
     } = req.query;
@@ -164,6 +165,9 @@ exports.getLeads = async (req, res) => {
     if (source) query.$or = [{ source: source }, { sourceOfLead: source }];
     if (assignedTo) query.assignedTo = assignedTo;
     if (campaign) query.campaignName = new RegExp(`^${escapeRegex(campaign)}$`, 'i');
+    if (quotationType && ['rent', 'sold'].includes(String(quotationType).toLowerCase())) {
+      query.quotationType = String(quotationType).toLowerCase();
+    }
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
@@ -192,6 +196,7 @@ exports.getLeads = async (req, res) => {
       reason: 1,
       timeline: 1,
       notes: 1,
+      quotationType: 1,
       products: 1,
       quotationDetails: 1,
     };

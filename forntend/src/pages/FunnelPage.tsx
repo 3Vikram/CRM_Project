@@ -436,7 +436,7 @@ export default function FunnelPage() {
                     <td className="border-r border-[#EAE3D7] px-2 py-2.5 text-[13px] text-gray-700" style={{ maxWidth: '240px', wordBreak: 'normal', overflowWrap: 'break-word' }}>{row.remarks || row.quotationDetails?.note || '-'}</td>
                     <td className="px-2 py-2.5">
                       <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => navigate(`/sales/quotations/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View">
+                        <button type="button" onClick={() => navigate(`/sales/quotations/view/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View">
                           <Eye className="h-4 w-4" />
                         </button>
                         <button type="button" onClick={() => navigate(`/sales/quotations/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">

@@ -23,6 +23,7 @@ import DCTrackingPage from '@/pages/DCTrackingPage'
 import BillSalePage from '@/pages/BillSalePage'
 import PlaceholderPage from '@/pages/PlaceholderPage'
 import QuotationDashboardPage from '@/pages/QuotationDashboardPage'
+import QuotationTypeSelectPage from '@/pages/QuotationTypeSelectPage'
 import ActivityPage from '@/pages/ActivityPage'
 import ActivityFormPage from '@/pages/ActivityFormPage'
 import CompanyProfilesPage from '@/pages/CompanyProfilesPage'
@@ -369,15 +370,23 @@ export default function App() {
           path="/sales/quotations"
           element={
             <SalesLayout>
-              <QuotationDashboardPage />
+              <QuotationTypeSelectPage />
             </SalesLayout>
           }
         />
         <Route
-          path="/sales/quotations/new"
+          path="/sales/quotations/new/:type"
           element={
             <SalesLayout>
               <QuotationFormPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/quotations/view/:id"
+          element={
+            <SalesLayout>
+              <QuotationViewPage />
             </SalesLayout>
           }
         />
@@ -390,10 +399,10 @@ export default function App() {
           }
         />
         <Route
-          path="/sales/quotations/:id"
+          path="/sales/quotations/:type"
           element={
             <SalesLayout>
-              <QuotationViewPage />
+              <QuotationDashboardPage />
             </SalesLayout>
           }
         />

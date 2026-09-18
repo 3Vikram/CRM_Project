@@ -8,6 +8,7 @@ export interface LeadRecord {
   customerId?: string;
   leadId?: string;
   quotationId?: string;
+  quotationType?: 'rent' | 'sold';
   companyName?: string;
   contactPerson?: string;
   designation?: string;
@@ -81,7 +82,7 @@ export interface LeadListResponse {
   };
 }
 
-export async function fetchLeads(params: { page?: number; limit?: number; search?: string; status?: string; priority?: string; source?: string; assignedTo?: string; campaign?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) {
+export async function fetchLeads(params: { page?: number; limit?: number; search?: string; status?: string; priority?: string; source?: string; assignedTo?: string; campaign?: string; quotationType?: 'rent' | 'sold'; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) {
   const searchParams = new URLSearchParams();
   if (params.page) searchParams.set('page', String(params.page));
   if (params.limit) searchParams.set('limit', String(params.limit));
@@ -91,6 +92,7 @@ export async function fetchLeads(params: { page?: number; limit?: number; search
   if (params.source && params.source !== 'all') searchParams.set('source', params.source);
   if (params.assignedTo) searchParams.set('assignedTo', params.assignedTo);
   if (params.campaign) searchParams.set('campaign', params.campaign);
+  if (params.quotationType) searchParams.set('quotationType', params.quotationType);
   if (params.sortBy) searchParams.set('sortBy', params.sortBy);
   if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
 

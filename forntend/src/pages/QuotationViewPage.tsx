@@ -100,6 +100,7 @@ export default function QuotationViewPage() {
   const [companyProfile, setCompanyProfile] = useState<CompanyProfileRecord | null>(null)
   const [customer, setCustomer] = useState<CustomerApiRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [returnType, setReturnType] = useState<'rent' | 'sold'>('rent')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [isSendingEmail, setIsSendingEmail] = useState(false)
@@ -125,6 +126,7 @@ export default function QuotationViewPage() {
         }
 
         setQuotation(quotationData)
+        setReturnType(quotationData.quotationType === 'sold' ? 'sold' : 'rent')
 
         const profileResponse = await fetchCompanyProfiles({ limit: 1 })
         if (profileResponse.data && profileResponse.data.length > 0) {
@@ -168,10 +170,10 @@ export default function QuotationViewPage() {
     return (
       <div className="space-y-6">
         <button
-          onClick={() => navigate('/sales/quotations')}
+          onClick={() => navigate(`/sales/quotations/${returnType}`)}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Quotations
+          <ArrowLeft className="h-4 w-4" /> Back to {returnType === 'sold' ? 'Sold' : 'Rent'} Quotations
         </button>
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error || 'Quotation not found'}
@@ -186,7 +188,7 @@ export default function QuotationViewPage() {
   const location = quotation.quotationDetails?.delivery || companyProfile?.city || ''
 
   const handleBack = () => {
-    navigate('/sales/quotations')
+    navigate(`/sales/quotations/${returnType}`)
   }
 
   const handlePrint = () => {
@@ -298,6 +300,28 @@ export default function QuotationViewPage() {
     const subtotal = getProductSubtotal(product)
     const taxPercent = parseTaxPercent(product.tax)
     return (subtotal * taxPercent) / 100
+  }
+
+  const getTaxBreakdown = (taxValue?: string | number) => {
+    const taxPercent = parseTaxPercent(taxValue)
+    const taxString = String(taxValue ?? '').toLowerCase()
+
+    if (taxString.includes('igst')) {
+      return {
+        leftLabel: `IGST`,
+        leftRate: taxPercent,
+        rightLabel: `IGST`,
+        rightRate: taxPercent,
+      }
+    }
+
+    const cgstRate = taxPercent / 2
+    return {
+      leftLabel: `CGST`,
+      leftRate: cgstRate,
+      rightLabel: `SGST`,
+      rightRate: cgstRate,
+    }
   }
 
   const subtotalTotal = products.reduce((sum, product) => sum + getProductSubtotal(product), 0)
@@ -474,7 +498,7 @@ export default function QuotationViewPage() {
         }
       `}</style>
 
-      <div className="mx-auto max-w-[860px] px-4 py-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
         <div className="quotation-actions mb-4 flex items-center justify-end gap-3">
           <button
             type="button"
@@ -530,24 +554,24 @@ export default function QuotationViewPage() {
           />
         )}
 
-        <div ref={printRef} className="quotation-view-shell mx-auto max-w-[820px]">
+        <div ref={printRef} className="quotation-view-shell w-full max-w-none mx-0">
           <div className="border border-[#111111] bg-white p-1.5 md:p-2" style={{ borderRadius: 0, boxShadow: 'none' }}>
-            <div className="mt-4 grid grid-cols-[1fr_auto] items-start gap-3 leading-tight">
-            <div className="text-[12px] font-bold text-black">
-              <div className="flex gap-2">
-                <span className="w-[62px] font-semibold">Date</span>
+            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 leading-tight">
+            <div className="max-w-[460px] min-w-0 text-[12px] font-bold text-black">
+              <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start' }}>
+                <span className="font-semibold">Date</span>
                 <span>:</span>
-                <span>{formatDate(quotation.createdDate)}</span>
+                <span className="min-w-0 break-all">{formatDate(quotation.createdDate)}</span>
               </div>
-              <div className="mt-0.5 flex gap-2">
-                <span className="w-[62px] font-semibold">Ref No</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start', marginTop: '2px' }}>
+                <span className="font-semibold">Ref No</span>
                 <span>:</span>
-                <span>{referenceNo}</span>
+                <span className="min-w-0 break-all">{referenceNo}</span>
               </div>
-              <div className="mt-0.5 flex gap-2">
-                <span className="w-[62px] font-semibold">GSTIN/UIN</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start', marginTop: '2px' }}>
+                <span className="font-semibold">GSTIN/UIN</span>
                 <span>:</span>
-                <span>{companyProfile?.gstNo || '—'}</span>
+                <span className="min-w-0 break-all">{companyProfile?.gstNo || '—'}</span>
               </div>
             </div>
 
@@ -568,23 +592,34 @@ export default function QuotationViewPage() {
             </h1>
           </div>
 
-          <div className="mt-2 text-[12px] text-black">
+          <div className="mt-3 text-[13px] text-black">
             <div className="mb-1 font-bold uppercase">To,</div>
-            <div className="leading-snug">
+            <div className="leading-snug text-[13px] font-medium">
               <div>{quotation.contactPerson || '—'}</div>
               <div>{quotation.companyName || '—'}</div>
-              {customer?.billToAddress?.city && <div>{customer.billToAddress.city}</div>}
+              {(() => {
+                const addressParts = [
+                  customer?.billToAddress?.addressLine1,
+                  customer?.billToAddress?.area,
+                  customer?.billToAddress?.city,
+                  customer?.billToAddress?.state,
+                  customer?.billToAddress?.pincode,
+                  customer?.billToAddress?.country,
+                ].filter(Boolean)
+
+                return addressParts.length > 0 ? <div>{addressParts.join(', ')}</div> : null
+              })()}
             </div>
           </div>
 
-          <div className="mt-2 text-[12px] text-black">
-            <span className="font-bold">Subject:</span>
-            <span className="font-bold ml-1 uppercase">{subject}</span>
+          <div className="mt-3 text-[12px] text-black">
+            <span className="font-semibold">Subject:</span>
+            <span className="ml-1 font-medium uppercase">{subject}</span>
           </div>
 
-          <div className="mt-2 text-[12px] leading-relaxed text-black">
-            <div>Dear Sir/Madam,</div>
-            <div className="mt-1">We are pleased to send our best quote for the following products enquired.</div>
+          <div className="mt-3 text-[13px] leading-relaxed text-black">
+            <div className="font-semibold">Dear Sir/Madam,</div>
+            <div className="mt-1 font-medium">We are pleased to send our best quote for the following products enquired.</div>
           </div>
 
          {/* <div className="mt-2 overflow-hidden" style={{ border: '0.3px solid #000000' }}> */}
@@ -629,51 +664,50 @@ export default function QuotationViewPage() {
                     const cgst = (subtotal * cgstRate) / 100
                     const sgst = (subtotal * sgstRate) / 100
                     const total = subtotal + cgst + sgst
+                    const taxBreakdown = getTaxBreakdown(product.tax)
+                    const leftTaxValue = taxBreakdown.leftLabel.toLowerCase().includes('igst') ? (subtotal * taxPercent) / 100 : cgst
+                    const rightTaxValue = taxBreakdown.rightLabel.toLowerCase().includes('igst') ? 0 : sgst
 
                     return (
                       <tr key={`${product.productName || 'product'}-${index}`} style={{ height: 'auto' }}>
-                        <td className="px-1 py-1 text-center align-top" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{index + 1}</td>
-                        <td className="px-1 py-1 text-left align-top" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{product.productName || '—'}</td>
-                        <td className="px-1 py-1 text-left align-top" style={{ border: '0.3px solid #000000', wordWrap: 'break-word', verticalAlign: 'top', whiteSpace: 'normal' }}>{product.productDescription || '—'}</td>
-                        <td className="px-1 py-1 text-center align-top" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{safeNumber(product.quantity)}</td>
-                        <td className="px-1 py-1 text-right align-top" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{formatCurrency(product.unitPrice)}</td>
-                        <td className="px-1 py-1 text-right align-top" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{formatCurrency(subtotal)}</td>
-                        {/* <td className="px-1 py-1 text-right align-top text-[9px]" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{formatCurrency(cgst)}</td>
-                        <td className="px-1 py-1 text-right align-top text-[9px]" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{formatCurrency(sgst)}</td> */}
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{index + 1}</td>
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{product.productName || '—'}</td>
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', wordWrap: 'break-word', verticalAlign: 'middle', whiteSpace: 'normal', textAlign: 'center', padding: '8px 6px' }}>{product.productDescription || '—'}</td>
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{safeNumber(product.quantity)}</td>
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(product.unitPrice)}</td>
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(subtotal)}</td>
                         <td
-  className="px-1 py-1 text-center align-top text-[9px]"
-  style={{
-    border: '0.3px solid #000000',
-    verticalAlign: 'top',
-  }}
->
-  <div className="font-bold">CGST 9%</div>
-  <div
-    style={{
-      borderTop: '1px dashed #b5b5b5',
-      margin: '4px 8px',
-    }}
-  />
-  <div>{formatCurrency(cgst)}</div>
-</td>
+                          className="px-1 py-1 text-center align-middle text-[9px]"
+                          style={{
+                            border: '0.3px solid #000000',
+                            verticalAlign: 'middle',
+                            textAlign: 'center',
+                            padding: '8px 6px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <div className="font-bold">{taxBreakdown.leftLabel} {taxBreakdown.leftRate ? `${taxBreakdown.leftRate}%` : ''}</div>
+                            <div style={{ width: '80%', borderTop: '1px dashed #b5b5b5', margin: '0 4px' }} />
+                            <div>{formatCurrency(leftTaxValue)}</div>
+                          </div>
+                        </td>
 
-<td
-  className="px-1 py-1 text-center align-top text-[9px]"
-  style={{
-    border: '0.3px solid #000000',
-    verticalAlign: 'top',
-  }}
->
-  <div className="font-bold">SGST 9%</div>
-  <div
-    style={{
-      borderTop: '1px dashed #b5b5b5',
-      margin: '4px 8px',
-    }}
-  />
-  <div>{formatCurrency(sgst)}</div>
-</td>
-                        <td className="px-1 py-1 text-right align-top" style={{ border: '0.3px solid #000000', verticalAlign: 'top' }}>{formatCurrency(total)}</td>
+                        <td
+                          className="px-1 py-1 text-center align-middle text-[9px]"
+                          style={{
+                            border: '0.3px solid #000000',
+                            verticalAlign: 'middle',
+                            textAlign: 'center',
+                            padding: '8px 6px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <div className="font-bold">{taxBreakdown.rightLabel} {taxBreakdown.rightRate ? `${taxBreakdown.rightRate}%` : ''}</div>
+                            <div style={{ width: '80%', borderTop: '1px dashed #b5b5b5', margin: '0 4px' }} />
+                            <div>{formatCurrency(rightTaxValue)}</div>
+                          </div>
+                        </td>
+                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(total)}</td>
                       </tr>
                     )
                   })
@@ -686,10 +720,10 @@ export default function QuotationViewPage() {
                 )}
 
                 <tr style={{ height: '18px', fontWeight: 'bold' }}>
-                  <td colSpan={5} className="px-1 py-1 text-right align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold' }}>Grand Total</td>
-                  <td className="px-1 py-1 text-right align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold' }}>{formatCurrency(subtotalTotal)}</td>
-                  <td colSpan={2} className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold' }}>{formatCurrency(totalCGST + totalSGST)}</td>
-                  <td className="px-1 py-1 text-right align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold' }}>{formatCurrency(grandTotal)}</td>
+                  <td colSpan={5} className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>Grand Total</td>
+                  <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>{formatCurrency(subtotalTotal)}</td>
+                  <td colSpan={2} className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>{formatCurrency(totalCGST + totalSGST)}</td>
+                  <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>{formatCurrency(grandTotal)}</td>
                 </tr>
               </tbody>
             </table>

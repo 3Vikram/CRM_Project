@@ -81,6 +81,7 @@ const LeadSchema = new mongoose.Schema(
     isScrapped: { type: Boolean, default: false },
     reason: { type: String, trim: true, default: '' },
     // Quotation fields
+    quotationType: { type: String, enum: ['rent', 'sold'], default: 'rent' },
     quotationId: { type: String, trim: true, unique: true, sparse: true },
     products: { type: Array, default: [] },
     quotationDetails: { type: mongoose.Schema.Types.Mixed, default: {} },

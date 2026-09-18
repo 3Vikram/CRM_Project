@@ -71,6 +71,7 @@ export default function QuotationEditPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [returnType, setReturnType] = useState<'rent' | 'sold'>('rent')
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false)
   const [taxSearch, setTaxSearch] = useState('')
@@ -140,6 +141,8 @@ export default function QuotationEditPage() {
           navigate('/sales/quotations')
           return
         }
+
+        setReturnType(quotation.quotationType === 'sold' ? 'sold' : 'rent')
 
         // Populate form with quotation data
         const newForm = { ...initialForm }
@@ -434,7 +437,7 @@ export default function QuotationEditPage() {
 
       // Navigate to quotation view page after a short delay
       setTimeout(() => {
-        navigate(`/sales/quotations/${id}`)
+        navigate(`/sales/quotations/view/${id}`)
       }, 1500)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update quotation'
@@ -469,10 +472,10 @@ export default function QuotationEditPage() {
       <div>
           <button
     type="button"
-    onClick={() => navigate('/sales/quotations')}
+    onClick={() => navigate(`/sales/quotations/${returnType}`)}
     className="mb-3 flex items-center gap-1 text-sm text-[#111827] hover:underline cursor-pointer"
   >
-    ← Back to Quotation
+    ← Back to {returnType === 'sold' ? 'Sold' : 'Rent'} Quotations
   </button>
         <h1 className="crm-page-heading">Edit Quotation</h1>
       </div>

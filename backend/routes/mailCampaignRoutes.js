@@ -24,7 +24,6 @@ router.get('/track/open/:trackingId', trackOpen);
 router.get('/track/click/:trackingId', trackClick);
 router.get('/open/:trackingId', trackOpen);
 router.get('/tracking/open/:trackingId', trackOpen);
-router.get('/tracking/open/:token', trackOpen);
 router.get('/tracking/click/:token', trackClick);
 router.get('/:id/report', getCampaignReport);
 router.get('/:id/preview', getCampaignPreview);

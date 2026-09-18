@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   Download,
   Eye,
@@ -47,6 +47,8 @@ const getUniqueValues = (items: Array<string | undefined>) =>
 
 export default function QuotationDashboardPage() {
   const navigate = useNavigate()
+  const { type } = useParams<{ type?: string }>()
+  const quotationType: 'rent' | 'sold' = type === 'sold' ? 'sold' : 'rent'
   const [quotations, setQuotations] = useState<LeadRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,7 +66,7 @@ export default function QuotationDashboardPage() {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await fetchLeads({ status: 'Proposal Sent', limit: 1000 })
+        const response = await fetchLeads({ status: 'Proposal Sent', quotationType, limit: 1000 })
         setQuotations(response.data)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load quotations')
@@ -74,7 +76,7 @@ export default function QuotationDashboardPage() {
     }
 
     void loadQuotations()
-  }, [])
+  }, [quotationType])
 
   const filterOptions = useMemo(() => {
     const createdByOptions = getUniqueValues(quotations.map((quote) => quote.createdBy || 'System'))
@@ -166,10 +168,17 @@ export default function QuotationDashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="crm-page-heading">Quotation Dashboard</h1>
+          <button
+            type="button"
+            onClick={() => navigate('/sales/quotations')}
+            className="mb-2 flex items-center gap-1 text-sm text-[#111827] hover:underline cursor-pointer"
+          >
+            ← Back to Quotation
+          </button>
+          <h1 className="crm-page-heading">{quotationType === 'sold' ? 'Sold Quotation Dashboard' : 'Rent Quotation Dashboard'}</h1>
         </div>
         <button
-          onClick={() => navigate('/sales/quotations/new')}
+          onClick={() => navigate(`/sales/quotations/new/${quotationType}`)}
           className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
         >
           <Plus className="h-4 w-4" /> ADD NEW
@@ -313,7 +322,7 @@ export default function QuotationDashboardPage() {
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.quotationDetails?.delivery || '-'}</td>
                   <td className="px-4 py-3 text-gray-700">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => navigate(`/sales/quotations/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
+                      <button onClick={() => navigate(`/sales/quotations/view/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
                         <Eye className="h-4 w-4" />
                       </button>
                       <button onClick={() => navigate(`/sales/quotations/edit/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">

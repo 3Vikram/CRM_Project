@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { RefreshCcw } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { createLead } from '@/lib/leadApi'
@@ -65,6 +65,8 @@ const initialForm = {
 
 export default function QuotationFormPage() {
   const navigate = useNavigate()
+  const { type } = useParams<{ type?: string }>()
+  const quotationType: 'rent' | 'sold' = type === 'sold' ? 'sold' : 'rent'
   const [form, setForm] = useState(initialForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [toast, setToast] = useState<string | null>(null)
@@ -291,6 +293,7 @@ export default function QuotationFormPage() {
         contactPerson: form.contactPerson || 'Not provided',
         email: form.email || 'noemail@noemail.com', // Provide default for required field
         mobile: form.mobile || '0000000000', // Provide default for required field
+        quotationType,
         leadStatus: 'Proposal Sent',
         products,
         quotationDetails: {
@@ -326,7 +329,7 @@ export default function QuotationFormPage() {
 
       // Navigate to dashboard after a short delay
       setTimeout(() => {
-        navigate('/sales/quotations')
+        navigate(`/sales/quotations/${quotationType}`)
       }, 1500)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save quotation'
@@ -348,12 +351,12 @@ export default function QuotationFormPage() {
       <div>
           <button
     type="button"
-    onClick={() => navigate('/sales/quotations')}
+    onClick={() => navigate(`/sales/quotations/${quotationType}`)}
     className="mb-3 flex items-center gap-1 text-sm text-[#111827] hover:underline cursor-pointer"
   >
-    ← Back to Quotation
+    ← Back to {quotationType === 'sold' ? 'Sold' : 'Rent'} Quotations
   </button>
-        <h1 className="crm-page-heading">Generate New Quotation</h1>
+        <h1 className="crm-page-heading">Generate New {quotationType === 'sold' ? 'Sold' : 'Rent'} Quotation</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
