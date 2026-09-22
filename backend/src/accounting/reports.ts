@@ -2,7 +2,7 @@ import type pg from 'pg'
 
 export async function trialBalance(pool: pg.Pool, companyId: string, to: string) {
   const result = await pool.query(
-    `SELECT l.id ledger_id,l.code,l.name,l.nature,l.current_classification,l.schedule_iii_map,
+    `SELECT l.id "ledgerId",l.code,l.name,l.nature,l.current_classification "currentClassification",l.schedule_iii_map "scheduleIIIMap",
       COALESCE(sum(vl.debit) FILTER (WHERE v.id IS NOT NULL),0)::text debit,
       COALESCE(sum(vl.credit) FILTER (WHERE v.id IS NOT NULL),0)::text credit,
       (COALESCE(sum(vl.debit) FILTER (WHERE v.id IS NOT NULL),0)-COALESCE(sum(vl.credit) FILTER (WHERE v.id IS NOT NULL),0))::text balance
@@ -20,10 +20,10 @@ export async function trialBalance(pool: pg.Pool, companyId: string, to: string)
 
 export async function ledgerReport(pool: pg.Pool, companyId: string, ledgerId: string, from: string | undefined, to: string) {
   const result = await pool.query(
-    `SELECT v.id voucher_id,v.voucher_number,v.voucher_type,v.voucher_date,v.narration voucher_narration,
-      v.invoice_reference,v.external_reference,
-      vl.line_number,vl.debit::text,vl.credit::text,vl.narration,vl.bill_reference,
-      sum(vl.debit-vl.credit) OVER (ORDER BY v.voucher_date,v.created_at,vl.line_number)::text running_balance,
+    `SELECT v.id "voucherId",v.voucher_number "voucherNumber",v.voucher_type "voucherType",v.voucher_date::text "voucherDate",v.narration "voucherNarration",
+      v.invoice_reference "invoiceReference",v.external_reference "externalReference",
+      vl.line_number "lineNumber",vl.debit::text,vl.credit::text,vl.narration,vl.bill_reference "billReference",
+      sum(vl.debit-vl.credit) OVER (ORDER BY v.voucher_date,v.created_at,vl.line_number)::text "runningBalance",
       CASE v.source_type
         WHEN 'purchase_invoice' THEN 'Purchase Invoice'
         WHEN 'bank_payment' THEN 'Bank Payment'
@@ -43,7 +43,7 @@ export async function ledgerReport(pool: pg.Pool, companyId: string, ledgerId: s
 
 export async function profitAndLoss(pool: pg.Pool, companyId: string, from: string | undefined, to: string) {
   const result = await pool.query(
-    `SELECT l.id ledger_id,l.code,l.name,l.nature,l.schedule_iii_map,
+    `SELECT l.id "ledgerId",l.code,l.name,l.nature,l.schedule_iii_map "scheduleIIIMap",
       CASE WHEN l.nature='income' THEN sum(vl.credit-vl.debit) ELSE sum(vl.debit-vl.credit) END::text amount
      FROM voucher_lines vl JOIN vouchers v ON v.company_id=vl.company_id AND v.id=vl.voucher_id
      JOIN ledgers l ON l.company_id=vl.company_id AND l.id=vl.ledger_id
@@ -58,7 +58,7 @@ export async function profitAndLoss(pool: pg.Pool, companyId: string, from: stri
 
 async function balanceSheetAt(pool: pg.Pool, companyId: string, asOf: string) {
   const result = await pool.query(
-    `SELECT l.id ledger_id,l.code,l.name,l.nature,l.current_classification,l.schedule_iii_map,
+    `SELECT l.id "ledgerId",l.code,l.name,l.nature,l.current_classification "currentClassification",l.schedule_iii_map "scheduleIIIMap",
       CASE WHEN l.nature='asset' THEN sum(vl.debit-vl.credit) ELSE sum(vl.credit-vl.debit) END::text amount
      FROM voucher_lines vl JOIN vouchers v ON v.company_id=vl.company_id AND v.id=vl.voucher_id
      JOIN ledgers l ON l.company_id=vl.company_id AND l.id=vl.ledger_id

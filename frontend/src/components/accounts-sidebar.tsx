@@ -10,12 +10,17 @@ import {
   BarChart3,
   Scale,
   FileBarChart,
+  LogOut,
 } from 'lucide-react'
-import { ACCOUNTING_COMPANIES, useAccounting } from './accounts/accounting-context'
+import { useAccounting } from './accounts/accounting-context'
+import { useCompanies } from '@/lib/queries/accounting'
+import { useAuth } from '@/lib/auth'
 
 export function AccountsSidebar() {
   const { pathname } = useLocation()
   const { companyId, setCompanyId } = useAccounting()
+  const { data: companies } = useCompanies()
+  const { user, logout } = useAuth()
 
   const menuItems = [
     { href: '/accounts/sale-invoice', label: 'Sale Invoice', icon: FileText },
@@ -46,7 +51,7 @@ export function AccountsSidebar() {
       <div className="border-b border-[#E7E3DA] px-4 py-3">
         <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500" htmlFor="accounts-company">Company books</label>
         <select id="accounts-company" className="mt-1 w-full rounded-md border border-[#D9D4C8] bg-white px-2 py-1.5 text-xs font-medium text-gray-800" value={companyId} onChange={(event) => setCompanyId(event.target.value)}>
-          {ACCOUNTING_COMPANIES.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+          {companies?.map((company) => <option key={company.id} value={company.id}>{company.legalName}</option>)}
         </select>
       </div>
 
@@ -80,14 +85,16 @@ export function AccountsSidebar() {
         </div>
       </div>
 
-      {/* TIP Section */}
-      <div className="p-4 m-3 bg-black/[0.02] border border-[#E7E3DA] rounded-lg">
-        <div className="text-xs font-semibold text-gray-600 uppercase mb-2 tracking-wider">
-          Tip
-        </div>
-        <p className="text-xs text-gray-600 leading-relaxed">
-          Accounts workspace — tools for invoices, payments, ledgers and reporting.
-        </p>
+      {/* Signed-in user */}
+      <div className="border-t border-[#E7E3DA] p-4">
+        {user && <div className="mb-2 truncate text-xs text-gray-600" title={user.email}>{user.name} · {user.role}</div>}
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-900"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign out
+        </button>
       </div>
     </div>
   )

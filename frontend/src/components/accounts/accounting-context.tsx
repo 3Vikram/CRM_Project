@@ -1,35 +1,36 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { AccountingData, emptyData, loadData, saveData } from '@/lib/accounting'
-
-export const ACCOUNTING_COMPANIES = [
-  { id: '3vikram', name: '3Vikram Technologies' },
-  { id: 'synov', name: 'SYNOV IT Services' },
-] as const
+import { useCompanies } from '@/lib/queries/accounting'
 
 const COMPANY_KEY = 'crm-accounting-company-v1'
-type ContextValue = { companyId: string; companyName: string; setCompanyId: (companyId: string) => void; data: AccountingData; setData: (data: AccountingData) => void }
+const FALLBACK_COMPANY_ID = '3vikram'
+
+type ContextValue = { companyId: string; companyName: string; setCompanyId: (companyId: string) => void; companiesLoading: boolean }
 const Context = createContext<ContextValue | null>(null)
 
 export function AccountingProvider({ children }: { children: React.ReactNode }) {
-  const [companyId, setCompanyIdState] = useState(() => localStorage.getItem(COMPANY_KEY) || ACCOUNTING_COMPANIES[0].id)
-  const [data, setDataState] = useState<AccountingData>(() => loadData(companyId))
+  const { data: companies, isLoading } = useCompanies()
+  const [companyId, setCompanyIdState] = useState(() => localStorage.getItem(COMPANY_KEY) || FALLBACK_COMPANY_ID)
+
+  // If the saved company id isn't in the list once it loads (e.g. it was
+  // removed, or nothing was saved yet), fall back to the first company.
+  useEffect(() => {
+    if (companies?.length && !companies.some((c) => c.id === companyId)) {
+      setCompanyIdState(companies[0].id)
+    }
+  }, [companies, companyId])
+
   const setCompanyId = (nextCompanyId: string) => {
-    if (!ACCOUNTING_COMPANIES.some((company) => company.id === nextCompanyId)) return
     localStorage.setItem(COMPANY_KEY, nextCompanyId)
     setCompanyIdState(nextCompanyId)
-    setDataState(loadData(nextCompanyId))
   }
-  const setData = (nextData: AccountingData) => {
-    if (nextData.companyId !== companyId) throw new Error('Cannot save accounting data into a different company')
-    setDataState(nextData)
-    saveData(nextData)
-  }
-  useEffect(() => {
-    const listener = (event: StorageEvent) => { if (event.key === `crm-accounting-data-v2:${companyId}`) setDataState(loadData(companyId)) }
-    window.addEventListener('storage', listener)
-    return () => window.removeEventListener('storage', listener)
-  }, [companyId])
-  const value = useMemo<ContextValue>(() => ({ companyId, companyName: ACCOUNTING_COMPANIES.find((company) => company.id === companyId)?.name ?? companyId, setCompanyId, data: data.companyId === companyId ? data : emptyData(companyId), setData }), [companyId, data])
+
+  const value = useMemo<ContextValue>(() => ({
+    companyId,
+    companyName: companies?.find((c) => c.id === companyId)?.legalName ?? companyId,
+    setCompanyId,
+    companiesLoading: isLoading,
+  }), [companyId, companies, isLoading])
+
   return <Context.Provider value={value}>{children}</Context.Provider>
 }
 

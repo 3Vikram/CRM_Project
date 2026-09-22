@@ -16,6 +16,7 @@ import LoginPage from '@/pages/accounts/LoginPage'
 import { AccountingProvider } from '@/components/accounts/accounting-context'
 import { AuthProvider } from '@/components/accounts/auth-provider'
 import { RequireAuth } from '@/components/accounts/require-auth'
+import { AccountingQueryProvider } from '@/components/accounts/query-provider'
 import { PurchaseInvoicePage, JournalRegisterPage, BankPaymentsPage, LedgerPage, ProfitLossPage, ReportsPage } from '@/pages/accounts/AccountingPages'
 import BalanceSheetPage from '@/pages/accounts/BalanceSheetPage'
 
@@ -34,6 +35,7 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
 function AccountsLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireAuth>
+      <AccountingQueryProvider>
       <AccountingProvider>
         <div className="flex">
           <AccountsSidebar />
@@ -43,6 +45,7 @@ function AccountsLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </AccountingProvider>
+      </AccountingQueryProvider>
     </RequireAuth>
   )
 }
