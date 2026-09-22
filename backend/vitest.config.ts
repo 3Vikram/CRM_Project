@@ -17,5 +17,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     setupFiles: [],
+    // Integration test files share one real Postgres database and each
+    // truncates tables in beforeEach; running files in parallel deadlocks
+    // on those TRUNCATEs. The suite is small enough that sequential is fine.
+    fileParallelism: false,
   },
 })

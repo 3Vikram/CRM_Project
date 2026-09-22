@@ -33,7 +33,7 @@ export async function resetBusinessData() {
   await testPool().query(`
     TRUNCATE TABLE
       audit_events, voucher_lines, vouchers, voucher_sequences,
-      purchase_invoice_lines, purchase_invoices, bank_payments,
+      purchase_invoice_lines, purchase_invoices, bank_payments, sales_invoices, invoice_drafts,
       migration_reconciliation_results, migration_errors, migration_mappings, migration_records, migration_files, migration_jobs,
       users
     RESTART IDENTITY CASCADE
@@ -49,4 +49,19 @@ export function testToken(role: AccountingRole, id = `test-${role}`) {
 
 export function authHeader(role: AccountingRole, id?: string) {
   return `Bearer ${testToken(role, id)}`
+}
+
+/**
+ * Inserts a real `users` row (needed for anything with a FK to users, like
+ * invoice_drafts) and returns an Authorization header for it. Most tests
+ * don't need this — `authHeader()`'s free-text actor id is enough wherever
+ * `created_by` is a plain text column.
+ */
+export async function seedTestUser(role: AccountingRole, email = `${role}@test.local`) {
+  const result = await testPool().query<{ id: string }>(
+    `INSERT INTO users(email,name,password_hash,role) VALUES($1,$2,'scrypt:00:00',$3) RETURNING id`,
+    [email, role, role],
+  )
+  const id = result.rows[0].id
+  return { id, authHeader: authHeader(role, id) }
 }

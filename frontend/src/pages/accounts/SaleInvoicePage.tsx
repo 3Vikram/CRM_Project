@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Download, RotateCcw } from 'lucide-react'
+import { Download, FileCheck2, RotateCcw } from 'lucide-react'
 import type { Entity, LineItem } from '@crm/shared'
 import { fetchEntities, computeInvoice, ComputationError } from '@/lib/api'
 import { useDebounced } from '@/lib/useDebounced'
@@ -9,10 +9,11 @@ import { ExcelDropzone } from '@/components/accounts/sale-invoice/ExcelDropzone'
 import { ControlsPanel } from '@/components/accounts/sale-invoice/ControlsPanel'
 import { InvoicePreview } from '@/components/accounts/sale-invoice/preview/InvoicePreview'
 import { groupIdentical } from '@/lib/groupLines'
+import { useIssueSalesInvoice, useSalesInvoices, useCancelSalesInvoice } from '@/lib/queries/sales-invoices'
 import {
   DraftProvider,
   useDraft,
-  clearStoredDraft,
+  useClearDraft,
 } from './sale-invoice/draft-context'
 
 function pickSellerFromRows(rows: LineItem[], entities: Entity[]): Entity {
@@ -98,11 +99,30 @@ function SaleInvoiceInner() {
     dispatch({ type: 'SET_LINES_AND_SELLER', lines: groupIdentical(rows), entity: seller })
   }
 
+  const clearDraft = useClearDraft()
+  const issueInvoice = useIssueSalesInvoice()
+  const cancelInvoice = useCancelSalesInvoice()
+  const { data: history } = useSalesInvoices(draft.sellerId)
+  const [issueError, setIssueError] = useState<string | null>(null)
+
   const handleReset = () => {
-    clearStoredDraft()
+    clearDraft()
     dispatch({ type: 'RESET', seller: entities[0] })
     setComputed(null)
     setCompErr(null)
+  }
+
+  const handleIssue = async () => {
+    setIssueError(null)
+    try {
+      await issueInvoice.mutateAsync(draft)
+      window.print()
+      clearDraft()
+      dispatch({ type: 'RESET', seller: entities[0] })
+      setComputed(null)
+    } catch (err) {
+      setIssueError(err instanceof Error ? err.message : 'Could not issue the invoice')
+    }
   }
 
   const mixedCompany = useMemo(() => {
@@ -133,17 +153,26 @@ function SaleInvoiceInner() {
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden sm:inline-flex items-center px-2.5 h-8 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs">
-            Autosaves locally
+            Autosaves to your account
           </span>
           <button
             type="button"
-            disabled={!computed || Boolean(computed?.mixedCompany)}
-            title={computed?.mixedCompany ? 'Split SYNOV and 3VIKRAM rows into separate invoices before printing.' : undefined}
-            onClick={() => window.print()}
+            disabled={!computed || Boolean(computed?.mixedCompany) || issueInvoice.isPending}
+            title={computed?.mixedCompany ? 'Split SYNOV and 3VIKRAM rows into separate invoices before issuing.' : undefined}
+            onClick={handleIssue}
             className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
           >
+            <FileCheck2 className="w-4 h-4" />
+            {issueInvoice.isPending ? 'Issuing…' : 'Issue & Print'}
+          </button>
+          <button
+            type="button"
+            disabled={!computed || Boolean(computed?.mixedCompany)}
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
             <Download className="w-4 h-4" />
-            Download PDF
+            Print preview
           </button>
           <button
             type="button"
@@ -156,6 +185,11 @@ function SaleInvoiceInner() {
         </div>
       </div>
 
+      {issueError && (
+        <div data-no-print className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
+          Could not issue the invoice: {issueError}
+        </div>
+      )}
       {loadErr && (
         <div data-no-print className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
           Could not load seller presets from /api/entities: {loadErr}. Is the
@@ -198,6 +232,39 @@ function SaleInvoiceInner() {
               loading={computing}
               error={compErr}
             />
+          </div>
+        </div>
+      )}
+
+      {!!history?.length && (
+        <div data-no-print className="rounded-lg border border-[#EFECE5] bg-white p-4">
+          <h2 className="mb-2 text-sm font-bold text-gray-900">Issued invoices for this seller</h2>
+          <div className="overflow-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase text-gray-500">
+                <tr><th className="px-2 py-1.5">Invoice</th><th className="px-2 py-1.5">Date</th><th className="px-2 py-1.5">Buyer</th><th className="px-2 py-1.5">Total</th><th className="px-2 py-1.5">Status</th><th className="px-2 py-1.5" /></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {history.map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="px-2 py-1.5">{inv.invoiceNumber}</td>
+                    <td className="px-2 py-1.5">{inv.invoiceDate}</td>
+                    <td className="px-2 py-1.5">{inv.buyerName}</td>
+                    <td className="px-2 py-1.5">₹{Number(inv.grandTotal).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${inv.status === 'issued' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{inv.status}</span>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {inv.status === 'issued' && (
+                        <button className="text-xs text-red-700 hover:underline" onClick={() => cancelInvoice.mutate({ id: inv.id, reason: 'Cancelled from Sale Invoice history' })}>
+                          Cancel
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

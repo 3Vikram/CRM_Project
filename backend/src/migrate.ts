@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { database, closeDatabase } from './db.js'
 
-const migrations = ['001_accounting_foundation.sql', '002_auth_and_platform.sql', '003_accounting_documents.sql']
+const migrations = ['001_accounting_foundation.sql', '002_auth_and_platform.sql', '003_accounting_documents.sql', '004_sales_invoices.sql']
 const pool = database()
 
 try {

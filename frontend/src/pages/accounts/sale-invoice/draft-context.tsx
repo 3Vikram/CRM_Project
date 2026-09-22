@@ -7,11 +7,13 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
   type ReactNode,
 } from 'react'
 import type { Entity, InvoiceDraft, LineItem, TaxType } from '@crm/shared'
 import { suggestTaxTypeFor } from '@/lib/tax-suggest'
 import { todayISO, previousFullMonth } from '@/lib/dates'
+import { useInvoiceDraft, useSaveInvoiceDraft, useClearInvoiceDraft } from '@/lib/queries/sales-invoices'
 
 /**
  * Default draft shape — empty ledger, ready for an operator to drop rows.
@@ -188,41 +190,65 @@ function reducer(state: InvoiceDraft, action: DraftAction): InvoiceDraft {
 interface DraftContextValue {
   draft: InvoiceDraft
   dispatch: React.Dispatch<DraftAction>
+  /** True once the server draft has been fetched and reconciled — autosave waits for this. */
+  hydrated: boolean
 }
 
 const DraftContext = createContext<DraftContextValue | null>(null)
 
-const STORAGE_KEY = 'crm.sale-invoice.draft.v1'
+// Legacy localStorage key, kept only for the one-time upload of a draft that
+// was saved before this page started autosaving to the server.
+const LEGACY_STORAGE_KEY = 'crm.sale-invoice.draft.v1'
 
 export function DraftProvider({ children }: { children: ReactNode }) {
   const [draft, dispatch] = useReducer(reducer, undefined, () => {
+    // Synchronous fallback so the first paint isn't empty while the server
+    // draft loads; reconciled (and overwritten if the server has one) below.
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = localStorage.getItem(LEGACY_STORAGE_KEY)
       if (raw) return JSON.parse(raw) as InvoiceDraft
     } catch {
       /* ignore */
     }
     return emptyDraft()
   })
+  const [hydrated, setHydrated] = useState(false)
+  const { data: serverDraft, isSuccess } = useInvoiceDraft()
+  const saveDraft = useSaveInvoiceDraft()
 
-  // ISSUE-09 will own debounced autosave; a light save here keeps the draft
-  // alive across hot reloads during development.
+  // Reconcile with the server once: prefer the server's draft; if it has
+  // none but a legacy local one exists, upload that once and clear it.
+  useEffect(() => {
+    if (!isSuccess || hydrated) return
+    if (serverDraft?.draft) {
+      dispatch({ type: 'SET', patch: serverDraft.draft })
+    } else {
+      try {
+        const raw = localStorage.getItem(LEGACY_STORAGE_KEY)
+        if (raw) saveDraft.mutate(JSON.parse(raw) as InvoiceDraft)
+      } catch {
+        /* ignore */
+      }
+    }
+    try { localStorage.removeItem(LEGACY_STORAGE_KEY) } catch { /* ignore */ }
+    setHydrated(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess, serverDraft, hydrated])
+
+  // Debounced autosave to the server, only once hydrated (so we never
+  // overwrite a real server draft with the pre-hydration placeholder state).
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   useEffect(() => {
+    if (!hydrated) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
-      } catch {
-        /* ignore quota errors */
-      }
-    }, 600)
+    saveTimer.current = setTimeout(() => saveDraft.mutate(draft), 600)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
-  }, [draft])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, hydrated])
 
-  const value = useMemo(() => ({ draft, dispatch }), [draft])
+  const value = useMemo(() => ({ draft, dispatch, hydrated }), [draft, hydrated])
   return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>
 }
 
@@ -232,11 +258,12 @@ export function useDraft() {
   return ctx
 }
 
-export function clearStoredDraft() {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    /* ignore */
+/** Clears the server-side draft (and any leftover legacy localStorage copy) after a successful issue/reset. */
+export function useClearDraft() {
+  const clear = useClearInvoiceDraft()
+  return () => {
+    clear.mutate()
+    try { localStorage.removeItem(LEGACY_STORAGE_KEY) } catch { /* ignore */ }
   }
 }
 
