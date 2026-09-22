@@ -17,8 +17,10 @@ import { AccountingProvider } from '@/components/accounts/accounting-context'
 import { AuthProvider } from '@/components/accounts/auth-provider'
 import { RequireAuth } from '@/components/accounts/require-auth'
 import { AccountingQueryProvider } from '@/components/accounts/query-provider'
-import { PurchaseInvoicePage, JournalRegisterPage, BankPaymentsPage, LedgerPage, ProfitLossPage, ReportsPage } from '@/pages/accounts/AccountingPages'
+import { useAuth } from '@/lib/auth'
+import { PurchaseInvoicePage, JournalRegisterPage, BankPaymentsPage, LedgerPage, ProfitLossPage } from '@/pages/accounts/AccountingPages'
 import BalanceSheetPage from '@/pages/accounts/BalanceSheetPage'
+import ReportsPage from '@/pages/accounts/ReportsPage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -32,6 +34,21 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
   )
 }
 
+function AccountsTopBar() {
+  const { user } = useAuth()
+  const initials = user
+    ? user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join('')
+    : 'AC'
+  return (
+    <TopBar
+      searchPlaceholder="Search invoices, ledger, reports..."
+      userName={user?.name}
+      userRole="Accounts · Finance"
+      userInitials={initials}
+    />
+  )
+}
+
 function AccountsLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireAuth>
@@ -40,7 +57,7 @@ function AccountsLayout({ children }: { children: React.ReactNode }) {
         <div className="flex">
           <AccountsSidebar />
           <div className="flex-1 ml-56">
-            <TopBar searchPlaceholder="Search invoices, ledger, reports..." userRole="Accounts · Finance" userInitials="AC" />
+            <AccountsTopBar />
             <main className="mt-16 p-8">{children}</main>
           </div>
         </div>

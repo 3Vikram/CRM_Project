@@ -5,6 +5,7 @@ import { Download, FileCheck2, RotateCcw } from 'lucide-react'
 import type { Entity, LineItem } from '@crm/shared'
 import { fetchEntities, computeInvoice, ComputationError } from '@/lib/api'
 import { useDebounced } from '@/lib/useDebounced'
+import { Toast } from '@/components/toast'
 import { ExcelDropzone } from '@/components/accounts/sale-invoice/ExcelDropzone'
 import { ControlsPanel } from '@/components/accounts/sale-invoice/ControlsPanel'
 import { InvoicePreview } from '@/components/accounts/sale-invoice/preview/InvoicePreview'
@@ -104,6 +105,7 @@ function SaleInvoiceInner() {
   const cancelInvoice = useCancelSalesInvoice()
   const { data: history } = useSalesInvoices(draft.sellerId)
   const [issueError, setIssueError] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const handleReset = () => {
     clearDraft()
@@ -190,6 +192,7 @@ function SaleInvoiceInner() {
           Could not issue the invoice: {issueError}
         </div>
       )}
+      {cancelError && <Toast message={cancelError} type="error" onClose={() => setCancelError(null)} />}
       {loadErr && (
         <div data-no-print className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
           Could not load seller presets from /api/entities: {loadErr}. Is the
@@ -256,7 +259,15 @@ function SaleInvoiceInner() {
                     </td>
                     <td className="px-2 py-1.5">
                       {inv.status === 'issued' && (
-                        <button className="text-xs text-red-700 hover:underline" onClick={() => cancelInvoice.mutate({ id: inv.id, reason: 'Cancelled from Sale Invoice history' })}>
+                        <button
+                          className="text-xs text-red-700 hover:underline"
+                          onClick={() =>
+                            cancelInvoice.mutate(
+                              { id: inv.id, reason: 'Cancelled from Sale Invoice history' },
+                              { onError: (err) => setCancelError(err instanceof Error ? err.message : 'Could not cancel invoice') },
+                            )
+                          }
+                        >
                           Cancel
                         </button>
                       )}

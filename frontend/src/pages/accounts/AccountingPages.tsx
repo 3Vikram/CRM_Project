@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useAccounting } from "@/components/accounts/accounting-context";
+import { Toast } from "@/components/toast";
 import { exportCsv, money, today } from "@/lib/accounting";
 import {
   type BankPayment,
@@ -34,7 +35,6 @@ import {
   useProfitLoss,
   usePurchaseInvoices,
   useSetBankPaymentClearance,
-  useTrialBalance,
   useUpdateBankPayment,
   useUpdatePurchaseInvoice,
   useUpdateVoucher,
@@ -48,6 +48,13 @@ const newVoucherLine = (side: "debit" | "credit" = "debit", ledgerId = ""): Edit
   key: Math.random().toString(36).slice(2), ledgerId, side, amount: 0, narration: "",
 });
 type EditableVoucher = { id?: string; number: string; invoiceReference: string; date: string; reference: string; narration: string; lines: EditableVoucherLine[] };
+
+// Row actions (Post/Cancel/Delete on an already-saved item) fire outside the
+// edit dialog, so they can't use its inline `error` banner — this surfaces
+// their failures instead of letting the button silently do nothing.
+function rowActionError(setter: (message: string) => void, fallback: string) {
+  return (err: unknown) => setter(err instanceof Error ? err.message : fallback);
+}
 
 function ledgerName(ledgers: Ledger[] | undefined, id: string) {
   return ledgers?.find((l) => l.id === id)?.name ?? "";
@@ -64,6 +71,7 @@ export function JournalRegisterPage() {
   const [editing, setEditing] = useState<EditableVoucher | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [rowError, setRowError] = useState("");
 
   const create = () => {
     setError("");
@@ -121,6 +129,7 @@ export function JournalRegisterPage() {
 
   return (
     <div className="space-y-6">
+      {rowError && <Toast message={rowError} type="error" onClose={() => setRowError("")} />}
       <Header
         title="Journal Register"
         description="Record invoice-linked debit and credit entries by item or account."
@@ -148,7 +157,7 @@ export function JournalRegisterPage() {
                     {v.status === "draft" && (
                       <>
                         <button className={secondary} onClick={() => edit(v)}>Edit</button>
-                        <button className={secondary} onClick={() => cancelDraft.mutate(v.id)}>Delete</button>
+                        <button className={secondary} onClick={() => cancelDraft.mutate(v.id, { onError: rowActionError(setRowError, "Could not delete journal entry") })}>Delete</button>
                       </>
                     )}
                     {v.status === "posted" && <Status value="Posted — see Reports to reverse" />}
@@ -370,6 +379,7 @@ export function PurchaseInvoicePage() {
   const [editing, setEditing] = useState<EditablePurchaseInvoice | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [rowError, setRowError] = useState("");
   const expenseLedgers = ledgers?.filter((l) => l.nature === "expense") ?? [];
 
   const fresh = (): EditablePurchaseInvoice => ({
@@ -417,6 +427,7 @@ export function PurchaseInvoicePage() {
 
   return (
     <div className="space-y-6">
+      {rowError && <Toast message={rowError} type="error" onClose={() => setRowError("")} />}
       <Header
         title="Purchase Invoice"
         description="Record vendor bills and post payable expenses."
@@ -441,11 +452,11 @@ export function PurchaseInvoicePage() {
                   {x.status === "draft" && (
                     <>
                       <button className={secondary} onClick={() => edit(x)}>Edit</button>
-                      <button className={secondary} onClick={() => postInvoice.mutate(x.id)}>Post</button>
-                      <button className={secondary} onClick={() => cancelInvoice.mutate({ id: x.id })}>Delete</button>
+                      <button className={secondary} onClick={() => postInvoice.mutate(x.id, { onError: rowActionError(setRowError, "Could not post purchase invoice") })}>Post</button>
+                      <button className={secondary} onClick={() => cancelInvoice.mutate({ id: x.id }, { onError: rowActionError(setRowError, "Could not delete purchase invoice") })}>Delete</button>
                     </>
                   )}
-                  {x.status === "posted" && <button className={secondary} onClick={() => cancelInvoice.mutate({ id: x.id, reason: "Cancelled from Purchase Invoice register" })}>Cancel</button>}
+                  {x.status === "posted" && <button className={secondary} onClick={() => cancelInvoice.mutate({ id: x.id, reason: "Cancelled from Purchase Invoice register" }, { onError: rowActionError(setRowError, "Could not cancel purchase invoice") })}>Cancel</button>}
                 </td>
               </tr>
             ))}
@@ -585,6 +596,7 @@ export function BankPaymentsPage() {
   const [editing, setEditing] = useState<EditableBankPayment | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [rowError, setRowError] = useState("");
 
   const bankLedgers = ledgers?.filter((l) => l.name === "Cash" || l.name === "Main Bank") ?? [];
   const categoryLedgers = ledgers?.filter((l) => l.nature === "expense" || l.name === "Vendor Advances" || l.name === "Accounts Payable") ?? [];
@@ -632,6 +644,7 @@ export function BankPaymentsPage() {
 
   return (
     <div className="space-y-6">
+      {rowError && <Toast message={rowError} type="error" onClose={() => setRowError("")} />}
       <Header
         title="Bank Payments"
         description="Record cash and bank payments, including purchase invoice settlements."
@@ -652,7 +665,7 @@ export function BankPaymentsPage() {
                 <td>{p.mode}</td>
                 <td>{money(Number(p.amount))}</td>
                 <td>
-                  <button className="hover:underline" onClick={() => setClearance.mutate({ id: p.id, clearance: p.clearance === "Cleared" ? "Pending" : "Cleared" })}>
+                  <button className="hover:underline" onClick={() => setClearance.mutate({ id: p.id, clearance: p.clearance === "Cleared" ? "Pending" : "Cleared" }, { onError: rowActionError(setRowError, "Could not update clearance") })}>
                     <Status value={p.clearance} />
                   </button>
                 </td>
@@ -661,11 +674,11 @@ export function BankPaymentsPage() {
                   {p.status === "draft" && (
                     <>
                       <button className={secondary} onClick={() => edit(p)}>Edit</button>
-                      <button className={secondary} onClick={() => postPayment.mutate(p.id)}>Post</button>
-                      <button className={secondary} onClick={() => cancelPayment.mutate({ id: p.id })}>Delete</button>
+                      <button className={secondary} onClick={() => postPayment.mutate(p.id, { onError: rowActionError(setRowError, "Could not post bank payment") })}>Post</button>
+                      <button className={secondary} onClick={() => cancelPayment.mutate({ id: p.id }, { onError: rowActionError(setRowError, "Could not delete bank payment") })}>Delete</button>
                     </>
                   )}
-                  {p.status === "posted" && <button className={secondary} onClick={() => cancelPayment.mutate({ id: p.id, reason: "Cancelled from Bank Payments register" })}>Cancel</button>}
+                  {p.status === "posted" && <button className={secondary} onClick={() => cancelPayment.mutate({ id: p.id, reason: "Cancelled from Bank Payments register" }, { onError: rowActionError(setRowError, "Could not cancel bank payment") })}>Cancel</button>}
                 </td>
               </tr>
             ))}
@@ -843,64 +856,6 @@ export function ProfitLossPage() {
           {!p.rows.length && <Empty text="Post income or expense transactions to generate P & L." />}
         </>
       )}
-    </div>
-  );
-}
-
-export function ReportsPage() {
-  const { companyId } = useAccounting();
-  const [tab, setTab] = useState("Trial Balance");
-  const [asOf, setAsOf] = useState(today());
-  const { data: tb } = useTrialBalance(companyId, asOf);
-  const { data: invoices } = usePurchaseInvoices(companyId);
-  const { data: payments } = useBankPayments(companyId);
-
-  const purchases = (invoices ?? []).filter((i) => i.status === "posted" && i.invoiceDate <= asOf);
-  const pays = (payments ?? []).filter((p) => p.status === "posted" && p.paymentDate <= asOf);
-  const tbRows = tb?.rows ?? [];
-
-  const headers =
-    tab === "Trial Balance" ? ["Account", "Debit", "Credit"]
-    : tab === "Purchase Register" ? ["Invoice", "Vendor", "Date", "Due", "Taxable", "GST", "Total", "Paid", "Outstanding"]
-    : tab === "Bank Payment Register" ? ["Payment", "Date", "Payee", "Mode", "Reference", "Amount", "Clearance"]
-    : tab === "Accounts Payable" ? ["Vendor", "Invoice", "Date", "Due", "Total", "Paid", "Outstanding", "Days overdue"]
-    : ["Account", "Type", "Debit", "Credit", "Closing"];
-
-  const rowCount =
-    tab === "Trial Balance" ? tbRows.length
-    : tab === "Purchase Register" ? purchases.length
-    : tab === "Bank Payment Register" ? pays.length
-    : tab === "Accounts Payable" ? purchases.filter((i) => i.outstanding > 0).length
-    : tbRows.length;
-
-  const csv: (string | number)[][] =
-    tab === "Trial Balance" ? tbRows.map((r) => [r.name, r.debit, r.credit])
-    : tab === "Purchase Register" ? purchases.map((r) => [r.vendorInvoiceNumber, r.vendor, r.invoiceDate, r.dueDate ?? "", r.totals.taxable, r.totals.gst, r.totals.total, r.paidAmount, r.outstanding])
-    : tab === "Bank Payment Register" ? pays.map((p) => [p.number, p.paymentDate, p.payee, p.mode, p.reference, Number(p.amount), p.clearance])
-    : tab === "Accounts Payable" ? purchases.filter((i) => i.outstanding > 0).map((r) => [r.vendor, r.vendorInvoiceNumber, r.invoiceDate, r.dueDate ?? "", r.totals.total, r.paidAmount, r.outstanding, Math.max(0, Math.floor((Date.parse(asOf) - Date.parse(r.dueDate ?? asOf)) / 86400000))])
-    : tbRows.map((r) => [r.name, r.nature, r.debit, r.credit, r.balance]);
-
-  return (
-    <div className="space-y-6">
-      <Header
-        title="Reports"
-        description="Registers, balances, and statutory-ready summaries."
-        action={<button className={button} disabled={!rowCount} onClick={() => exportCsv(`${tab.replaceAll(" ", "-").toLowerCase()}.csv`, headers, csv)}><Download className="w-4" />Export CSV</button>}
-      />
-      <div className="flex flex-wrap gap-2">
-        {["Trial Balance", "Purchase Register", "Bank Payment Register", "Accounts Payable", "Account Balances"].map((x) => (
-          <button key={x} className={x === tab ? button : secondary} onClick={() => setTab(x)}>{x}</button>
-        ))}
-        <input type="date" className={`${input} ml-auto max-w-44`} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
-      </div>
-      <Table headers={headers}>
-        <>
-          {csv.map((row, i) => (
-            <tr key={i}>{row.map((v, j) => <td key={j}>{typeof v === "number" ? money(v) : v}</td>)}</tr>
-          ))}
-        </>
-      </Table>
-      {!rowCount && <Empty text="Post accounting transactions to populate reports." />}
     </div>
   );
 }
