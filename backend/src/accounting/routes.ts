@@ -1,11 +1,12 @@
 import { Router } from 'express'
-import { CreateBankPaymentSchema, CreateMigrationJobSchema, CreatePurchaseInvoiceSchema, CreateVoucherSchema, ReportPeriodSchema, ReverseVoucherSchema } from '@crm/shared'
+import { CreateBankPaymentSchema, CreateMigrationJobSchema, CreatePurchaseInvoiceSchema, CreateVoucherSchema, LegacyAccountingDataSchema, ReportPeriodSchema, ReverseVoucherSchema } from '@crm/shared'
 import { database } from '../db.js'
 import { allow } from '../auth/token.js'
 import { balanceSheet, ledgerReport, profitAndLoss, trialBalance } from './reports.js'
 import { createVoucher, deleteDraftVoucher, listVouchers, postDirect, reverseVoucher, transitionVoucher, updateDraftVoucher } from './service.js'
 import { cancelPurchaseInvoice, createPurchaseInvoice, getPurchaseInvoice, listPurchaseInvoices, postPurchaseInvoice, updatePurchaseInvoice } from './purchaseInvoices.js'
 import { cancelBankPayment, createBankPayment, getBankPayment, listBankPayments, postBankPayment, setBankPaymentClearance, updateBankPayment } from './bankPayments.js'
+import { importBrowserData } from './browserImport.js'
 import { AccountingError, NotFoundError } from './errors.js'
 import { z } from 'zod'
 
@@ -141,4 +142,11 @@ accountingRouter.post('/companies/:companyId/bank-payments/:id/cancel', allow('a
 accountingRouter.patch('/companies/:companyId/bank-payments/:id/clearance', allow('administrator', 'accountant', 'maker'), async (req, res, next) => { try {
   const clearance = z.enum(['Pending', 'Cleared']).parse(req.body?.clearance)
   res.json(await setBankPaymentClearance(database(), company(req), req.params.id, clearance, req.actor!))
+} catch (error) { next(error) } })
+
+// --- one-time browser localStorage import -----------------------------------
+
+accountingRouter.post('/companies/:companyId/import/browser', allow('administrator', 'migration_operator'), async (req, res, next) => { try {
+  const input = LegacyAccountingDataSchema.parse({ ...req.body, companyId: company(req) })
+  res.status(201).json(await importBrowserData(database(), input, req.actor!))
 } catch (error) { next(error) } })

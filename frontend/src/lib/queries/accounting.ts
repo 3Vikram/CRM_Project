@@ -270,6 +270,18 @@ export function useProfitLoss(companyId: string, from: string | undefined, to: s
 export type BalanceSheetRow = { ledgerId: string; code: string; name: string; nature: 'asset' | 'liability' | 'equity'; currentClassification: string; scheduleIIIMap: string | null; amount: string }
 export type BalanceSheetSnapshot = { asOf: string; rows: BalanceSheetRow[]; currentYearProfit: string; totals: { assets: string; liabilities: string; equity: string; balanced: boolean } }
 export type BalanceSheet = { companyId: string; current: BalanceSheetSnapshot; previous: BalanceSheetSnapshot | null }
+// --- one-time browser localStorage import -----------------------------------
+
+export function useImportBrowserData(companyId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: unknown) => req<{ jobId: string; counts: Record<string, { created: number; skipped: number }> }>(
+      `/companies/${encodeURIComponent(companyId)}/import/browser`, { method: 'POST', body: JSON.stringify(data) },
+    ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['accounting'] }),
+  })
+}
+
 export function useBalanceSheet(companyId: string, to: string, compareTo?: string) {
   return useQuery({
     queryKey: ['accounting', 'balance-sheet', companyId, to, compareTo],
