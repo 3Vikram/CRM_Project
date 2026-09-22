@@ -1,107 +1,46 @@
-# 3Vikram Technologies
+# 3Vikram Technologies — frontend
 
-A CRM application built with **React 19**, **Vite**, **TypeScript**, **React Router**, and **Tailwind CSS 4**.
+The React SPA for the 3Vikram CRM (package name `3vikram-technologies`). This is one piece of a monorepo — see the [repo root README](../README.md) for prerequisites, database setup, login, and how to run the whole app (`pnpm dev` from the root starts this and the backend together).
 
-## Prerequisites
+## Tech stack
 
-Install the following on your Windows machine:
+- [React 19](https://react.dev), [Vite 6](https://vite.dev), [React Router 7](https://reactrouter.com), [TypeScript](https://www.typescriptlang.org), [Tailwind CSS 4](https://tailwindcss.com)
+- [TanStack Query](https://tanstack.com/query) for the Accounts module's server state (`src/lib/queries/`)
 
-1. **Node.js** — v20 or newer (the project runs on v24; download from https://nodejs.org). Using the official Windows installer is fine. Verify with:
-   ```powershell
-   node -v
-   ```
-
-2. **pnpm** — the package manager used by this project. Install it globally:
-   ```powershell
-   npm install -g pnpm
-   ```
-   Verify:
-   ```powershell
-   pnpm -v
-   ```
-
-> Tip: If you use [nvm-windows](https://github.com/coreybutler/nvm-windows), switch to a supported Node version first: `nvm use 24`.
->
-> Note: This project uses [pnpm](https://pnpm.io) `allowBuilds` settings in `pnpm-workspace.yaml` to allow `esbuild` (required by Vite) to run its install script. If you hit an `ERR_PNPM_IGNORED_BUILDS` warning, run `pnpm approve-builds` and approve `esbuild`.
-
-## Getting Started
-
-All commands below run in **PowerShell** (or any terminal) from the project folder, e.g. `C:\Users\workspace\crm`.
-
-### 1. Install dependencies
-
-```powershell
-pnpm install
-```
-
-If pnpm warns about **ignored build scripts** for `esbuild`, approve it — Vite needs esbuild's native binary:
-
-```powershell
-pnpm approve-builds
-```
-
-Select `esbuild`, press Enter, then re-run `pnpm install`.
-
-### 2. Start the development server
-
-```powershell
-pnpm dev
-```
-
-Open **http://localhost:3000** in your browser. The server stays running in that terminal; press `Ctrl + C` to stop it.
-
-If port 3000 is in use, Vite automatically picks another port (e.g. 3001) — check the terminal output for the actual URL.
-
-### 3. Build for production (optional)
-
-```powershell
-pnpm build
-pnpm start
-```
-
-## Available Scripts
+## Scripts (run from this directory, or via `pnpm --filter ./frontend <script>` from the root)
 
 | Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start the Vite dev server with hot reload |
-| `pnpm build` | Create an optimized production build (outputs to `dist/`) |
-| `pnpm preview` | Preview the production build locally |
-| `pnpm start` | Alias for `pnpm preview` |
+|---------|--------------|
+| `pnpm dev` | Vite dev server with hot reload, on **http://127.0.0.1:3001**, proxying `/api` to the backend on port 4000 |
+| `pnpm build` | Production build to `dist/` |
+| `pnpm preview` / `pnpm start` | Preview the production build |
+| `pnpm test` | Vitest |
 
-## Project Structure
+## Structure
 
 ```
-crm/
-├── index.html          # Vite entry HTML (title, meta, favicons)
-├── vite.config.ts      # Vite config (React plugin, @ alias, dev port)
+frontend/
+├── index.html
+├── vite.config.ts        # React plugin, @ alias, dev port/proxy
 ├── src/
-│   ├── main.tsx        # React entry point
-│   ├── App.tsx         # Router + layout (sidebar, top bar, routes)
-│   ├── pages/          # One component per route
-│   │   ├── CustomersPage.tsx
-│   │   ├── DashboardPage.tsx
-│   │   ├── LeadsPage.tsx
-│   │   ├── InventoryPage.tsx
-│   │   ├── PurchaseOrdersPage.tsx
-│   │   ├── DCTrackingPage.tsx
-│   │   └── BillSalePage.tsx
-│   ├── components/      # Reusable UI components (sidebar, modal, cards, etc.)
-│   ├── lib/             # Utilities
-│   └── index.css        # Global styles / Tailwind theme tokens
-├── public/             # Static assets (favicons, images)
-└── package.json
+│   ├── main.tsx
+│   ├── App.tsx            # Router + both module layouts (Sales, Accounts)
+│   ├── pages/
+│   │   ├── *.tsx           # Sales module pages (no login)
+│   │   └── accounts/       # Accounts module pages (behind /login)
+│   ├── components/
+│   │   ├── accounts/       # Accounts-only: auth, query provider, ledger context
+│   │   └── *.tsx            # Shared / Sales UI (sidebar, top bar, cards, ...)
+│   ├── lib/
+│   │   ├── queries/         # TanStack Query hooks for the Accounts API
+│   │   ├── api.ts, auth.ts  # Accounts fetch wrapper + auth context
+│   │   └── ...               # Excel parsing, tax rules, date helpers
+│   └── index.css            # Tailwind theme tokens
+└── public/
 ```
-
-## Tech Stack
-
-- [React 19](https://react.dev)
-- [Vite](https://vite.dev) (dev server & build)
-- [React Router](https://reactrouter.com) (client-side routing)
-- [TypeScript](https://www.typescriptlang.org)
-- [Tailwind CSS 4](https://tailwindcss.com)
-- [pnpm](https://pnpm.io) for dependency management
 
 ## Notes
 
-- Customer data currently lives in component state and resets when you refresh. Wire up a backend or `localStorage` persistence when you're ready.
-- For any "command not found" errors, make sure Node.js and pnpm are installed and that they appear on your `PATH` (close and reopen the terminal after installing).
+- The **Sales** module (`/sales/*`) has no backend of its own yet — its data lives in component state and resets on refresh.
+- The **Accounts** module (`/accounts/*`) is fully backed by the Postgres API; see [docs/accounting-foundation.md](../docs/accounting-foundation.md).
+- If pnpm warns about **ignored build scripts** for `esbuild` on install, run `pnpm approve-builds` from the repo root and select `esbuild`.
