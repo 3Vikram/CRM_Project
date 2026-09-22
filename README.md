@@ -72,7 +72,7 @@ pnpm db:down      # stops the container
 pnpm db:reset     # drops and recreates the schema, then migrates and seeds — refuses to run against a non-localhost DATABASE_URL
 ```
 
-The first migration creates both legal entities, financial years FY 2025-26 and FY 2026-27, and a starter chart of accounts; later migrations add users/login, the rest of the chart of accounts, and the purchase-invoice/bank-payment/sale-invoice document tables. See [docs/accounting-foundation.md](docs/accounting-foundation.md) for the full schema and workflow.
+The first migration creates both legal entities, financial years FY 2025-26 and FY 2026-27, and a starter chart of accounts; later migrations add users/login, the rest of the chart of accounts, the purchase-invoice/bank-payment/sale-invoice document tables, and scope voucher numbering to the financial year (so `PURCHASE-000001` can recur in each new year without colliding with a prior year's). See [docs/accounting-foundation.md](docs/accounting-foundation.md) for the full schema and workflow.
 
 Add a user beyond the seeded admin with:
 
