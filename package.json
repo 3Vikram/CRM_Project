@@ -8,7 +8,12 @@
     "dev:backend": "pnpm --filter backend dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @crm/backend db:migrate",
+    "db:seed": "pnpm --filter @crm/backend db:seed",
+    "db:reset": "node scripts/db-reset.mjs"
   },
   "packageManager": "pnpm@11.5.2"
 }

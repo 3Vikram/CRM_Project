@@ -1,13 +1,13 @@
 import { Router } from 'express'
 import { CreateMigrationJobSchema, CreateVoucherSchema, ReportPeriodSchema, ReverseVoucherSchema } from '@crm/shared'
 import { database } from '../db.js'
-import { allow, requireActor } from './auth.js'
+import { allow } from '../auth/token.js'
 import { balanceSheet, ledgerReport, profitAndLoss, trialBalance } from './reports.js'
-import { createVoucher, reverseVoucher, transitionVoucher } from './service.js'
+import { createVoucher, postDirect, reverseVoucher, transitionVoucher } from './service.js'
 import { AccountingError, NotFoundError } from './errors.js'
 
 export const accountingRouter = Router()
-accountingRouter.use(requireActor)
+// `requireActor` already ran at the /api level (see app.ts); every route below assumes req.actor is set.
 
 function company(req: { params: Record<string, string>; body?: unknown }) {
   const companyId = req.params.companyId
@@ -29,6 +29,11 @@ accountingRouter.post('/companies/:companyId/vouchers', allow('administrator', '
 
 for (const action of ['submit', 'approve', 'post'] as const) accountingRouter.post(`/companies/:companyId/vouchers/:voucherId/${action}`, async (req, res, next) => { try {
   res.json(await transitionVoucher(database(), company(req), req.params.voucherId, action, req.actor!))
+} catch (error) { next(error) } })
+
+// Submit + approve + post in one call. Only allowed when the company has maker-checker switched off.
+accountingRouter.post('/companies/:companyId/vouchers/:voucherId/post-direct', allow('administrator', 'accountant'), async (req, res, next) => { try {
+  res.json(await postDirect(database(), company(req), req.params.voucherId, req.actor!))
 } catch (error) { next(error) } })
 
 accountingRouter.post('/companies/:companyId/vouchers/:voucherId/reverse', allow('administrator', 'accountant'), async (req, res, next) => { try {

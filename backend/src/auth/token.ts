@@ -1,11 +1,14 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { NextFunction, Request, Response } from 'express'
-import { AccountingError } from './errors.js'
+import { accountingRoles, type AccountingRole } from '@crm/shared'
+import { AccountingError } from '../accounting/errors.js'
 
-export const accountingRoles = ['administrator', 'accountant', 'maker', 'approver', 'auditor', 'read_only_management', 'migration_operator'] as const
-export type AccountingRole = typeof accountingRoles[number]
+export { accountingRoles }
+export type { AccountingRole }
 export type Actor = { id: string; role: AccountingRole }
-type TokenPayload = Actor & { exp: number }
+export type TokenPayload = Actor & { exp: number }
+
+const TOKEN_TTL_SECONDS = 8 * 60 * 60 // 8 hours
 
 declare global { namespace Express { interface Request { actor?: Actor } } }
 
@@ -25,10 +28,19 @@ function decodeAccessToken(token: string): Actor | undefined {
   } catch { return undefined }
 }
 
-export function signAccountingAccessToken(payload: TokenPayload, secret: string) {
+export function signAccessToken(payload: TokenPayload, secret: string) {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${encoded}.${createHmac('sha256', secret).update(encoded).digest('base64url')}`
 }
+
+/** Convenience for login: signs a fresh token for `actor` that expires in TOKEN_TTL_SECONDS. */
+export function issueAccessToken(actor: Actor, secret: string) {
+  const exp = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS
+  return { token: signAccessToken({ ...actor, exp }, secret), exp }
+}
+
+// Kept for the pre-login callers/tests that referenced the old name.
+export const signAccountingAccessToken = signAccessToken
 
 export function requireActor(req: Request, _res: Response, next: NextFunction) {
   const authorization = req.header('authorization')

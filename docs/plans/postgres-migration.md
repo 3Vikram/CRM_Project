@@ -1,10 +1,14 @@
-# Plan: move all app data to PostgreSQL
+# Plan: move the Accounts module to PostgreSQL
 
-Status: approved for implementation · Written 2026-09-22
+Status: approved for implementation · Written 2026-09-22 · **Scope narrowed 2026-09-22: Accounts only, see note below**
+
+> **Scope note:** this plan originally covered the Sales/CRM pages too (customers, leads, inventory, purchase orders, DC tracking, bill sale, dashboard). That is explicitly **out of scope**. Do not touch anything under `frontend/src/pages/` other than `frontend/src/pages/accounts/**`, and do not touch `frontend/src/components/` other than the `accounts/` subfolder and shared primitives you're only *reading*. The former "Phase 5: CRM" and the `/api/customers`, `/api/leads`, etc. endpoints and `005_crm.sql` migration described lower in earlier drafts of this doc are cancelled — this version has them removed.
 
 ## Goal
 
-Every piece of data the app shows or edits lives in PostgreSQL and goes through the Express API. That covers sales CRM records, the accounts screens, sale invoices, seller entity presets and invoice drafts. After this work, nothing is stored in React component state or `localStorage` except per-browser preferences: the selected company and the login token.
+Every piece of data the **Accounts module** shows or edits lives in PostgreSQL and goes through the Express API. That covers the Accounts screens (purchase invoices, journal register/vouchers, bank payments, ledger, P&L, balance sheet, reports), the sale invoice generator and its drafts, and seller entity presets. Login is included because every accounting route requires a signed-in user. After this work, nothing in the Accounts module is stored in React component state or `localStorage` except per-browser preferences: the selected company and the login token.
+
+The Sales CRM pages (dashboard, customers, leads, inventory, purchase orders, DC tracking, bill sale) and the standalone `/inventory` route are **not touched** by this plan.
 
 ## Decisions already made (do not revisit)
 
@@ -25,9 +29,8 @@ Every piece of data the app shows or edits lives in PostgreSQL and goes through 
 | Sale invoice draft | `localStorage` key `crm.sale-invoice.draft.v1` | `frontend/src/pages/accounts/sale-invoice/draft-context.tsx` |
 | Issued sale invoices | Not saved anywhere. Print is the end of the flow, and `POST /api/invoices` returns 501. | `SaleInvoicePage.tsx`, `backend/src/routes/index.ts` |
 | Seller entity presets | Hardcoded `ENTITIES` array | `backend/src/config/entities.ts` |
-| Customers | `useState(initialCustomers)`, with a working create/edit UI. Changes are lost on refresh. | `frontend/src/pages/CustomersPage.tsx` |
-| Leads, inventory, purchase orders, DC tracking, bills | Hardcoded arrays, read-only with search | `LeadsPage`, `InventoryPage`, `PurchaseOrdersPage`, `DCTrackingPage`, `BillSalePage` |
-| Dashboard | Hardcoded arrays | `DashboardPage.tsx` |
+
+Out of scope, not touched: `CustomersPage.tsx`, `LeadsPage.tsx`, `InventoryPage.tsx`, `PurchaseOrdersPage.tsx`, `DCTrackingPage.tsx`, `BillSalePage.tsx`, `DashboardPage.tsx`, and everything else under `/sales/*` and the top-level `/inventory` route.
 
 The backend already has a working PostgreSQL accounting engine: `backend/src/accounting/*` and `backend/sql/001_accounting_foundation.sql`. That includes companies, ledgers, vouchers with DB-enforced immutability and balance, audit events, reports, and migration job tables. **Build on it; don't replace it.**
 
@@ -37,9 +40,9 @@ The backend already has a working PostgreSQL accounting engine: `backend/src/acc
 - **Validation:** zod schemas and TS types go in `packages/shared/src/` and are exported from `index.ts`. The backend `.parse()`s every request body and query. Rebuild shared (`pnpm --filter @crm/shared build`) after changing it.
 - **Money** is `numeric(20,4)` in the DB and a decimal string in the API (reuse `MoneySchema`). Convert to and from `number` only in the UI. Reuse `backend/src/accounting/money.ts` for arithmetic.
 - **SQL** is always parameterised (`$1`). Multi-statement writes use the existing `transaction()` helper in `service.ts`; move it to `backend/src/db.ts` so every module can share it.
-- **Company scoping:** accounting and invoice tables carry `company_id` and every query filters on it. The CRM tables (customers, leads, inventory, POs, DCs, bills) are **not** company-scoped, matching today's UI.
+- **Company scoping:** accounting and invoice tables carry `company_id` and every query filters on it.
 - **Route style:** follow `backend/src/accounting/routes.ts`. One router per domain, mounted in `backend/src/routes/index.ts`, with errors passed to `next()`. Add a small `asyncHandler` wrapper so routes stop repeating try/catch.
-- **Audit:** every create, update or delete on a business table writes an `audit_events` row through the existing `audit()` helper. `company_id` is currently `NOT NULL`, so make it nullable in migration 002 and use NULL for the CRM tables.
+- **Audit:** every create, update or delete on a business table writes an `audit_events` row through the existing `audit()` helper. `company_id` is currently `NOT NULL`, so make it nullable in migration 002 (auth events have no company).
 - **Frontend data layer:** add `@tanstack/react-query`. There is one `apiFetch` in `frontend/src/lib/api.ts` that adds `Authorization: Bearer <token>`, and a 401 sends the user to `/login`. Each domain gets a hooks file (`frontend/src/lib/queries/<domain>.ts`) with `useX()` and `useCreateX()` style hooks that invalidate on success. Every page shows loading and error states.
 
 ## Target schema
@@ -67,18 +70,6 @@ The backend already has a working PostgreSQL accounting engine: `backend/src/acc
 - `sales_invoices(id uuid, company_id, invoice_number, invoice_date, buyer_name, buyer_gstin, status text check in ('issued','cancelled'), draft jsonb not null, computed jsonb not null, grand_total numeric(20,4), posted_voucher_id uuid, created_by, created_at)`, unique on `(company_id, invoice_number)`. `draft` stores the `InvoiceDraft`; `computed` stores the server-recomputed `ComputedInvoice` snapshot at the time the invoice is issued.
 - `invoice_drafts(user_id uuid pk references users, draft jsonb not null, updated_at)`. There is one working draft per user, which replaces the `localStorage` draft.
 
-### 005_crm.sql
-All tables get `id uuid pk default gen_random_uuid()`, `created_at` and `updated_at`.
-- `customers(name, contact, email, phone, location, address, gstin, status text check in ('Active','Inactive'), notes)`. `activeCount` is shown in the UI; store it as `active_rentals integer default 0` until a real relation exists.
-- `leads(company_name, contact, stage text check in ('New','In Progress','Qualified','Won','Lost'), value numeric(20,4))`.
-- `inventory_items(name, specs, categories text[], total integer, rented integer, check (rented <= total))`. The API derives `available`, `utilization` and health status; don't store them.
-- `purchase_orders(number unique, vendor, amount numeric, item_count integer, status)`.
-- `delivery_challans(number unique, direction text check in ('IN','OUT'), customer_id uuid null, customer_name, product, dc_date, status)`.
-- `bills(number unique, customer_id uuid null, customer_name, amount numeric, due_date, status)`.
-- `activity_events(id, kind, subject, action, target, created_at)`. The CRM API writes these, and the dashboard's "recent activity" reads them.
-
-Take status values for POs, DCs and bills from the `statusColors` maps in their page files.
-
 ## API surface
 
 `/api/health` and `/api/auth/login` are public. Everything else sits behind `requireActor`.
@@ -94,8 +85,6 @@ Take status values for POs, DCs and bills from the `statusColors` maps in their 
 | Purchase invoices | `GET/POST …/companies/:companyId/purchase-invoices`, `GET/PUT …/:id` (drafts only), `POST …/:id/post`, `POST …/:id/cancel` (draft → cancelled; posted → reverse the voucher, then cancelled) |
 | Bank payments | Same shape as purchase invoices, under `…/bank-payments`, plus `PATCH …/:id/clearance` (allowed while posted, because clearance is not a ledger field) |
 | Import | `POST …/companies/:companyId/import/browser` with the old `AccountingData` JSON |
-| CRM | `GET/POST /api/customers`, `GET/PUT/DELETE /api/customers/:id`, and the same for `leads`, `inventory-items`, `purchase-orders`, `delivery-challans`, `bills`. Lists take `?q=` for server-side search. |
-| Dashboard | `GET /api/dashboard` → stat counts, recent `activity_events`, leads to follow up, DCs needing attention |
 
 **Role rules.** Any authenticated user can read. `auditor` and `read_only_management` get 403 on every write. Accounting writes keep the existing `allow(...)` role lists.
 
@@ -132,8 +121,6 @@ Take status values for POs, DCs and bills from the `statusColors` maps in their 
   - `draft-context.tsx` autosaves to `PUT /api/invoice-draft`, debounced with the existing `useDebounced`. On first load, if the server has no draft and the old `localStorage` key exists, upload it and then remove the key.
   - Replace the **Print** button with **Issue & Print**. It calls `POST /api/invoices`, runs `window.print()` on success, and clears the draft.
   - Add a simple list of issued invoices under the page, or at `/accounts/sale-invoice/history`, with Cancel.
-- **CRM pages:** each page fetches from its endpoint. Search goes to the server via `?q=` and `useDebounced`. `CustomersPage` create, edit and delete go through the API. The other pages stay read-only in the UI as they are today; building their forms is out of scope.
-- **Dashboard:** read-only from `GET /api/dashboard`. Format relative times such as "2h ago" in the client.
 
 ## One-time browser import
 
@@ -167,7 +154,7 @@ Do them in order. Each phase ends with `pnpm test` and `pnpm build` passing and 
 - Add `.env` and `frontend/crm-vite-cache/` to `.gitignore`.
 - Load `backend/.env` automatically: change the backend `dev`, `db:migrate` and `start` scripts to `node --env-file-if-exists=.env …`, or `tsx --env-file-if-exists=.env …` for `dev` and `db:migrate`.
 - Root scripts: `db:up` (`docker compose up -d --wait db`), `db:down`, `db:migrate`, `db:seed`, `db:reset` (drop and recreate the schema, then migrate and seed; refuse to run unless `DATABASE_URL` points at localhost).
-- `backend/src/seed.ts` is **dev-only** and idempotent. It inserts the current hardcoded rows from the six sales pages and the dashboard (added once their tables exist), plus an admin user from `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`.
+- `backend/src/seed.ts` is **dev-only** and idempotent. It creates the admin user from `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`. (No CRM seed data — that module is out of scope.)
 - Fix `pnpm-workspace.yaml` by setting `allowBuilds.esbuild: true`; it currently holds a placeholder string.
 - Done when `pnpm db:up && pnpm db:migrate` works on a fresh volume, and running `db:migrate` a second time is a no-op.
 
@@ -196,15 +183,10 @@ Do them in order. Each phase ends with `pnpm test` and `pnpm build` passing and 
 - Draft endpoints, issue with sales voucher posting, cancel, history list.
 - Update `draft-context.tsx` and `SaleInvoicePage.tsx`.
 
-**Phase 5: CRM**
-- Migration 005, CRUD routes with `?q=` search, `activity_events` writes.
-- Seed data.
-- The six pages and the dashboard on the API.
-
-**Phase 6: Browser import**
+**Phase 5: Browser import**
 - Endpoint, sidebar action, tests. Include a re-run that must be a no-op.
 
-**Phase 7: Docs and cleanup**
+**Phase 6: Docs and cleanup**
 - Update root `README.md`: DB setup, login, the `user:create` CLI and the new env vars.
 - Update `docs/accounting-foundation.md`: `postDirect` and `require_maker_checker`.
 - Update or replace the outdated `frontend/README.md`.
@@ -226,14 +208,12 @@ Do them in order. Each phase ends with `pnpm test` and `pnpm build` passing and 
   - issuing a sale invoice stores the computed snapshot and posts AR, Sales and Output GST; a duplicate invoice number gives 409
   - running the browser import twice creates each record once
   - an unknown account name makes the import fail with nothing written
-  - CRM CRUD and `?q=` search work
 - **Frontend:** keep the existing Vitest tests green, and add tests for any pure mapping helpers you create.
 - **Manual smoke test** at the end, and report the results:
   1. `pnpm db:reset`, create a user, `pnpm dev`, log in.
   2. Create and post one of each accounting document.
   3. Check that the balance sheet balances.
   4. Issue a sale invoice.
-  5. Edit a customer, refresh, and confirm the change stuck.
 
 ## Things to watch
 

@@ -12,7 +12,10 @@ import DCTrackingPage from '@/pages/DCTrackingPage'
 import BillSalePage from '@/pages/BillSalePage'
 import PlaceholderPage from '@/pages/PlaceholderPage'
 import SaleInvoicePage from '@/pages/accounts/SaleInvoicePage'
+import LoginPage from '@/pages/accounts/LoginPage'
 import { AccountingProvider } from '@/components/accounts/accounting-context'
+import { AuthProvider } from '@/components/accounts/auth-provider'
+import { RequireAuth } from '@/components/accounts/require-auth'
 import { PurchaseInvoicePage, JournalRegisterPage, BankPaymentsPage, LedgerPage, ProfitLossPage, ReportsPage } from '@/pages/accounts/AccountingPages'
 import BalanceSheetPage from '@/pages/accounts/BalanceSheetPage'
 
@@ -30,24 +33,30 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
 
 function AccountsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AccountingProvider>
-      <div className="flex">
-        <AccountsSidebar />
-        <div className="flex-1 ml-56">
-          <TopBar searchPlaceholder="Search invoices, ledger, reports..." userRole="Accounts · Finance" userInitials="AC" />
-          <main className="mt-16 p-8">{children}</main>
+    <RequireAuth>
+      <AccountingProvider>
+        <div className="flex">
+          <AccountsSidebar />
+          <div className="flex-1 ml-56">
+            <TopBar searchPlaceholder="Search invoices, ledger, reports..." userRole="Accounts · Finance" userInitials="AC" />
+            <main className="mt-16 p-8">{children}</main>
+          </div>
         </div>
-      </div>
-    </AccountingProvider>
+      </AccountingProvider>
+    </RequireAuth>
   )
 }
 
 export default function App() {
   return (
+    <AuthProvider>
     <BrowserRouter>
       <Routes>
         {/* Landing: choose a module */}
         <Route path="/" element={<ModuleSelectPage />} />
+
+        {/* Accounts sign in */}
+        <Route path="/login" element={<LoginPage />} />
 
         {/* Sales module — full CRM lives here */}
         <Route
@@ -200,5 +209,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </AuthProvider>
   )
 }

@@ -1,7 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import request from 'supertest'
 import { createApp } from './app.js'
+import { signAccessToken } from './auth/token.js'
 import type { InvoiceDraft } from '@crm/shared'
+
+const TEST_SECRET = 'invoices-compute-test-secret'
+process.env.ACCOUNTING_AUTH_SECRET ??= TEST_SECRET
+function authHeader() {
+  const token = signAccessToken({ id: 'test-user', role: 'administrator', exp: Math.floor(Date.now() / 1000) + 3600 }, process.env.ACCOUNTING_AUTH_SECRET!)
+  return `Bearer ${token}`
+}
+/** supertest agent pre-authenticated as a test administrator. */
+function api(app: Parameters<typeof request>[0]) {
+  const agent = request(app)
+  return {
+    get: (path: string) => agent.get(path).set('Authorization', authHeader()),
+    post: (path: string) => agent.post(path).set('Authorization', authHeader()),
+  }
+}
 
 function line1(amount = 4200) {
   return {
@@ -73,7 +89,7 @@ function baseDraft(overrides: Partial<InvoiceDraft> = {}): InvoiceDraft {
 describe('GET /api/entities', () => {
   it('returns the two seller presets with full fields', async () => {
     const app = createApp()
-    const res = await request(app).get('/api/entities').expect(200)
+    const res = await api(app).get('/api/entities').expect(200)
     const ids = (res.body as { id: string }[]).map((e) => e.id).sort()
     expect(ids).toEqual(['3vikram', 'synov'])
     for (const e of res.body as any[]) {
@@ -86,7 +102,7 @@ describe('GET /api/entities', () => {
 describe('POST /api/invoices/compute', () => {
   it('splits CGST/SGST as equal 9%/9% halves on taxable value (intra-state 18%)', async () => {
     const app = createApp()
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft())
       .expect(200)
@@ -105,12 +121,12 @@ describe('POST /api/invoices/compute', () => {
 
   it('exposes suggestedTaxType matching the seller<->buyer state', async () => {
     const app = createApp()
-    const intra = await request(app)
+    const intra = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ taxType: 'CGST_SGST' }))
       .expect(200)
     expect(intra.body.suggestedTaxType).toBe('CGST_SGST')
-    const inter = await request(app)
+    const inter = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ buyer: { ...baseDraft().buyer, stateCode: '27', stateName: 'Maharashtra' } }))
       .expect(200)
@@ -121,7 +137,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('charges IGST as a single full-rate line when taxType is IGST', async () => {
     const app = createApp()
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ taxType: 'IGST' }))
       .expect(200)
@@ -136,7 +152,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('suppresses all tax when gstApplicable is false', async () => {
     const app = createApp()
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ gstApplicable: false }))
       .expect(200)
@@ -155,7 +171,7 @@ describe('POST /api/invoices/compute', () => {
       { ...line1(), amount: 4200, discount: 200 },
       { ...line2(), amount: 3650, discount: 150 },
     ]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any }))
       .expect(200)
@@ -166,7 +182,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('ignores taxType override when gstApplicable is false', async () => {
     const app = createApp()
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ gstApplicable: false, taxType: 'IGST' }))
       .expect(200)
@@ -177,7 +193,7 @@ describe('POST /api/invoices/compute', () => {
   it('rounds the grand total and emits a signed Rounded Off line', async () => {
     const app = createApp()
     const lines = [{ ...line1(), amount: 100.48 }, { ...line2(), amount: 0 }]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any, roundOff: true, gstApplicable: false }))
       .expect(200)
@@ -191,7 +207,7 @@ describe('POST /api/invoices/compute', () => {
   it('keeps paise when roundOff is off', async () => {
     const app = createApp()
     const lines = [{ ...line1(), amount: 100.48 }, { ...line2(), amount: 0 }]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any, roundOff: false, gstApplicable: false }))
       .expect(200)
@@ -220,7 +236,7 @@ describe('POST /api/invoices/compute', () => {
         ],
       },
     ]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: groupedLines as any }))
       .expect(200)
@@ -234,7 +250,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('always returns the full printable configuration and serial detail for a flat line', async () => {
     const app = createApp()
-    const res = await request(app).post('/api/invoices/compute').send(baseDraft({
+    const res = await api(app).post('/api/invoices/compute').send(baseDraft({
       lines: [{
         ...line1(10000), quantity: 4, price: 2500, isReturned: false,
         serial: 'PG02K07Y/PG02K04X/PG02W3NK/PG0340CT',
@@ -261,7 +277,7 @@ describe('POST /api/invoices/compute', () => {
       { ...line1(), company: 'SYNOV' },
       { ...line2(), company: '3VIKRAM' },
     ]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any }))
       .expect(200)
@@ -278,7 +294,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('resolves the seller footer blocks (remarks/declaration/terms/bank) from preset when toggles on', async () => {
     const app = createApp()
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({
         sellerId: '3vikram',
@@ -300,7 +316,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('omits resolved footer fields when their toggle is off', async () => {
     const app = createApp()
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({
         footer: {},
@@ -320,7 +336,7 @@ describe('POST /api/invoices/compute', () => {
   it('round-off line carries the signed paise diff to the nearest ₹1', async () => {
     const app = createApp()
     const lines = [{ ...line1(), amount: 100.48 }, { ...line2(), amount: 0 }]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any, roundOff: true, gstApplicable: false }))
       .expect(200)
@@ -336,7 +352,7 @@ describe('POST /api/invoices/compute', () => {
   it('rounds mid-values up via Math.round and emits a positive diff', async () => {
     const app = createApp()
     const lines = [{ ...line1(), amount: 1000.6 }, { ...line2(), amount: 0 }]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any, roundOff: true, gstApplicable: false }))
       .expect(200)
@@ -348,7 +364,7 @@ describe('POST /api/invoices/compute', () => {
   it('tax words include paise when total tax has paise', async () => {
     const app = createApp()
     const lines = [{ ...line1(), amount: 100.01 }, { ...line2(), amount: 0 }]
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/invoices/compute')
       .send(baseDraft({ lines: lines as any, roundOff: false }))
       .expect(200)
@@ -360,7 +376,7 @@ describe('POST /api/invoices/compute', () => {
 
   it('rejects a malformed draft with 4xx', async () => {
     const app = createApp()
-    await request(app)
+    await api(app)
       .post('/api/invoices/compute')
       .send({ not: 'a draft' })
       .expect(400)
@@ -370,7 +386,7 @@ describe('POST /api/invoices/compute', () => {
 describe('GET /api/entities presets', () => {
   it('exposes the e-Invoice default flag per seller', async () => {
     const app = createApp()
-    const res = await request(app).get('/api/entities').expect(200)
+    const res = await api(app).get('/api/entities').expect(200)
     const map = Object.fromEntries(res.body.map((e: any) => [e.id, e.eInvoiceDefault]))
     expect(map['3vikram']).toBe(true)
     expect(map['synov']).toBe(false)
@@ -380,6 +396,6 @@ describe('GET /api/entities presets', () => {
 describe('GET /api/health', () => {
   it('responds ok', async () => {
     const app = createApp()
-    await request(app).get('/api/health').expect(200, { ok: true })
+    await api(app).get('/api/health').expect(200, { ok: true })
   })
 })

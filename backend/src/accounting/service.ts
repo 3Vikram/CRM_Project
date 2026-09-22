@@ -2,15 +2,14 @@ import type pg from 'pg'
 import type { CreateVoucher } from '@crm/shared'
 import { assertBalanced } from './money.js'
 import { AccountingError, ConflictError, NotFoundError } from './errors.js'
-import type { Actor } from './auth.js'
+import type { Actor } from '../auth/token.js'
+import { transaction } from '../db.js'
 
 const managementRoles = new Set(['administrator', 'accountant'])
 
-async function transaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect()
-  try { await client.query('BEGIN'); const result = await work(client); await client.query('COMMIT'); return result }
-  catch (error) { await client.query('ROLLBACK'); throw error }
-  finally { client.release() }
+async function requireMakerChecker(client: pg.PoolClient, companyId: string): Promise<boolean> {
+  const result = await client.query<{ require_maker_checker: boolean }>(`SELECT require_maker_checker FROM companies WHERE id=$1`, [companyId])
+  return result.rows[0]?.require_maker_checker ?? true
 }
 
 async function validatePostingContext(client: pg.PoolClient, voucher: CreateVoucher) {
@@ -42,53 +41,84 @@ async function nextVoucherNumber(client: pg.PoolClient, companyId: string, finan
   return `${type.toUpperCase().replaceAll('_', '-')}-${String(result.rows[0].next_number).padStart(6, '0')}`
 }
 
-export async function createVoucher(pool: pg.Pool, input: CreateVoucher, actor: Actor) {
+/** Inserts a draft voucher and its lines on `client`. Caller controls the transaction. */
+async function createVoucherOnClient(client: pg.PoolClient, input: CreateVoucher, actor: Actor) {
   assertBalanced(input.lines)
-  return transaction(pool, async (client) => {
-    const existing = await client.query(`SELECT * FROM vouchers WHERE company_id=$1 AND idempotency_key=$2`, [input.companyId, input.idempotencyKey])
-    if (existing.rowCount) return existing.rows[0]
-    const financialYearId = await validatePostingContext(client, input)
-    const number = await nextVoucherNumber(client, input.companyId, financialYearId, input.voucherType)
-    const inserted = await client.query(
-      `INSERT INTO vouchers(company_id,financial_year_id,voucher_type,voucher_number,voucher_date,narration,external_reference,idempotency_key,source_type,source_id,created_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [input.companyId, financialYearId, input.voucherType, number, input.voucherDate, input.narration, input.externalReference ?? null, input.idempotencyKey, input.sourceType, input.sourceId ?? null, actor.id],
+  const existing = await client.query(`SELECT * FROM vouchers WHERE company_id=$1 AND idempotency_key=$2`, [input.companyId, input.idempotencyKey])
+  if (existing.rowCount) return existing.rows[0]
+  const financialYearId = await validatePostingContext(client, input)
+  const number = await nextVoucherNumber(client, input.companyId, financialYearId, input.voucherType)
+  const inserted = await client.query(
+    `INSERT INTO vouchers(company_id,financial_year_id,voucher_type,voucher_number,voucher_date,narration,external_reference,idempotency_key,source_type,source_id,created_by)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [input.companyId, financialYearId, input.voucherType, number, input.voucherDate, input.narration, input.externalReference ?? null, input.idempotencyKey, input.sourceType, input.sourceId ?? null, actor.id],
+  )
+  for (const [index, line] of input.lines.entries()) {
+    await client.query(
+      `INSERT INTO voucher_lines(company_id,voucher_id,line_number,ledger_id,debit,credit,narration,party_id,bill_reference,cost_centre_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [input.companyId, inserted.rows[0].id, index + 1, line.ledgerId, line.side === 'debit' ? line.amount : '0', line.side === 'credit' ? line.amount : '0', line.narration ?? '', line.partyId ?? null, line.billReference ?? null, line.costCentreId ?? null],
     )
-    for (const [index, line] of input.lines.entries()) {
-      await client.query(
-        `INSERT INTO voucher_lines(company_id,voucher_id,line_number,ledger_id,debit,credit,narration,party_id,bill_reference,cost_centre_id)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [input.companyId, inserted.rows[0].id, index + 1, line.ledgerId, line.side === 'debit' ? line.amount : '0', line.side === 'credit' ? line.amount : '0', line.narration ?? '', line.partyId ?? null, line.billReference ?? null, line.costCentreId ?? null],
-      )
-    }
-    await audit(client, input.companyId, actor.id, 'voucher.created', inserted.rows[0].id, { number })
-    return inserted.rows[0]
-  })
+  }
+  await audit(client, input.companyId, actor.id, 'voucher.created', inserted.rows[0].id, { number })
+  return inserted.rows[0]
+}
+
+export async function createVoucher(pool: pg.Pool, input: CreateVoucher, actor: Actor) {
+  return transaction(pool, (client) => createVoucherOnClient(client, input, actor))
+}
+
+async function transitionVoucherOnClient(client: pg.PoolClient, companyId: string, voucherId: string, action: 'submit' | 'approve' | 'post', actor: Actor, opts: { skipMakerChecker?: boolean } = {}) {
+  const found = await client.query(`SELECT * FROM vouchers WHERE company_id=$1 AND id=$2 FOR UPDATE`, [companyId, voucherId])
+  if (!found.rowCount) throw new NotFoundError('Voucher not found')
+  const voucher = found.rows[0]
+  const expected = action === 'submit' ? 'draft' : action === 'approve' ? 'submitted' : 'approved'
+  if (voucher.status !== expected) throw new ConflictError(`Voucher must be ${expected} before it can be ${action}ed`)
+  if (action === 'submit' && voucher.created_by !== actor.id && !managementRoles.has(actor.role)) throw new AccountingError('Only the maker or accounting management may submit this voucher', 403, 'FORBIDDEN')
+  const selfApproving = action === 'approve' && voucher.created_by === actor.id
+  if (selfApproving && !opts.skipMakerChecker) throw new AccountingError('Maker and approver must be different users', 403, 'MAKER_CHECKER_REQUIRED')
+  if (action === 'approve' && !opts.skipMakerChecker && actor.role !== 'approver' && !managementRoles.has(actor.role)) throw new AccountingError('Approver role is required', 403, 'FORBIDDEN')
+  if (action === 'post' && !managementRoles.has(actor.role)) throw new AccountingError('Accountant or administrator role is required to post', 403, 'FORBIDDEN')
+  if (action === 'post') {
+    const sums = await client.query<{ debit: string; credit: string }>(`SELECT COALESCE(sum(debit),0)::text debit,COALESCE(sum(credit),0)::text credit FROM voucher_lines WHERE company_id=$1 AND voucher_id=$2`, [companyId, voucherId])
+    if (sums.rows[0].debit !== sums.rows[0].credit) throw new AccountingError('Total debits must equal total credits', 422, 'UNBALANCED_VOUCHER')
+    const lock = await client.query(`SELECT 1 FROM period_locks WHERE company_id=$1 AND reopened_at IS NULL AND locked_through >= $2 LIMIT 1`, [companyId, voucher.voucher_date])
+    if (lock.rowCount) throw new AccountingError('The accounting period is locked', 423, 'PERIOD_LOCKED')
+  }
+  const status = action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : 'posted'
+  const actorColumn = action === 'submit' ? 'submitted_by' : action === 'approve' ? 'approved_by' : 'posted_by'
+  const result = await client.query(`UPDATE vouchers SET status=$3, ${actorColumn}=$4, posted_at=CASE WHEN $3='posted' THEN now() ELSE posted_at END WHERE company_id=$1 AND id=$2 RETURNING *`, [companyId, voucherId, status, actor.id])
+  await audit(client, companyId, actor.id, selfApproving ? 'voucher.self_approved' : `voucher.${status}`, voucherId)
+  return result.rows[0]
 }
 
 export async function transitionVoucher(pool: pg.Pool, companyId: string, voucherId: string, action: 'submit' | 'approve' | 'post', actor: Actor) {
+  return transaction(pool, (client) => transitionVoucherOnClient(client, companyId, voucherId, action, actor))
+}
+
+/**
+ * Runs submit → approve → post in one transaction for a single draft voucher.
+ * Only `administrator`/`accountant` may use it, and only when the company has
+ * `require_maker_checker = false` — otherwise the normal three-step workflow applies.
+ */
+export async function postDirect(pool: pg.Pool, companyId: string, voucherId: string, actor: Actor) {
+  if (!managementRoles.has(actor.role)) throw new AccountingError('Accountant or administrator role is required to post', 403, 'FORBIDDEN')
   return transaction(pool, async (client) => {
-    const found = await client.query(`SELECT * FROM vouchers WHERE company_id=$1 AND id=$2 FOR UPDATE`, [companyId, voucherId])
-    if (!found.rowCount) throw new NotFoundError('Voucher not found')
-    const voucher = found.rows[0]
-    const expected = action === 'submit' ? 'draft' : action === 'approve' ? 'submitted' : 'approved'
-    if (voucher.status !== expected) throw new ConflictError(`Voucher must be ${expected} before it can be ${action}ed`)
-    if (action === 'submit' && voucher.created_by !== actor.id && !managementRoles.has(actor.role)) throw new AccountingError('Only the maker or accounting management may submit this voucher', 403, 'FORBIDDEN')
-    if (action === 'approve' && voucher.created_by === actor.id) throw new AccountingError('Maker and approver must be different users', 403, 'MAKER_CHECKER_REQUIRED')
-    if (action === 'approve' && actor.role !== 'approver' && !managementRoles.has(actor.role)) throw new AccountingError('Approver role is required', 403, 'FORBIDDEN')
-    if (action === 'post' && !managementRoles.has(actor.role)) throw new AccountingError('Accountant or administrator role is required to post', 403, 'FORBIDDEN')
-    if (action === 'post') {
-      const sums = await client.query<{ debit: string; credit: string }>(`SELECT COALESCE(sum(debit),0)::text debit,COALESCE(sum(credit),0)::text credit FROM voucher_lines WHERE company_id=$1 AND voucher_id=$2`, [companyId, voucherId])
-      if (sums.rows[0].debit !== sums.rows[0].credit) throw new AccountingError('Total debits must equal total credits', 422, 'UNBALANCED_VOUCHER')
-      const lock = await client.query(`SELECT 1 FROM period_locks WHERE company_id=$1 AND reopened_at IS NULL AND locked_through >= $2 LIMIT 1`, [companyId, voucher.voucher_date])
-      if (lock.rowCount) throw new AccountingError('The accounting period is locked', 423, 'PERIOD_LOCKED')
-    }
-    const status = action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : 'posted'
-    const actorColumn = action === 'submit' ? 'submitted_by' : action === 'approve' ? 'approved_by' : 'posted_by'
-    const result = await client.query(`UPDATE vouchers SET status=$3, ${actorColumn}=$4, posted_at=CASE WHEN $3='posted' THEN now() ELSE posted_at END WHERE company_id=$1 AND id=$2 RETURNING *`, [companyId, voucherId, status, actor.id])
-    await audit(client, companyId, actor.id, `voucher.${status}`, voucherId)
-    return result.rows[0]
+    const makerChecker = await requireMakerChecker(client, companyId)
+    if (makerChecker) throw new AccountingError('This company requires maker-checker approval; use submit/approve/post', 409, 'MAKER_CHECKER_REQUIRED')
+    await transitionVoucherOnClient(client, companyId, voucherId, 'submit', actor, { skipMakerChecker: true })
+    await transitionVoucherOnClient(client, companyId, voucherId, 'approve', actor, { skipMakerChecker: true })
+    return transitionVoucherOnClient(client, companyId, voucherId, 'post', actor, { skipMakerChecker: true })
   })
+}
+
+/** Creates a voucher and immediately posts it, in one transaction. Used by document posting (purchase invoices, bank payments, sales invoices). */
+export async function createAndPostVoucherOnClient(client: pg.PoolClient, input: CreateVoucher, actor: Actor) {
+  const voucher = await createVoucherOnClient(client, input, actor)
+  if (voucher.status === 'posted') return voucher
+  await transitionVoucherOnClient(client, input.companyId, voucher.id, 'submit', actor, { skipMakerChecker: true })
+  await transitionVoucherOnClient(client, input.companyId, voucher.id, 'approve', actor, { skipMakerChecker: true })
+  return transitionVoucherOnClient(client, input.companyId, voucher.id, 'post', actor, { skipMakerChecker: true })
 }
 
 export async function reverseVoucher(pool: pg.Pool, companyId: string, voucherId: string, reversalDate: string, idempotencyKey: string, reason: string, actor: Actor) {
@@ -110,6 +140,6 @@ export async function reverseVoucher(pool: pg.Pool, companyId: string, voucherId
   })
 }
 
-async function audit(client: pg.PoolClient, companyId: string, actorId: string, action: string, entityId: string, metadata: object = {}) {
-  await client.query(`INSERT INTO audit_events(company_id,actor_id,action,entity_type,entity_id,metadata) VALUES($1,$2,$3,'voucher',$4,$5)`, [companyId, actorId, action, entityId, metadata])
+export async function audit(client: pg.PoolClient, companyId: string | null, actorId: string, action: string, entityId: string, metadata: object = {}, entityType = 'voucher') {
+  await client.query(`INSERT INTO audit_events(company_id,actor_id,action,entity_type,entity_id,metadata) VALUES($1,$2,$3,$4,$5,$6)`, [companyId, actorId, action, entityType, entityId, metadata])
 }

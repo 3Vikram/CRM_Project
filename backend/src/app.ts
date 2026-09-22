@@ -1,5 +1,7 @@
 import express from 'express'
 import { apiRouter } from './routes/index.js'
+import { authRouter } from './auth/routes.js'
+import { requireActor } from './auth/token.js'
 import { ZodError } from 'zod'
 import { AccountingError } from './accounting/errors.js'
 import { DatabaseUnavailableError } from './db.js'
@@ -8,11 +10,12 @@ export function createApp() {
   const app = express()
   app.use(express.json({ limit: '4mb' }))
 
-  // simple health probe
+  // simple health probe — public
   app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
-  // primary seam — all deterministic invoice math + entity presets
-  app.use('/api', apiRouter)
+  // login is public; everything else under /api requires a bearer token
+  app.use('/api/auth', authRouter)
+  app.use('/api', requireActor, apiRouter)
 
   // common error handler
   app.use(

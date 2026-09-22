@@ -19,3 +19,13 @@ packages/shared/dist
 
 # tsbuildinfo
 *.tsbuildinfo
+
+# env files (see .env.example)
+.env
+backend/.env
+
+# vite cache written outside the workspace on platforms without LOCALAPPDATA/TEMP
+frontend/crm-vite-cache/
+
+# local postgres data dir used for dev when Docker isn't available
+.pgdata/
