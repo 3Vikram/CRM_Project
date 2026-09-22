@@ -1,10 +1,13 @@
 import { Router } from 'express'
-import { CreateMigrationJobSchema, CreateVoucherSchema, ReportPeriodSchema, ReverseVoucherSchema } from '@crm/shared'
+import { CreateBankPaymentSchema, CreateMigrationJobSchema, CreatePurchaseInvoiceSchema, CreateVoucherSchema, ReportPeriodSchema, ReverseVoucherSchema } from '@crm/shared'
 import { database } from '../db.js'
 import { allow } from '../auth/token.js'
 import { balanceSheet, ledgerReport, profitAndLoss, trialBalance } from './reports.js'
-import { createVoucher, postDirect, reverseVoucher, transitionVoucher } from './service.js'
+import { createVoucher, deleteDraftVoucher, listVouchers, postDirect, reverseVoucher, transitionVoucher, updateDraftVoucher } from './service.js'
+import { cancelPurchaseInvoice, createPurchaseInvoice, getPurchaseInvoice, listPurchaseInvoices, postPurchaseInvoice, updatePurchaseInvoice } from './purchaseInvoices.js'
+import { cancelBankPayment, createBankPayment, getBankPayment, listBankPayments, postBankPayment, setBankPaymentClearance, updateBankPayment } from './bankPayments.js'
 import { AccountingError, NotFoundError } from './errors.js'
+import { z } from 'zod'
 
 export const accountingRouter = Router()
 // `requireActor` already ran at the /api level (see app.ts); every route below assumes req.actor is set.
@@ -22,9 +25,24 @@ accountingRouter.get('/companies/:companyId/ledgers', async (req, res, next) => 
   res.json(result.rows)
 } catch (error) { next(error) } })
 
+accountingRouter.get('/companies/:companyId/vouchers', async (req, res, next) => { try {
+  const type = typeof req.query.type === 'string' ? req.query.type : undefined
+  res.json(await listVouchers(database(), company(req), type))
+} catch (error) { next(error) } })
+
 accountingRouter.post('/companies/:companyId/vouchers', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
   const input = CreateVoucherSchema.parse({ ...req.body, companyId: company(req) })
   res.status(201).json(await createVoucher(database(), input, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.put('/companies/:companyId/vouchers/:voucherId', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
+  const input = CreateVoucherSchema.parse({ ...req.body, companyId: company(req) })
+  res.json(await updateDraftVoucher(database(), company(req), req.params.voucherId, input, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/vouchers/:voucherId/cancel', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
+  await deleteDraftVoucher(database(), company(req), req.params.voucherId, req.actor!)
+  res.status(204).end()
 } catch (error) { next(error) } })
 
 for (const action of ['submit', 'approve', 'post'] as const) accountingRouter.post(`/companies/:companyId/vouchers/:voucherId/${action}`, async (req, res, next) => { try {
@@ -60,4 +78,67 @@ accountingRouter.post('/companies/:companyId/migrations', allow('administrator',
 
 accountingRouter.get('/companies/:companyId/migrations', allow('administrator', 'accountant', 'migration_operator', 'auditor'), async (req, res, next) => { try {
   const result = await database().query(`SELECT * FROM migration_jobs WHERE company_id=$1 ORDER BY created_at DESC`, [company(req)]); res.json(result.rows)
+} catch (error) { next(error) } })
+
+// --- Purchase invoices --------------------------------------------------
+
+accountingRouter.get('/companies/:companyId/purchase-invoices', async (req, res, next) => { try {
+  res.json(await listPurchaseInvoices(database(), company(req)))
+} catch (error) { next(error) } })
+
+accountingRouter.get('/companies/:companyId/purchase-invoices/:id', async (req, res, next) => { try {
+  res.json(await getPurchaseInvoice(database(), company(req), req.params.id))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/purchase-invoices', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
+  const input = CreatePurchaseInvoiceSchema.parse({ ...req.body, companyId: company(req) })
+  res.status(201).json(await createPurchaseInvoice(database(), input, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.put('/companies/:companyId/purchase-invoices/:id', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
+  const input = CreatePurchaseInvoiceSchema.parse({ ...req.body, companyId: company(req) })
+  res.json(await updatePurchaseInvoice(database(), company(req), req.params.id, input, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/purchase-invoices/:id/post', allow('administrator', 'accountant'), async (req, res, next) => { try {
+  res.json(await postPurchaseInvoice(database(), company(req), req.params.id, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/purchase-invoices/:id/cancel', allow('administrator', 'accountant'), async (req, res, next) => { try {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined
+  res.json(await cancelPurchaseInvoice(database(), company(req), req.params.id, req.actor!, reason))
+} catch (error) { next(error) } })
+
+// --- Bank payments -------------------------------------------------------
+
+accountingRouter.get('/companies/:companyId/bank-payments', async (req, res, next) => { try {
+  res.json(await listBankPayments(database(), company(req)))
+} catch (error) { next(error) } })
+
+accountingRouter.get('/companies/:companyId/bank-payments/:id', async (req, res, next) => { try {
+  res.json(await getBankPayment(database(), company(req), req.params.id))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/bank-payments', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
+  const input = CreateBankPaymentSchema.parse({ ...req.body, companyId: company(req) })
+  res.status(201).json(await createBankPayment(database(), input, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.put('/companies/:companyId/bank-payments/:id', allow('administrator', 'accountant', 'maker', 'migration_operator'), async (req, res, next) => { try {
+  const input = CreateBankPaymentSchema.parse({ ...req.body, companyId: company(req) })
+  res.json(await updateBankPayment(database(), company(req), req.params.id, input, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/bank-payments/:id/post', allow('administrator', 'accountant'), async (req, res, next) => { try {
+  res.json(await postBankPayment(database(), company(req), req.params.id, req.actor!))
+} catch (error) { next(error) } })
+
+accountingRouter.post('/companies/:companyId/bank-payments/:id/cancel', allow('administrator', 'accountant'), async (req, res, next) => { try {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined
+  res.json(await cancelBankPayment(database(), company(req), req.params.id, req.actor!, reason))
+} catch (error) { next(error) } })
+
+accountingRouter.patch('/companies/:companyId/bank-payments/:id/clearance', allow('administrator', 'accountant', 'maker'), async (req, res, next) => { try {
+  const clearance = z.enum(['Pending', 'Cleared']).parse(req.body?.clearance)
+  res.json(await setBankPaymentClearance(database(), company(req), req.params.id, clearance, req.actor!))
 } catch (error) { next(error) } })

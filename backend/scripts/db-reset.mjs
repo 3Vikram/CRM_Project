@@ -13,7 +13,7 @@ function loadEnvFile(path) {
     }
   } catch {}
 }
-loadEnvFile(new URL('../.env', import.meta.url))
+loadEnvFile(new URL('../../.env', import.meta.url))
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {

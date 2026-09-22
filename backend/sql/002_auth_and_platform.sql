@@ -20,12 +20,16 @@ ALTER TABLE audit_events ALTER COLUMN company_id DROP NOT NULL;
 
 ALTER TABLE companies ADD COLUMN require_maker_checker boolean NOT NULL DEFAULT false;
 
--- Seller/invoice presets, formerly hardcoded in backend/src/config/entities.ts.
--- Shape matches the shared `Entity` type minus `id` (= companies.id) and `name`
--- (= companies.legal_name).
+-- Seller/invoice presets, mirroring backend/src/config/entities.ts (which
+-- stays in place as the offline fallback used when DATABASE_URL isn't set,
+-- and by the synchronous invoice-compute math in services/compute.ts).
+-- Shape matches the shared `Entity` type minus `id` (= companies.id).
+-- `gstin`/`pan` also exist as plain companies columns; the entities API
+-- reads those, and profile.name overrides companies.legal_name for display.
 ALTER TABLE companies ADD COLUMN profile jsonb;
 
 UPDATE companies SET profile = '{
+  "name": "3Vikram Technologies",
   "shortName": "3VIKRAM",
   "legalName": "3Vikram Technologies - 2025-26",
   "address": "No.1/5 Santosh Complex Basavanagudi, Near Armugam Circle, Bengaluru - 560004",
@@ -50,6 +54,7 @@ UPDATE companies SET profile = '{
 
 UPDATE companies SET profile = '{
   "shortName": "KVAS",
+  "name": "SYNOV IT Services Pvt Ltd",
   "legalName": "SYNOV IT SERVICES PRIVATE LIMITED - (23-24)",
   "address": "91 Springboard Business Hub Pvt Ltd, Gopala Krishna Complex, No. 45/3, Residency Road, MG Road, Bengaluru-560025",
   "stateCode": "29",

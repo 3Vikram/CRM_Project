@@ -54,6 +54,8 @@ export const CreateVoucherSchema = z.object({
   voucherDate: IsoDateSchema,
   narration: z.string().max(2000).default(''),
   externalReference: z.string().max(200).optional(),
+  /** Journal register's "Invoice number" field, distinct from externalReference ("Reference"). */
+  invoiceReference: z.string().max(200).optional(),
   idempotencyKey: z.string().min(8).max(200),
   sourceType: z.string().max(50).default('manual'),
   sourceId: z.string().max(200).optional(),

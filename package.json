@@ -13,7 +13,7 @@
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @crm/backend db:migrate",
     "db:seed": "pnpm --filter @crm/backend db:seed",
-    "db:reset": "node scripts/db-reset.mjs"
+    "db:reset": "node backend/scripts/db-reset.mjs"
   },
   "packageManager": "pnpm@11.5.2"
 }
