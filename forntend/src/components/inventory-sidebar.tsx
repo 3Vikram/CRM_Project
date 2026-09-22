@@ -45,6 +45,7 @@ export function InventorySidebar() {
       items: [
         { href: '/inventory/daily-email', label: 'Daily Email', icon: Mail },
         { href: '/inventory/depreciation-history', label: 'Depreciation History', icon: Calculator },
+        { href: '/inventory/accessories', label: 'Accessories', icon: Package },
       ],
     },
   ]

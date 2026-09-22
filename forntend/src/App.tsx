@@ -22,6 +22,8 @@ import SerialHistoryPage from '@/pages/inventory/SerialHistoryPage'
 import RentalLifecyclePage from '@/pages/RentalLifecyclePage'
 import DailyEmailPage from '@/pages/DailyEmailPage'
 import DepreciationHistoryPage from '@/pages/DepreciationHistoryPage'
+import AccessoriesPage from '@/pages/AccessoriesPage'
+import AccessoryLifecyclePage from '@/pages/AccessoryLifecyclePage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -222,6 +224,14 @@ export default function App() {
           }
         />
         <Route
+          path="/inventory/accessory-lifecycle/:accessoryId"
+          element={
+            <InventoryLayout>
+              <AccessoryLifecyclePage />
+            </InventoryLayout>
+          }
+        />
+        <Route
           path="/inventory/rent-out"
           element={
             <InventoryLayout>
@@ -306,6 +316,14 @@ export default function App() {
           element={
             <InventoryLayout>
               <DepreciationHistoryPage />
+            </InventoryLayout>
+          }
+        />
+        <Route
+          path="/inventory/accessories"
+          element={
+            <InventoryLayout>
+              <AccessoriesPage />
             </InventoryLayout>
           }
         />

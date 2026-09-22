@@ -29,6 +29,7 @@ export default function RentalLifecyclePage() {
   const navigate = useNavigate()
   const [assetInfo, setAssetInfo] = useState<any>(null)
   const [rentalHistory, setRentalHistory] = useState<any[]>([])
+  const [finalSale, setFinalSale] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +40,7 @@ export default function RentalLifecyclePage() {
       try {
         const response = await getAssetSerialHistory(decodeURIComponent(serialNumber))
         setAssetInfo(response.asset || null)
+        setFinalSale(response.finalSale || null)
         // Reverse the order: newest/current first
         const reversed = (response.rentalHistory || []).slice().reverse()
         setRentalHistory(reversed)
@@ -54,6 +56,20 @@ export default function RentalLifecyclePage() {
 
   // Calculate bottom summary from original (unreversed) order
   const originalRentalHistory = rentalHistory.slice().reverse()
+  const lifecycleEntries = [
+    ...rentalHistory,
+    ...(finalSale
+      ? [{
+          ...finalSale,
+          id: 'final-sale',
+          isSoldOut: true,
+          date: finalSale.saleDate,
+          saleAmount: finalSale.saleAmount,
+        }]
+      : []),
+  ]
+  const totalMonths = originalRentalHistory.reduce((total, cycle) => total + Number(cycle.totalMonths || 0), 0)
+  const totalRentalAmount = originalRentalHistory.reduce((total, cycle) => total + Number(cycle.rentalRevenue || 0), 0)
 
   const handleBack = () => {
     navigate(-1)

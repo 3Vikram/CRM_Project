@@ -8,6 +8,7 @@ import assetRoutes from './routes/asset.js';
 import productRoutes from './routes/products.js';
 import deliveryChallanRoutes from './routes/deliveryChallans.js';
 import dailyEmailRoutes from './routes/dailyEmail.js';
+import accessoriesRoutes from './routes/accessories.js';
 import { DailyEmailSettings } from './models/DailyEmailSettings.js';
 import { EmailHistory } from './models/EmailHistory.js';
 import { initializeEmailService } from './services/emailService.js';
@@ -55,6 +56,7 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/delivery-challans', deliveryChallanRoutes);
 app.use('/api/daily-email', dailyEmailRoutes);
+app.use('/api/accessories', accessoriesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

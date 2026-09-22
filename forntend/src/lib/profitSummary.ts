@@ -26,6 +26,10 @@ const parseDate = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+const getFinancialYearStart = (date: Date) => (date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1)
+
+const getFinancialYearLabel = (yearStart: number) => `${yearStart}-${String(yearStart + 1).slice(-2)}`
+
 const getAssetInvoiceDate = (data: AssetSerialHistoryResponse) => parseDate(data.asset.purchaseDate)
 
 export const calculateTotalRentalRevenue = (data: AssetSerialHistoryResponse) =>
@@ -46,20 +50,37 @@ export const calculateDepreciation = (data: AssetSerialHistoryResponse, asOf = n
 
   if (!invoiceDate || !Number.isFinite(price) || price <= 0) return []
 
+  const saleDate = parseDate(data.finalSale?.saleDate)
+  const saleFinancialYearStart = saleDate && saleDate <= asOf ? getFinancialYearStart(saleDate) : null
+
   const entries: DepreciationEntry[] = []
   const purchaseYear = invoiceDate.getFullYear()
   let remainingValue = price
 
   const initialValue = roundAmount(price * 0.4)
-  entries.push({ year: `${purchaseYear}-${String(purchaseYear + 1).slice(-2)}`, value: initialValue, taxBenefit: roundAmount(initialValue * 0.25) })
-  remainingValue = roundAmount(remainingValue - initialValue)
+  const initialFinancialYear = getFinancialYearStart(invoiceDate)
+  const initialFinancialYearLabel = getFinancialYearLabel(initialFinancialYear)
+
+  if (saleFinancialYearStart !== null && initialFinancialYear >= saleFinancialYearStart) {
+    entries.push({ year: initialFinancialYearLabel, value: 0, taxBenefit: 0 })
+  } else {
+    entries.push({ year: initialFinancialYearLabel, value: initialValue, taxBenefit: roundAmount(initialValue * 0.25) })
+    remainingValue = roundAmount(remainingValue - initialValue)
+  }
 
   for (let year = purchaseYear + 1; year <= asOf.getFullYear(); year += 1) {
     const aprilFirst = new Date(year, 3, 1)
     if (aprilFirst <= invoiceDate || aprilFirst > asOf) continue
 
+    const financialYearLabel = getFinancialYearLabel(year)
+
+    if (saleFinancialYearStart !== null && year >= saleFinancialYearStart) {
+      entries.push({ year: financialYearLabel, value: 0, taxBenefit: 0 })
+      continue
+    }
+
     const value = roundAmount(remainingValue * 0.4)
-    entries.push({ year: `${year}-${String(year + 1).slice(-2)}`, value, taxBenefit: roundAmount(value * 0.25) })
+    entries.push({ year: financialYearLabel, value, taxBenefit: roundAmount(value * 0.25) })
     remainingValue = roundAmount(remainingValue - value)
   }
 

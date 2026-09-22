@@ -210,9 +210,6 @@ export default function DepreciationHistoryPage() {
         <Typography variant="h4" sx={{ fontWeight: 700, color: '#0B1F33', mb: 1 }}>
           Depreciation History
         </Typography>
-        <Typography variant="body1" sx={{ color: '#5F6B76' }}>
-          Track the yearly depreciation value of all inventory assets.
-        </Typography>
       </Box>
 
       <Paper
