@@ -1,7 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Sidebar } from '@/components/sidebar'
 import { TopBar } from '@/components/top-bar'
+import { getStoredAuth } from '@/lib/auth'
 import ModuleSelectPage from '@/pages/ModuleSelectPage'
+import AdminLoginPage from '@/pages/AdminLoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import CustomersPage from '@/pages/CustomersPage'
 import CustomerFormPage from '@/pages/CustomerFormPage'
@@ -44,6 +46,13 @@ import ReportsPage from '@/pages/ReportsPage'
 import ReportDetailPage from '@/pages/ReportDetailPage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
+  const auth = getStoredAuth('admin')
+
+  if (!auth || auth.user.role !== 'admin') {
+    return <Navigate to="/admin-login" replace state={{ from: location.pathname }} />
+  }
+
   return (
     <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
       <TopBar />
@@ -59,17 +68,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route
+          path="/admin-login"
+          element={getStoredAuth('admin') ? <Navigate to="/sales/dashboard" replace /> : <AdminLoginPage />}
+        />
+
         {/* Landing: choose a module */}
         <Route path="/" element={<ModuleSelectPage />} />
 
         {/* Sales module — full CRM lives here */}
         <Route
           path="/sales"
-          element={
-            <SalesLayout>
-              <Navigate to="/sales/dashboard" replace />
-            </SalesLayout>
-          }
+          element={getStoredAuth('admin') ? <Navigate to="/sales/dashboard" replace /> : <AdminLoginPage />}
         />
         <Route
           path="/sales/dashboard"

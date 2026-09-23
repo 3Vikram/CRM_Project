@@ -12,7 +12,7 @@ const modules = [
     icon: ShoppingCart,
     iconBg: 'bg-emerald-100',
     iconColor: 'text-emerald-700',
-    to: '/sales/dashboard',
+    to: '/sales',
     accent: 'ring-emerald-200 hover:ring-emerald-300',
   },
   {

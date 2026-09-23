@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const Employee = require('../models/Employee');
 const Counter = require('../models/Counter');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
@@ -108,20 +109,28 @@ const generateEmployeeCode = async () => {
   return `EMP-${String(counter.value).padStart(4, '0')}`;
 };
 
+const hashEmployeePassword = async (password) => {
+  if (!password) return '';
+  return bcrypt.hash(password, 10);
+};
+
 const serializeEmployee = (employee) => {
   const source = employee && employee.toObject ? employee.toObject() : employee || {};
   return {
-    ...source,
     _id: source._id ? String(source._id) : '',
     employeeCode: source.employeeCode || '',
     employeeName: source.employeeName || '',
+    fullName: source.fullName || source.employeeName || '',
     email: source.email || '',
     phone: source.phone || '',
+    contactNo: source.contactNo || source.phone || '',
     designation: source.designation || '',
     department: source.department || 'Sales',
     role: source.role || 'Sales Executive',
     status: source.status || 'Active',
     joiningDate: source.joiningDate || null,
+    dateOfJoin: source.dateOfJoin || null,
+    dateOfBirth: source.dateOfBirth || null,
     address: source.address || '',
     notes: source.notes || '',
     createdBy: source.createdBy || 'Admin',
@@ -203,6 +212,12 @@ exports.createEmployee = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Employee name and email are required.' });
     }
 
+    if (payload.password) {
+      payload.passwordHash = await hashEmployeePassword(payload.password);
+      payload.passwordSalt = '';
+      delete payload.password;
+    }
+
     if (!payload.employeeCode) {
       payload.employeeCode = await generateEmployeeCode();
     }
@@ -226,6 +241,12 @@ exports.updateEmployee = async (req, res) => {
     const payload = normaliseEmployeePayload(req.body);
     if (!payload.employeeName || !payload.email) {
       return res.status(400).json({ success: false, message: 'Employee name and email are required.' });
+    }
+
+    if (payload.password) {
+      payload.passwordHash = await hashEmployeePassword(payload.password);
+      payload.passwordSalt = '';
+      delete payload.password;
     }
 
     const employee = await Employee.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });

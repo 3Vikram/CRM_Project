@@ -16,6 +16,7 @@ const locationRoutes = require('./routes/locationRoutes');
 const companyProfileRoutes = require('./routes/companyProfileRoutes');
 const opfRoutes = require('./routes/opfRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
+const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
@@ -37,6 +38,7 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/company-profiles', companyProfileRoutes);
 app.use('/api/opf', opfRoutes);
 app.use('/api/employees', employeeRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/locations', locationRoutes);
 
