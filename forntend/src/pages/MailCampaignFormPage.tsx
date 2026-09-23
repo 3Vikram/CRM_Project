@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ImagePlus, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { TiptapEditor } from '@/components/TiptapEditor'
-import { createCampaign, getCampaignById, sendCampaign, updateCampaign } from '@/lib/mailCampaignApi'
+import { createCampaign, fetchRecipientData, getCampaignById, sendCampaign, updateCampaign } from '@/lib/mailCampaignApi'
 import { fetchCompanyProfiles, type CompanyProfileRecord } from '@/lib/companyProfileApi'
 
-const alignmentOptions = ['Image Before Text', 'Image After Text', 'Image Above Text', 'Image Below Text']
+const alignmentOptions = ['Image Before Text', 'Image After Text']
 
 export default function MailCampaignFormPage() {
   const navigate = useNavigate()
@@ -22,6 +22,9 @@ export default function MailCampaignFormPage() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
+  const [batchName, setBatchName] = useState('')
+  const [batchNumber, setBatchNumber] = useState<number | ''>('')
+  const [batches, setBatches] = useState<Array<{ batchNumber: number; name: string; count: number }>>([])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const [error, setError] = useState('')
@@ -57,8 +60,17 @@ export default function MailCampaignFormPage() {
       setImagePreviewUrl(resolveImageUrl(campaign.image))
       setScheduledDate(campaign.scheduledDate || '')
       setScheduledTime(campaign.scheduledTime || '')
+      setBatchName(campaign.batchName || '')
+      setBatchNumber(campaign.batchNumber || '')
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign.'))
   }, [id])
+
+  useEffect(() => {
+    void fetchRecipientData(['Contacts']).then((response) => {
+      const availableBatches = Array.isArray(response?.data?.batches) ? response.data.batches : []
+      setBatches(availableBatches.sort((left: { batchNumber: number }, right: { batchNumber: number }) => left.batchNumber - right.batchNumber))
+    }).catch(() => setBatches([]))
+  }, [])
 
   const handleImageChange = (file: File | null) => {
     if (!file) return
@@ -94,6 +106,8 @@ export default function MailCampaignFormPage() {
     formData.append('createdDate', new Date().toISOString().split('T')[0])
     formData.append('scheduledDate', action === 'Scheduled' ? scheduledDate : '')
     formData.append('scheduledTime', action === 'Scheduled' ? scheduledTime : '')
+    formData.append('batchName', batchName)
+    formData.append('batchNumber', batchNumber ? String(batchNumber) : '')
     if (image) formData.append('image', image)
 
     try {
@@ -149,6 +163,17 @@ export default function MailCampaignFormPage() {
               <span className="mb-2 block text-sm font-semibold text-gray-700">Campaign Image Alignment</span>
               <select value={imageAlignment} onChange={(event) => setImageAlignment(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#CEC9BD]">
                 {alignmentOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-gray-700">Batch</span>
+              <select value={batchNumber} onChange={(event) => {
+                const nextBatchNumber = event.target.value ? Number(event.target.value) : ''
+                setBatchNumber(nextBatchNumber)
+                setBatchName(nextBatchNumber ? `Batch ${nextBatchNumber}` : '')
+              }} className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#CEC9BD]">
+                <option value="">All Batches</option>
+                {batches.map((batch) => <option key={batch.batchNumber} value={batch.batchNumber}>{batch.name} ({batch.count})</option>)}
               </select>
             </label>
           </div>

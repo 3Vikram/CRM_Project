@@ -144,7 +144,7 @@ const parseCampaignGroups = (value) => {
   });
 };
 
-const resolveContactRecipients = async (groups) => {
+const resolveContactRecipients = async (groups, batchName = '', batchNumber = null) => {
   const requestedContactIds = [...new Set(groups.flatMap((group) => group.contactIds).filter(Boolean))];
   const contactIds = requestedContactIds.filter((id) => mongoose.isValidObjectId(id));
   if (requestedContactIds.length && contactIds.length !== requestedContactIds.length) {
@@ -155,6 +155,8 @@ const resolveContactRecipients = async (groups) => {
   const contactQuery = contactIds.length
     ? { _id: { $in: contactIds }, email: { $regex: validEmailRegex } }
     : { email: { $regex: validEmailRegex } };
+  if (batchName) contactQuery.batchName = batchName;
+  if (Number.isInteger(Number(batchNumber)) && Number(batchNumber) > 0) contactQuery.batchNumber = Number(batchNumber);
   const contacts = await Contact.find(contactQuery).select('_id email').lean();
   const emailByContactId = new Map(contacts.map((contact) => [String(contact._id), String(contact.email).trim().toLowerCase()]));
 
@@ -394,6 +396,13 @@ exports.getRecipientData = async (req, res) => {
       }
     }
 
+    data.batchNames = await Contact.distinct('batchName', { batchName: { $nin: ['', null] } });
+    data.batches = await Contact.aggregate([
+      { $match: { batchNumber: { $gte: 1 } } },
+      { $group: { _id: '$batchNumber', count: { $sum: 1 } } },
+      { $project: { _id: 0, batchNumber: '$_id', name: { $concat: ['Batch ', { $toString: '$_id' }] }, count: 1 } },
+      { $sort: { batchNumber: 1 } },
+    ]);
     res.status(200).json({ success: true, data });
   } catch (error) {
     console.error('Failed to load recipient details:', error);
@@ -614,21 +623,9 @@ const normalizeFooterWebsiteLinks = (html, websiteUrl) => String(html || '').rep
   },
 );
 
-const isDirectSynovLink = (destination) => {
-  const value = String(destination || '');
-  if (normalizeEmailDestination(value) === 'https://www.synov.in') return true;
-  try {
-    const url = new URL(value);
-    const originalUrl = url.searchParams.get('url') || '';
-    return normalizeEmailDestination(originalUrl) === 'https://www.synov.in';
-  } catch (_error) {
-    return false;
-  }
-};
-
 const addEmailTracking = (html, campaignId, trackingId, baseUrl) => {
   const trackedHtml = String(html || '').replace(/href\s*=\s*(["'])(https?:\/\/[^"']+)\1/gi, (_match, quote, destination) => (
-    isDirectSynovLink(destination) || /\/api\/mail-campaigns\/(?:track|tracking)\/click\//i.test(destination)
+    /\/api\/mail-campaigns\/(?:track|tracking)\/click\//i.test(destination)
       ? `href=${quote}${destination}${quote}`
       : `href=${quote}${baseUrl}/api/mail-campaigns/tracking/click/${trackingId}?url=${encodeURIComponent(normalizeEmailDestination(destination))}${quote}`
   ));
@@ -646,37 +643,43 @@ const syncCampaignOpenCount = async (campaignId) => {
     { $match: { campaignId } },
     { $group: {
       _id: null,
-      uniqueOpens: { $addToSet: '$recipientEmail' },
       opens: { $sum: { $ifNull: ['$openCount', 0] } },
       clicks: { $sum: { $ifNull: ['$clickCount', 0] } },
+      openedRecipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, '$recipientEmail', null] } },
+    } },
+    { $project: {
+      _id: 0,
+      opens: 1,
+      clicks: 1,
+      uniqueOpens: { $size: { $setDifference: ['$openedRecipients', [null]] } },
     } },
   ]);
   const updateResult = await MailCampaign.updateOne(
     { campaignId },
     { $set: {
       opens: openSummary?.opens || 0,
-      uniqueOpens: openSummary?.opens || 0,
+      uniqueOpens: openSummary?.uniqueOpens || 0,
       clicks: openSummary?.clicks || 0,
     } },
   );
   logger.info('mail-campaign.opens.updated', {
     campaignId,
     opensTotal: openSummary?.opens || 0,
-    uniqueOpens: openSummary?.opens || 0,
+    uniqueOpens: openSummary?.uniqueOpens || 0,
     matchedCount: updateResult.matchedCount,
     modifiedCount: updateResult.modifiedCount,
   });
   return {
     opensTotal: openSummary?.opens || 0,
-    uniqueOpens: openSummary?.opens || 0,
+    uniqueOpens: openSummary?.uniqueOpens || 0,
     clicksTotal: openSummary?.clicks || 0,
   };
 };
 
 exports.trackOpen = async (req, res) => {
   const trackingId = String(req.params.trackingId || req.params.token || '').trim();
+  console.log('[TRACK OPEN REQUEST]', trackingId);
   logger.info('mail-campaign.open.requested', { trackingId });
-  console.log(`OPEN TRACKING REQUEST: trackingId=${trackingId}`);
 
   try {
     const log = await EmailLog.findOne({
@@ -691,10 +694,10 @@ exports.trackOpen = async (req, res) => {
     }
 
     const now = new Date();
-    const firstOpenLog = await EmailLog.findOneAndUpdate(
-      { _id: log._id, $or: [{ openCount: { $exists: false } }, { openCount: 0 }] },
+    const updatedLog = await EmailLog.findOneAndUpdate(
+      { _id: log._id },
       [{ $set: {
-        openCount: 1,
+        openCount: { $add: [{ $ifNull: ['$openCount', 0] }, 1] },
         openedAt: { $ifNull: ['$openedAt', now] },
         firstOpenedAt: { $ifNull: ['$firstOpenedAt', now] },
         lastOpenedAt: now,
@@ -702,58 +705,19 @@ exports.trackOpen = async (req, res) => {
       { new: true },
     ).lean();
 
-    if (firstOpenLog) {
-      logger.info('mail-campaign.open.first-detected', {
-        campaignId: log.campaignId,
-        recipientEmail: log.recipientEmail,
-        trackingId,
-        openCount: 1,
-      });
-      await syncCampaignOpenCount(log.campaignId);
-      const leadResult = await ensureEngagementLead({
-        log: firstOpenLog,
-        openCount: firstOpenLog.openCount || 0,
-        clickCount: firstOpenLog.clickCount || 0,
-      });
-      console.log(`OPEN TRACKING UPDATED: campaignId=${firstOpenLog.campaignId} recipient=${firstOpenLog.recipientEmail} trackingId=${trackingId} previousOpenCount=${0} newOpenCount=${firstOpenLog.openCount} campaignTotalOpensIncremented=${1} leadThresholdReached=${Boolean(leadResult)} leadCreatedOrUpdated=${Boolean(leadResult)}`);
-    } else {
-      const refreshedLog = await EmailLog.findOneAndUpdate(
-        { _id: log._id },
-        [{
-          $set: {
-            openCount: { $add: [{ $ifNull: ['$openCount', 0] }, 1] },
-            openedAt: { $ifNull: ['$openedAt', now] },
-            firstOpenedAt: { $ifNull: ['$firstOpenedAt', now] },
-            lastOpenedAt: now,
-          },
-        }],
-        { new: true },
-      ).lean();
-
-      logger.info('mail-campaign.open.repeat-detected', {
-        campaignId: log.campaignId,
-        recipientEmail: log.recipientEmail,
-        trackingId,
-        previousOpenCount: log.openCount || 0,
-        newOpenCount: refreshedLog?.openCount || 0,
-        previousOpenedAt: log.openedAt,
-        lastOpenedAt: refreshedLog?.lastOpenedAt,
-      });
-
-      console.log(`REPEAT OPEN TRACKING RECEIVED: campaignId=${log.campaignId} recipient=${log.recipientEmail} trackingId=${trackingId} openCount=${refreshedLog?.openCount || 0}`);
-
-      await syncCampaignOpenCount(log.campaignId);
-
-      const leadResult = await ensureEngagementLead({
-        log: refreshedLog,
-        openCount: refreshedLog?.openCount || 0,
-        clickCount: refreshedLog?.clickCount || 0,
-      });
-
-      if (leadResult) {
-        console.log(`LEAD CREATED/UPDATED FROM REPEAT OPEN: campaignId=${refreshedLog.campaignId} recipient=${refreshedLog.recipientEmail} leadId=${leadResult.leadId} openCount=${refreshedLog.openCount} clickCount=${refreshedLog.clickCount || 0}`);
-      }
-    }
+    await syncCampaignOpenCount(log.campaignId);
+    const leadResult = await ensureEngagementLead({
+      log: updatedLog,
+      openCount: updatedLog?.openCount || 0,
+      clickCount: updatedLog?.clickCount || 0,
+    });
+    console.log('[TRACK OPEN]', {
+      trackingId,
+      campaignId: updatedLog?.campaignId,
+      recipient: updatedLog?.recipientEmail,
+      openCount: updatedLog?.openCount,
+      leadThresholdReached: Boolean(leadResult),
+    });
   } catch (error) {
     logger.error('mail-campaign.track-open.failed', { trackingId, message: error?.message, stack: error?.stack });
   }
@@ -800,6 +764,8 @@ exports.getTrackingDiagnostic = async (req, res) => {
 };
 
 exports.trackClick = async (req, res) => {
+  const trackingId = String(req.params.token || req.params.trackingId || '').trim();
+  console.log('[TRACK CLICK REQUEST]', trackingId);
   const rawDestination = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
   const originalUrl = String(rawDestination || '');
   let destination = originalUrl;
@@ -818,8 +784,6 @@ exports.trackClick = async (req, res) => {
   }
   if (!['http:', 'https:'].includes(destinationUrl.protocol)) return res.status(400).json({ success: false, message: 'Tracked destination is invalid.' });
   const redirectUrl = destination;
-  const trackingId = String(req.params.token || req.params.trackingId || '').trim();
-  console.log(`CLICK REDIRECT trackingId=${trackingId} originalUrl=${originalUrl} decodedUrl=${destination} redirectUrl=${redirectUrl}`);
   try {
     const log = await EmailLog.findOne({ $or: [{ trackingId }, { trackingToken: trackingId }] })
       .select('_id campaignId campaignName recipientEmail openCount clickCount firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt').lean();
@@ -835,13 +799,20 @@ exports.trackClick = async (req, res) => {
         } }],
         { new: true },
       ).lean();
-      const campaignUpdate = await MailCampaign.updateOne({ campaignId: updatedLog.campaignId }, { $inc: { clicks: 1 } });
+      await syncCampaignOpenCount(updatedLog.campaignId);
       const leadResult = await ensureEngagementLead({
         log: updatedLog,
         openCount: updatedLog.openCount || 0,
         clickCount: updatedLog.clickCount || 0,
       });
-      console.log(`CLICK TRACKING UPDATED: campaignId=${updatedLog.campaignId} recipient=${updatedLog.recipientEmail} trackingId=${trackingId} previousClickCount=${(updatedLog.clickCount || 0) - 1} newClickCount=${updatedLog.clickCount} campaignTotalClicksIncremented=${campaignUpdate.modifiedCount ? 1 : 0} originalUrl=${destination} leadThresholdReached=${Boolean(leadResult)} leadCreatedOrUpdated=${Boolean(leadResult)}`);
+      console.log('[TRACK CLICK]', {
+        trackingId,
+        recipient: updatedLog.recipientEmail,
+        campaignId: updatedLog.campaignId,
+        clickCount: updatedLog.clickCount,
+        destination,
+        leadThresholdReached: Boolean(leadResult),
+      });
     }
   } catch (error) {
     logger.error('mail-campaign.track-click.failed', { message: error?.message, stack: error?.stack });
@@ -917,6 +888,8 @@ exports.getCampaignPreview = async (req, res) => {
 exports.createCampaign = async (req, res) => {
   try {
     const incomingGroups = parseCampaignGroups(req.body.campaignGroups);
+    const batchName = String(req.body.batchName || '').trim();
+    const batchNumber = Number(req.body.batchNumber) > 0 ? Number(req.body.batchNumber) : null;
     const recipientEmails = parseArrayField(req.body.recipientEmails);
     const legacyGroups = incomingGroups.length ? incomingGroups : [{
       groupName: 'Campaign Group 1',
@@ -937,7 +910,7 @@ exports.createCampaign = async (req, res) => {
       deliveryResults: Array.isArray(group.deliveryResults) ? group.deliveryResults : [],
     }));
 
-    const resolvedGroups = await resolveContactRecipients(finalGroups);
+    const resolvedGroups = await resolveContactRecipients(finalGroups, batchName, batchNumber);
     const flattenedRecipientEmails = [...new Set(resolvedGroups.flatMap((group) => group.recipientEmails))];
     const campaignStatus = req.body.status || 'Draft';
 
@@ -964,6 +937,8 @@ exports.createCampaign = async (req, res) => {
       recipientModules: parseArrayField(req.body.recipientModules),
       recipientGroup: parseArrayField(req.body.recipientGroup),
       recipientEmails: flattenedRecipientEmails,
+      batchName,
+      batchNumber,
       recipientCount: flattenedRecipientEmails.length,
       campaignBody: sanitize(req.body.campaignBody || finalGroups[0]?.message || ''),
       footer: sanitize(req.body.footer || ''),
@@ -1016,6 +991,8 @@ exports.updateCampaign = async (req, res) => {
     if (!existing) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
     const incomingGroups = parseCampaignGroups(req.body.campaignGroups);
+    const batchName = String(req.body.batchName || existing.batchName || '').trim();
+    const batchNumber = Number(req.body.batchNumber || existing.batchNumber) > 0 ? Number(req.body.batchNumber || existing.batchNumber) : null;
     const recipientEmails = parseArrayField(req.body.recipientEmails || existing.recipientEmails);
     const legacyGroups = incomingGroups.length ? incomingGroups : [{
       groupName: 'Campaign Group 1',
@@ -1036,7 +1013,7 @@ exports.updateCampaign = async (req, res) => {
       deliveryResults: Array.isArray(group.deliveryResults) ? group.deliveryResults : [],
     }));
 
-    const resolvedGroups = await resolveContactRecipients(finalGroups);
+    const resolvedGroups = await resolveContactRecipients(finalGroups, batchName, batchNumber);
     const flattenedRecipientEmails = [...new Set(resolvedGroups.flatMap((group) => group.recipientEmails))];
     const campaignStatus = req.body.status || existing.status || 'Draft';
 
@@ -1050,6 +1027,8 @@ exports.updateCampaign = async (req, res) => {
       recipientModules: parseArrayField(req.body.recipientModules || existing.recipientModules),
       recipientGroup: parseArrayField(req.body.recipientGroup || existing.recipientGroup),
       recipientEmails: flattenedRecipientEmails,
+      batchName,
+      batchNumber,
       recipientCount: flattenedRecipientEmails.length,
       campaignBody: sanitize(req.body.campaignBody || finalGroups[0]?.message || existing.campaignBody || ''),
       footer: sanitize(req.body.footer || existing.footer || ''),
@@ -1137,7 +1116,7 @@ exports.sendCampaign = async (req, res) => {
       }
       subject = targetGroup.subject || campaign.subject || '';
       htmlBody = targetGroup.message || campaign.campaignBody || '<p>Campaign email</p>';
-      const [refreshedGroup] = await resolveContactRecipients([targetGroup]);
+      const [refreshedGroup] = await resolveContactRecipients([targetGroup], campaign.batchName || '', campaign.batchNumber);
       recipients = refreshedGroup.recipientEmails;
       targetGroup.contactIds = refreshedGroup.contactIds;
       targetGroup.recipientEmails = refreshedGroup.recipientEmails;
@@ -1145,7 +1124,7 @@ exports.sendCampaign = async (req, res) => {
       targetGroup.sentDate = '';
       await campaign.save();
     } else {
-      const refreshedGroups = await resolveContactRecipients(campaign.campaignGroups || [{ contactIds: [] }]);
+      const refreshedGroups = await resolveContactRecipients(campaign.campaignGroups || [{ contactIds: [] }], campaign.batchName || '', campaign.batchNumber);
       recipients = refreshedGroups.flatMap((group) => group.recipientEmails);
       campaign.campaignGroups = refreshedGroups;
       campaign.recipientEmails = [...new Set(recipients)];
@@ -1199,7 +1178,12 @@ exports.sendCampaign = async (req, res) => {
       ...(campaign.image && hasCampaignImage ? [{ filename: path.basename(localCampaignImagePath), path: localCampaignImagePath, cid: campaignImageCid, contentType: 'image/png' }] : []),
     ];
 
-    const trackingIds = new Map(normalizedRecipients.map((recipient) => [recipient.toLowerCase(), crypto.randomBytes(24).toString('hex')]));
+    const trackingIds = new Map(
+      normalizedRecipients.map((recipient) => [
+        String(recipient).trim().toLowerCase(),
+        crypto.randomBytes(24).toString('hex'),
+      ])
+    );
     const trackingUrlIsLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(trackingBaseUrl);
     logger.info('mail-campaign.tracking-config', {
       campaignId: campaign.campaignId,
@@ -1208,7 +1192,7 @@ exports.sendCampaign = async (req, res) => {
       warning: trackingUrlIsLocal ? 'External recipients cannot reach a local tracking URL.' : '',
     });
     const emailLogs = normalizedRecipients.map((recipient) => {
-      const trackingId = trackingIds.get(recipient.toLowerCase());
+      const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
       logger.info('mail-campaign.tracking-id.generated', {
         campaignId: campaign.campaignId,
         recipientEmail: recipient,
@@ -1233,7 +1217,7 @@ exports.sendCampaign = async (req, res) => {
     const report = await sendCampaignEmails({
       subject,
       html: (recipient) => {
-        const trackingId = trackingIds.get(recipient.toLowerCase());
+        const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
         const trackedHtml = addEmailTracking(buildCampaignEmailHtml({ htmlBody: emailBody, footer: rewriteEmailAssetUrls(normalizeFooterWebsiteLinks(removeCompanyLogoImages(campaign.footer, logoUrl), companyWebsiteUrl), trackingBaseUrl), logoHtml: '', showFooterSeparator: logoBeforeText }), campaign.campaignId, trackingId, trackingBaseUrl);
         const trackingUrl = buildTrackingPixelUrl(trackingBaseUrl, trackingId);
         const imageSources = [...trackedHtml.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
@@ -1263,7 +1247,7 @@ exports.sendCampaign = async (req, res) => {
         return trackedHtml;
       },
       tracking: (recipient) => {
-        const trackingId = trackingIds.get(recipient.toLowerCase());
+        const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
         return {
           campaignId: campaign.campaignId,
           trackingId,
@@ -1282,14 +1266,14 @@ exports.sendCampaign = async (req, res) => {
     const failedCount = report.results.filter((item) => item.status === 'Failed').length;
 
     await Promise.all(report.results.map((item) => EmailLog.updateOne(
-      { $or: [{ trackingId: trackingIds.get(item.recipientEmail.toLowerCase()) }, { trackingToken: trackingIds.get(item.recipientEmail.toLowerCase()) }] },
+      { $or: [{ trackingId: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()) }, { trackingToken: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()) }] },
       {
         $set: {
           status: item.status,
           sentAt: new Date(),
           errorMessage: item.errorMessage || '',
-          trackingId: trackingIds.get(item.recipientEmail.toLowerCase()),
-          trackingToken: trackingIds.get(item.recipientEmail.toLowerCase()),
+          trackingId: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
+          trackingToken: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
         },
       }
     )));
@@ -1326,7 +1310,7 @@ exports.sendCampaign = async (req, res) => {
       status: groupId ? (targetGroup ? targetGroup.status : campaign.status) : campaign.status,
     });
     report.results.forEach((item) => {
-      const trackingId = trackingIds.get(item.recipientEmail.toLowerCase());
+      const trackingId = trackingIds.get(String(item.recipientEmail).trim().toLowerCase());
       console.log(`SENT TRACKING: trackingId=${trackingId} recipient=${item.recipientEmail} status=${item.status}`);
     });
 

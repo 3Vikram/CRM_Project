@@ -44,6 +44,8 @@ export interface ContactRecord {
   mail?: string;
   contactNumber: string;
   email: string;
+  batchName?: string;
+  batchNumber?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -58,11 +60,19 @@ export interface ContactPayload {
   email: string;
 }
 
-export async function fetchContacts(params: { search?: string; page?: number; limit?: number } = {}) {
+export interface ContactBatchSummary {
+  batchNumber: number
+  name: string
+  count: number
+}
+
+export async function fetchContacts(params: { search?: string; page?: number; limit?: number; batchName?: string; batchNumber?: number } = {}) {
   const query = new URLSearchParams();
   if (params.search) query.set('search', params.search);
   if (params.page) query.set('page', String(params.page));
   if (params.limit) query.set('limit', String(params.limit));
+  if (params.batchName) query.set('batchName', params.batchName);
+  if (params.batchNumber) query.set('batchNumber', String(params.batchNumber));
 
   const cacheKey = `contacts:${query.toString()}`;
   return getCachedResponse(cacheKey, async () => {
@@ -71,9 +81,11 @@ export async function fetchContacts(params: { search?: string; page?: number; li
         search: params.search || '',
         page: params.page ?? '',
         limit: params.limit ?? '',
+        batchName: params.batchName || '',
+        batchNumber: params.batchNumber || '',
       },
     });
-    return response.data ?? { data: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 1 } };
+    return response.data ?? { data: [], batches: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 1 } };
   }, 30_000);
 }
 
@@ -128,7 +140,7 @@ export async function importContacts(file: File) {
   formData.append('file', file);
   const response = await requestWithFallback('post', '/contacts/import', { data: formData });
   clearApiCache();
-  return response.data as { success: boolean; message: string; imported?: number; skipped?: number };
+  return response.data as { success: boolean; message: string; imported?: number; skipped?: number; batchName?: string; batchNumber?: number };
 }
 
 export async function fetchCustomersForContacts() {

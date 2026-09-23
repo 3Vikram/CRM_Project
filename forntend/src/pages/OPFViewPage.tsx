@@ -154,33 +154,33 @@ export default function OPFViewPage() {
           background: #f3f4f6;
           display: flex;
           flex-direction: column;
-          align-items: center;
-          padding: 20px 0;
+          align-items: stretch;
+          padding: 20px 24px;
           box-sizing: border-box;
         }
         .opf-page {
-          width: 210mm;
-          min-height: 297mm;
-          max-width: 210mm;
-          margin: 20px auto;
+          width: 100%;
+          min-height: 0;
+          max-width: none;
+          margin: 0;
           box-sizing: border-box;
           --opf-inset: 12px;
-          padding: 4mm;
-          border: 1px solid #333 !important;
+          padding: 24px;
+          border: 0;
           background: #fff;
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 8px;
+          font-size: 11px;
         }
-        .opf-header { position: relative; display: flex; min-height: 68px; align-items: center; justify-content: center; border-bottom: 1px solid #333; }
+        .opf-header { position: relative; display: flex; min-height: 82px; align-items: center; justify-content: center; border-top: 1px solid #333; border-bottom: 1px solid #333; margin-bottom: 12px; padding: 8px 0; box-sizing: border-box; }
         .opf-header h1 { margin: 0; font-size: 20px; font-weight: 700; text-transform: uppercase; }
-        .opf-header img { position: absolute; right: 0; max-width: 190px; height: 58px; object-fit: contain; }
+        .opf-header img { position: absolute; right: 0; max-width: 190px; height: 64px; object-fit: contain; }
         .opf-meta {
           display: grid;
           grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 12px;
-          border-bottom: 0.5px solid #333;
+          gap: 20px;
+          border-bottom: 1px solid #333;
           margin: 0 calc(var(--opf-inset) * -1);
-          padding: 8px var(--opf-inset);
+          padding: 10px var(--opf-inset) 14px;
           box-sizing: border-box;
           align-items: start;
         }
@@ -196,17 +196,17 @@ export default function OPFViewPage() {
         .opf-meta .opf-detail-label {
           font-weight: 700;
           white-space: nowrap;
-          line-height: 1.2;
+          line-height: 1.35;
         }
         .opf-meta .opf-detail-row span:last-child {
           min-width: 0;
-          line-height: 1.3;
+          line-height: 1.4;
           word-break: normal;
           overflow-wrap: break-word;
           color: #111;
         }
-        .opf-section { margin-top: 13px; }
-        .opf-section h3 { margin: 0 0 4px; font-size: 12px; font-weight: 700; }
+        .opf-section { margin-top: 22px; }
+        .opf-section h3 { margin: 0 0 9px; font-size: 14px; font-weight: 700; }
         .opf-table {
           width: 100%;
           max-width: 100%;
@@ -214,23 +214,23 @@ export default function OPFViewPage() {
           border-collapse: collapse;
           border-spacing: 0;
           table-layout: fixed;
-          font-size: 8px;
-          line-height: 1.35;
+          font-size: 11px;
+          line-height: 1.45;
           box-sizing: border-box;
         }
         .opf-table colgroup col:nth-child(1) { width: 5%; }
-        .opf-table colgroup col:nth-child(2) { width: 15%; }
-        .opf-table colgroup col:nth-child(3) { width: 10%; }
-        .opf-table colgroup col:nth-child(4) { width: 17%; }
+        .opf-table colgroup col:nth-child(2) { width: 14%; }
+        .opf-table colgroup col:nth-child(3) { width: 9%; }
+        .opf-table colgroup col:nth-child(4) { width: 15%; }
         .opf-table colgroup col:nth-child(5) { width: 6%; }
         .opf-table colgroup col:nth-child(6) { width: 5%; }
         .opf-table colgroup col:nth-child(7) { width: 10%; }
         .opf-table colgroup col:nth-child(8) { width: 10%; }
-        .opf-table colgroup col:nth-child(9) { width: 14%; }
-        .opf-table colgroup col:nth-child(10) { width: 8%; }
+        .opf-table colgroup col:nth-child(9) { width: 17%; }
+        .opf-table colgroup col:nth-child(10) { width: 9%; }
         .opf-table th, .opf-table td {
           border: 0.5px solid #333;
-          padding: 3px 4px;
+          padding: 8px 6px;
           overflow-wrap: break-word;
           word-break: normal;
           vertical-align: middle;
@@ -247,8 +247,8 @@ export default function OPFViewPage() {
           text-align: right;
           white-space: nowrap;
           font-variant-numeric: tabular-nums;
-          padding-left: 6px;
-          padding-right: 8px;
+          padding-left: 5px;
+          padding-right: 7px;
           vertical-align: middle;
         }
         .opf-table td:not(.opf-number) {
@@ -277,65 +277,71 @@ export default function OPFViewPage() {
           flex-direction: column;
           justify-content: center;
           align-self: stretch;
-          padding: 3px 2px;
+          padding: 6px 8px;
           box-sizing: border-box;
         }
         .opf-gst > div:first-child { border-right: 0.5px solid #333; }
         .opf-gst-label {
-          padding: 0 2px 2px;
-          font-size: 7px;
+          padding: 0 2px 4px;
+          font-size: inherit;
           font-weight: 700;
           text-align: center;
           white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          overflow: visible;
         }
         .opf-gst-value {
-          padding: 2px 2px 0;
-          font-size: 8px;
+          padding: 4px 2px 0;
+          font-size: inherit;
           text-align: center;
           white-space: nowrap;
           font-variant-numeric: tabular-nums;
         }
-        .opf-summary-row td { padding: 4px 6px; }
-        .opf-summary-label { text-align: right; }
-        .opf-summary-row .opf-number { padding-right: 8px; }
+        .opf-summary-row td { padding: 9px 7px; }
+        .opf-summary-label { text-align: right; vertical-align: middle; }
+        .opf-summary-row .opf-number { padding-right: 7px; }
         .opf-bottom {
           display: grid;
           grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
-          margin-top: 13px;
-          border: none;
-          font-size: 10px;
-          line-height: 1.45;
+          margin-top: 24px;
+          border-top: 1px solid #333;
+          padding-top: 16px;
+          font-size: 12px;
+          line-height: 1.5;
         }
-        .opf-bottom-details { display: grid; gap: 3px; padding: 7px 14px 7px 0; }
-        .opf-detail-row { display: flex; align-items: flex-start; gap: 6px; }
-        .opf-detail-label { min-width: 120px; font-weight: 700; flex-shrink: 0; }
+        .opf-bottom-details { display: grid; gap: 6px; padding: 0 20px 12px 0; }
+        .opf-bottom-details .opf-detail-row { min-height: 18px; }
+        .opf-detail-row { display: flex; align-items: flex-start; gap: 8px; }
+        .opf-detail-label { min-width: 150px; font-weight: 700; flex-shrink: 0; }
         .opf-signature {
           display: flex;
-          min-height: 190px;
+          min-height: 210px;
           align-items: flex-end;
           justify-content: center;
           border-left: 0.5px solid #333;
-          padding: 12px;
+          padding: 20px 12px;
           text-align: center;
           font-weight: 700;
+          font-size: inherit;
         }
         @media (max-width: 720px) {
-          .opf-page { width: calc(100% - 32px); min-height: 0; --opf-inset: 6px; padding: var(--opf-inset); font-size: 7px; }
+          .opf-view-root { padding: 12px; }
+          .opf-page { width: 100%; max-width: none; min-height: 0; --opf-inset: 6px; padding: 12px; font-size: 10px; }
           .opf-header { min-height: 48px; }
           .opf-header h1 { font-size: 10px; }
           .opf-header img { max-width: 78px; height: 34px; }
-          .opf-meta { gap: 3px; padding-top: 3px; padding-bottom: 3px; font-size: 6px; }
-          .opf-section { margin-top: 5px; }
-          .opf-section h3 { margin-bottom: 2px; font-size: 7px; }
-          .opf-table { font-size: 6px; }
-          .opf-table th, .opf-table td { padding: 2px 1px; }
-          .opf-gst-label, .opf-gst-value { font-size: 5.5px; }
+          .opf-meta { gap: 6px; padding-top: 6px; padding-bottom: 8px; font-size: 9px; }
+          .opf-section { margin-top: 14px; }
+          .opf-section h3 { margin-bottom: 5px; font-size: 11px; }
+          .opf-table { font-size: 9px; }
+          .opf-table th, .opf-table td { padding: 5px 3px; }
+          .opf-gst > div { padding: 6px 4px; }
+          .opf-gst-label, .opf-gst-value { font-size: inherit; }
           .opf-gst-line { margin-top: 2px; }
-          .opf-bottom { grid-template-columns: minmax(0, 4fr) minmax(0, 1fr); margin-top: 5px; font-size: 6px; line-height: 1.25; }
-          .opf-bottom-details { padding: 4px 6px 4px 0; }
-          .opf-signature { min-height: 105px; padding: 5px; }
+          .opf-bottom { grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); margin-top: 14px; padding-top: 10px; font-size: 10px; line-height: 1.35; }
+          .opf-bottom-details { gap: 4px; padding: 0 6px 6px 0; }
+          .opf-detail-row { gap: 4px; }
+          .opf-detail-label { min-width: 105px; }
+          .opf-signature { min-height: 120px; padding: 8px 4px; font-size: inherit; }
         }
         @media print {
           @page { size: A4 portrait; margin: 0; }
@@ -351,6 +357,18 @@ export default function OPFViewPage() {
           .opf-print-area .opf-table tr { break-inside: avoid; page-break-inside: avoid; }
           .opf-print-area .opf-table th, .opf-print-area .opf-table td { overflow-wrap: break-word !important; word-break: normal !important; white-space: normal !important; }
           .opf-print-area .opf-table .opf-number, .opf-print-area .opf-gst-value { white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; }
+          .opf-print-area { font-size: 8px !important; }
+          .opf-print-area .opf-table { font-size: 8px !important; line-height: 1.35 !important; }
+          .opf-print-area .opf-table th, .opf-print-area .opf-table td { padding: 3px 4px !important; }
+          .opf-print-area .opf-gst > div { padding: 3px 2px !important; }
+          .opf-print-area .opf-gst-label { padding: 0 2px 2px !important; font-size: inherit !important; }
+          .opf-print-area .opf-gst-value { padding: 2px 2px 0 !important; font-size: inherit !important; }
+          .opf-print-area .opf-summary-row td { padding: 4px 6px !important; }
+          .opf-print-area .opf-bottom { margin-top: 13px !important; border-top: 0 !important; padding-top: 0 !important; font-size: 10px !important; line-height: 1.45 !important; }
+          .opf-print-area .opf-bottom-details { gap: 3px !important; padding: 7px 14px 7px 0 !important; }
+          .opf-print-area .opf-detail-row { gap: 6px !important; }
+          .opf-print-area .opf-detail-label { min-width: 120px !important; }
+          .opf-print-area .opf-signature { min-height: 190px !important; padding: 12px !important; font-size: inherit !important; }
           .opf-print-area .opf-gst { position: relative !important; overflow: visible !important; }
           .opf-print-area .opf-gst-label, .opf-print-area .opf-gst-value { white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important; }
           .opf-print-area .opf-bottom { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }

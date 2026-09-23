@@ -67,6 +67,8 @@ exports.getContacts = async (req, res) => {
       sortBy = 'createdAt',
       sortOrder = 'desc',
       search = '',
+      batchName = '',
+      batchNumber = '',
     } = req.query;
     const query = {};
     const searchValue = regexFromSearch(search);
@@ -80,6 +82,8 @@ exports.getContacts = async (req, res) => {
         { email: searchValue },
       ];
     }
+    if (batchName) query.batchName = batchName;
+    if (batchNumber && Number.isInteger(Number(batchNumber))) query.batchNumber = Number(batchNumber);
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
@@ -91,6 +95,8 @@ exports.getContacts = async (req, res) => {
       mail: 1,
       contactNumber: 1,
       email: 1,
+      batchName: 1,
+      batchNumber: 1,
       createdAt: 1,
     };
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'customerName', 'contactName', 'email', 'contactNumber']);
@@ -106,9 +112,21 @@ exports.getContacts = async (req, res) => {
       Contact.countDocuments(query),
     ]);
 
+    const batches = await Contact.aggregate([
+      { $match: { $or: [{ batchNumber: { $gte: 1 } }, { batchName: { $nin: ['', null] } }] } },
+      { $group: {
+        _id: { $ifNull: ['$batchNumber', { $convert: { input: { $arrayElemAt: [{ $split: ['$batchName', ' '] }, 1] }, to: 'int', onError: null, onNull: null } }] },
+        name: { $first: '$batchName' },
+        count: { $sum: 1 },
+      } },
+      { $match: { _id: { $ne: null } } },
+      { $project: { _id: 0, batchNumber: '$_id', name: { $cond: [{ $gt: ['$_id', 0] }, { $concat: ['Batch ', { $toString: '$_id' }] }, '$name'] }, count: 1 } },
+      { $sort: { batchNumber: 1 } },
+    ]);
     res.status(200).json({
       success: true,
       data: contacts.map((contact) => normalizeContactRecord(contact)),
+      batches,
       pagination: {
         total,
         page: pageNum,
@@ -244,6 +262,9 @@ exports.importContacts = async (req, res) => {
     if (!sheet) return res.status(400).json({ success: false, message: 'The Excel file has no worksheet.' });
 
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    if (rows.length > 500) {
+      return res.status(400).json({ success: false, message: 'A maximum of 500 contacts can be imported at once.' });
+    }
     const contactsToInsert = [];
     const seenEmails = new Set();
     const seenPhones = new Set();
@@ -280,8 +301,32 @@ exports.importContacts = async (req, res) => {
     skipped += contactsToInsert.length - newContacts.length;
 
     if (!newContacts.length) return res.status(200).json({ success: true, message: 'No new contacts to import.', imported: 0, skipped });
-    const inserted = await Contact.insertMany(newContacts, { ordered: false });
-    res.status(201).json({ success: true, message: `Contacts imported successfully: ${inserted.length}`, imported: inserted.length, skipped });
+    const [highestBatch] = await Contact.aggregate([
+      { $match: { $or: [{ batchNumber: { $gte: 1 } }, { batchName: { $nin: ['', null] } }] } },
+      {
+        $project: {
+          batchNumber: {
+            $ifNull: [
+              '$batchNumber',
+              {
+                $convert: {
+                  input: { $arrayElemAt: [{ $split: ['$batchName', ' '] }, 1] },
+                  to: 'int',
+                  onError: 0,
+                  onNull: 0,
+                },
+              },
+            ],
+          },
+        },
+      },
+      { $sort: { batchNumber: -1 } },
+      { $limit: 1 },
+    ]);
+    const batchNumber = Number(highestBatch?.batchNumber || 0) + 1;
+    const batchName = `Batch ${batchNumber}`;
+    const inserted = await Contact.insertMany(newContacts.map((contact) => ({ ...contact, batchName, batchNumber })), { ordered: false });
+    res.status(201).json({ success: true, message: `Contacts imported successfully: ${inserted.length} (${batchName})`, imported: inserted.length, skipped, batchName, batchNumber });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message || 'Unable to process the Excel file.' });
   }

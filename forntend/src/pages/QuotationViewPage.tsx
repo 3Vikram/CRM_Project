@@ -366,6 +366,149 @@ export default function QuotationViewPage() {
   return (
     <div className="bg-white text-black" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <style>{`
+        .quotation-document {
+          width: 100%;
+          max-width: none;
+          margin: 0 auto;
+          padding: 28px 3% 34px !important;
+          box-sizing: border-box;
+          font-size: 14px;
+        }
+        .quotation-header {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+          align-items: center !important;
+          gap: 28px;
+          margin: 0 0 28px !important;
+          padding-bottom: 20px;
+        }
+        .quotation-meta {
+          max-width: 460px;
+          line-height: 1.55;
+        }
+        .quotation-logo {
+          grid-column: 3;
+          grid-row: 1;
+          min-height: 92px;
+          align-items: center !important;
+        }
+        .quotation-logo img {
+          margin: 0 !important;
+          height: 88px !important;
+          max-width: 240px !important;
+        }
+        .quotation-title {
+          grid-column: 2;
+          grid-row: 1;
+          white-space: nowrap;
+          font-size: 20px !important;
+        }
+        .quotation-recipient {
+          margin-top: 0 !important;
+          padding-top: 4px;
+          line-height: 1.55;
+        }
+        .quotation-subject {
+          margin-top: 22px !important;
+          line-height: 1.5;
+        }
+        .quotation-introduction {
+          margin-top: 22px !important;
+          line-height: 1.65 !important;
+        }
+        .quotation-introduction > div + div {
+          margin-top: 9px !important;
+        }
+        .quotation-products-table {
+          margin-top: 24px !important;
+        }
+        .quotation-products-table table {
+          font-size: inherit;
+        }
+        .quotation-products-table th,
+        .quotation-products-table td {
+          line-height: 1.4;
+          vertical-align: middle;
+        }
+        .quotation-products-table thead tr {
+          height: 34px !important;
+        }
+        .quotation-products-table tbody tr:not(:last-child) td {
+          padding-top: 10px !important;
+          padding-bottom: 10px !important;
+        }
+        .quotation-terms {
+          margin-top: 30px !important;
+          line-height: 1.55 !important;
+        }
+        .quotation-terms > div {
+          margin-bottom: 8px !important;
+        }
+        .quotation-terms li {
+          margin-bottom: 4px !important;
+          line-height: 1.5 !important;
+        }
+        .quotation-closing {
+          margin-top: 28px !important;
+          line-height: 1.55 !important;
+        }
+        .quotation-closing p + p {
+          margin-top: 16px !important;
+        }
+        .quotation-closing > div {
+          margin-top: 18px !important;
+          line-height: 1.55;
+        }
+        .quotation-branding-block {
+          margin-top: 34px;
+        }
+        .quotation-partner-logo {
+          padding-top: 20px !important;
+        }
+        .quotation-partner-logo img {
+          height: 135px !important;
+          max-width: min(100%, 520px);
+        }
+        .quotation-footer {
+          margin-top: 30px !important;
+          padding-top: 16px !important;
+          line-height: 1.55;
+        }
+        @media (max-width: 720px) {
+          .quotation-document {
+            padding: 20px 16px 28px !important;
+          }
+          .quotation-header {
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            padding-bottom: 16px;
+          }
+          .quotation-title {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            justify-self: center;
+            font-size: 20px !important;
+          }
+          .quotation-logo {
+            grid-column: 2;
+            grid-row: 1;
+            min-height: 70px;
+          }
+          .quotation-logo img {
+            height: 64px !important;
+            max-width: 150px !important;
+          }
+          .quotation-products-table {
+            overflow-x: auto;
+          }
+          .quotation-products-table table {
+            min-width: 720px;
+          }
+          .quotation-partner-logo img {
+            height: 100px !important;
+          }
+        }
+
         @page {
           size: A4 portrait;
           margin: 8mm;
@@ -555,9 +698,9 @@ export default function QuotationViewPage() {
         )}
 
         <div ref={printRef} className="quotation-view-shell w-full max-w-none mx-0">
-          <div className="border border-[#111111] bg-white p-1.5 md:p-2" style={{ borderRadius: 0, boxShadow: 'none' }}>
-            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 leading-tight">
-            <div className="max-w-[460px] min-w-0 text-[12px] font-bold text-black">
+          <div className="quotation-document bg-white p-1.5 md:p-2" style={{ borderRadius: 0, boxShadow: 'none' }}>
+            <div className="quotation-header mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 leading-tight">
+            <div className="quotation-meta max-w-[460px] min-w-0 text-[14px] font-bold text-black">
               <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start' }}>
                 <span className="font-semibold">Date</span>
                 <span>:</span>
@@ -575,7 +718,7 @@ export default function QuotationViewPage() {
               </div>
             </div>
 
-            <div className="flex items-start justify-end">
+            <div className="quotation-logo flex items-start justify-end">
               {companyLogoUrl ? (
                 <img
                   src={companyLogoUrl}
@@ -584,17 +727,15 @@ export default function QuotationViewPage() {
                 />
               ) : null}
             </div>
-          </div>
 
-          <div className="-mt-5 text-center">
-            <h1 className="m-0 text-[28px] font-bold uppercase text-black underline decoration-[1.5px] underline-offset-4 md:text-[31px]" style={{ letterSpacing: 'normal' }}>
+            <h1 className="quotation-title m-0 text-[20px] font-bold uppercase text-black underline decoration-[1.5px] underline-offset-4" style={{ letterSpacing: 'normal' }}>
               QUOTATION
             </h1>
           </div>
 
-          <div className="mt-3 text-[13px] text-black">
+          <div className="quotation-recipient mt-3 text-[14px] text-black">
             <div className="mb-1 font-bold uppercase">To,</div>
-            <div className="leading-snug text-[13px] font-medium">
+            <div className="leading-snug text-[14px] font-medium">
               <div>{quotation.contactPerson || '—'}</div>
               <div>{quotation.companyName || '—'}</div>
               {(() => {
@@ -612,19 +753,19 @@ export default function QuotationViewPage() {
             </div>
           </div>
 
-          <div className="mt-3 text-[12px] text-black">
+          <div className="quotation-subject mt-3 text-[14px] text-black">
             <span className="font-semibold">Subject:</span>
             <span className="ml-1 font-medium uppercase">{subject}</span>
           </div>
 
-          <div className="mt-3 text-[13px] leading-relaxed text-black">
+          <div className="quotation-introduction mt-3 text-[14px] leading-relaxed text-black">
             <div className="font-semibold">Dear Sir/Madam,</div>
             <div className="mt-1 font-medium">We are pleased to send our best quote for the following products enquired.</div>
           </div>
 
          {/* <div className="mt-2 overflow-hidden" style={{ border: '0.3px solid #000000' }}> */}
-         <div className="quotation-products-table mt-2 overflow-hidden">
-            <table className="w-full text-[10px] text-black" style={{ fontFamily: '"Times New Roman", Times, serif', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <div className="quotation-products-table mt-2 overflow-hidden">
+          <table className="w-full text-[14px] text-black" style={{ fontFamily: '"Times New Roman", Times, serif', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '5%' }} />
                 <col style={{ width: '14%' }} />
@@ -647,12 +788,6 @@ export default function QuotationViewPage() {
                   <th colSpan={2} className="px-1 py-1 text-center font-bold align-middle" style={{ width: '14%', border: '0.3px solid #000000' }}>GST (INR)</th>
                   <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '13%', border: '0.3px solid #000000' }}>Total<br />Price(INR)</th>
                 </tr>
-                {/* <tr style={{ height: '16px' }}>
-                  <th colSpan={6} style={{ backgroundColor: '#ffffff', border: '0.3px solid #000000', padding: 0 }} />
-                  <th className="px-0.5 py-0 text-center font-bold align-middle text-[9px]" style={{ width: '7%', border: '0.3px solid #000000' }}>CGST<br />9%</th>
-                  <th className="px-0.5 py-0 text-center font-bold align-middle text-[9px]" style={{ width: '7%', border: '0.3px solid #000000' }}>SGST<br />9%</th>
-                  <th style={{ backgroundColor: '#ffffff', border: '0.3px solid #000000', padding: 0 }} />
-                </tr> */}
               </thead>
               <tbody>
                 {products.length > 0 ? (
@@ -677,7 +812,7 @@ export default function QuotationViewPage() {
                         <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(product.unitPrice)}</td>
                         <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(subtotal)}</td>
                         <td
-                          className="px-1 py-1 text-center align-middle text-[9px]"
+                          className="px-1 py-1 text-center align-middle text-[14px]"
                           style={{
                             border: '0.3px solid #000000',
                             verticalAlign: 'middle',
@@ -693,7 +828,7 @@ export default function QuotationViewPage() {
                         </td>
 
                         <td
-                          className="px-1 py-1 text-center align-middle text-[9px]"
+                          className="px-1 py-1 text-center align-middle text-[14px]"
                           style={{
                             border: '0.3px solid #000000',
                             verticalAlign: 'middle',
@@ -730,7 +865,7 @@ export default function QuotationViewPage() {
           </div>
 
 <div
-  className="mt-3 text-[12px] text-black"
+  className="quotation-terms mt-3 text-[14px] text-black"
   style={{
     fontFamily: '"Times New Roman", Times, serif',
     lineHeight: '1.3',
@@ -774,11 +909,11 @@ export default function QuotationViewPage() {
   </ol>
 </div>
 
-          <div
-  className="mt-4 leading-tight text-black"
+            <div
+          className="quotation-closing mt-4 leading-tight text-black"
   style={{
     fontFamily: '"Times New Roman", Times, serif',
-    fontSize: '12px',
+    fontSize: '14px',
   }}
 >
   <p className="m-0">
@@ -806,7 +941,7 @@ export default function QuotationViewPage() {
 
           <div className="quotation-branding-block">
             {partnerLogoUrl && (
-              <div className="mt-0 flex justify-center pt-4">
+              <div className="quotation-partner-logo mt-0 flex justify-center pt-4">
                 <img
                   src={partnerLogoUrl}
                   alt="Company partner logo"
@@ -815,7 +950,7 @@ export default function QuotationViewPage() {
               </div>
             )}
 
-            <div className="quotation-footer mt-4 border-t border-[#2b2b2b] pt-3 text-center text-[11px] text-black">
+            <div className="quotation-footer mt-4 border-t border-[#2b2b2b] pt-3 text-center text-[14px] text-black">
               <div className="font-bold text-black">{companyProfile?.companyName || 'Company Name'}</div>
               <div className="mt-1">
                 {companyProfile?.address || ''}

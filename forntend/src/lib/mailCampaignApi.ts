@@ -57,6 +57,8 @@ export interface MailCampaignRecord {
   recipientGroup: string[]
   recipientEmails: string[]
   recipientCount: number
+  batchName?: string
+  batchNumber?: number
   campaignBody: string
   footer: string
   image: string

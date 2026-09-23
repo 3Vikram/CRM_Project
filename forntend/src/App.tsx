@@ -40,6 +40,8 @@ import RenewalsPage from '@/pages/RenewalsPage'
 import DataAdminPage from '@/pages/DataAdminPage'
 import EmployeesPage from '@/pages/EmployeesPage'
 import EmployeeFormPage from '@/pages/EmployeeFormPage'
+import ReportsPage from '@/pages/ReportsPage'
+import ReportDetailPage from '@/pages/ReportDetailPage'
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -463,6 +465,23 @@ export default function App() {
           element={
             <SalesLayout>
               <PlaceholderPage module="Activity Reports" />
+            </SalesLayout>
+          }
+        />
+
+        <Route
+          path="/reports"
+          element={
+            <SalesLayout>
+              <ReportsPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/reports/:reportKey"
+          element={
+            <SalesLayout>
+              <ReportDetailPage />
             </SalesLayout>
           }
         />

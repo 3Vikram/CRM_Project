@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { Search, Plus, MoreVertical, MessageCircle } from 'lucide-react'
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Tooltip } from '@mui/material'
-import { deleteContact, fetchContacts, moveContactToCustomer, type ContactRecord } from '@/lib/contactApi'
+import { deleteContact, fetchContacts, moveContactToCustomer, type ContactBatchSummary, type ContactRecord } from '@/lib/contactApi'
 
 const PAGE_SIZE = 20
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
@@ -14,6 +14,8 @@ export default function ContactsPage() {
   const navigate = useNavigate()
   const [allContacts, setAllContacts] = useState<ContactRecord[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [batchNumber, setBatchNumber] = useState<number | ''>('')
+  const [batches, setBatches] = useState<ContactBatchSummary[]>([])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(false)
@@ -36,12 +38,15 @@ export default function ContactsPage() {
   const loadContacts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await fetchContacts({ page: 1, limit: 1000 })
+      const response = await fetchContacts({ page: 1, limit: 1000, batchNumber: batchNumber || undefined })
       setAllContacts(response.data || [])
+      setBatches((response.batches || []).sort((left: ContactBatchSummary, right: ContactBatchSummary) => left.batchNumber - right.batchNumber))
+    } catch (error) {
+      setFeedbackMessage(error instanceof Error ? error.message : 'Unable to load contacts.')
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [batchNumber])
 
   useEffect(() => {
     void loadContacts()
@@ -108,6 +113,10 @@ export default function ContactsPage() {
           <h1 className="crm-page-heading">Contacts</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <select value={batchNumber} onChange={(event) => { setBatchNumber(event.target.value ? Number(event.target.value) : ''); setPage(1) }} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-[18px] text-gray-700">
+            <option value="">All Contacts</option>
+            {batches.map((batch) => <option key={batch.batchNumber} value={batch.batchNumber}>{batch.name} ({batch.count})</option>)}
+          </select>
           <button onClick={() => navigate('/sales/contacts/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-[18px] font-medium text-white transition hover:bg-[#1E293B]">
             <Plus className="h-4 w-4" />
             ADD NEW

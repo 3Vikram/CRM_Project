@@ -34,7 +34,7 @@ export function Sidebar() {
     { href: '/sales/funnels', label: 'Funnel', icon: Users },
     { href: '/sales/opf', label: 'OPF', icon: Building2 },
     { href: '/sales/renewals', label: 'Renewals', icon: Package2 },
-    { href: '/sales/reports', label: 'Report', icon: LayoutDashboard },
+    { href: '/reports', label: 'Reports', icon: LayoutDashboard },
     { href: '/sales/data-admin', label: 'Data Admin', icon: Package },
     { href: '/sales/employees', label: 'Employees', icon: Users },
     { href: '/sales/company-profiles', label: 'Company Profiles', icon: Building2 },

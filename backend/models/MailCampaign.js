@@ -26,6 +26,8 @@ const mailCampaignSchema = new mongoose.Schema(
     recipientModules: [{ type: String }],
     recipientGroup: [{ type: String }],
     recipientEmails: [{ type: String }],
+    batchName: { type: String, default: '' },
+    batchNumber: { type: Number, min: 1, default: null },
     recipientCount: { type: Number, default: 0 },
     campaignBody: { type: String, default: '' },
     footer: { type: String, default: '' },
