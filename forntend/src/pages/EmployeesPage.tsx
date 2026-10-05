@@ -6,6 +6,7 @@ import { Search, Plus, Download, Eye, Pencil, Trash2, UserCog } from 'lucide-rea
 import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteEmployee, fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi'
+import { PermissionGate } from '@/components/PermissionGate'
 
 const tableCellClass = 'px-3 py-3 border-r border-[#E5E7EB] align-top whitespace-nowrap'
 
@@ -135,9 +136,11 @@ export default function EmployeesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] pb-3">
         <h1 className="crm-page-heading">Employee List</h1>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={handleAddNew} className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B]">
-            ADD NEW +
-          </button>
+          <PermissionGate moduleName="employees" action="create">
+            <button type="button" onClick={handleAddNew} className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B]">
+              ADD NEW +
+            </button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -221,12 +224,16 @@ export default function EmployeesPage() {
                           <button type="button" onClick={() => handleView(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="View">
                             <Eye className="h-3.5 w-3.5" />
                           </button>
-                          <button type="button" onClick={() => handleEdit(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Edit">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button type="button" onClick={() => handleDelete(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Delete">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <PermissionGate moduleName="employees" action="edit">
+                            <button type="button" onClick={() => handleEdit(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Edit">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          </PermissionGate>
+                          <PermissionGate moduleName="employees" action="delete">
+                            <button type="button" onClick={() => handleDelete(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Delete">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </PermissionGate>
                         </div>
                       </td>
                     </tr>

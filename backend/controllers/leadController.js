@@ -149,7 +149,7 @@ exports.getLeads = async (req, res) => {
       sortOrder = 'desc',
     } = req.query;
 
-    const query = {};
+    const query = { ...(req.leadResourceFilter || {}) };
     const searchValue = regexFromSearch(search);
     if (searchValue) {
       query.$or = [

@@ -162,22 +162,32 @@ export default function DashboardPage() {
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
   const [opfs, setOpfs] = useState<OPFRecord[]>([])
   const [activities, setActivities] = useState<ActivityRecord[]>([])
+  const [quotationCount, setQuotationCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
-      const [leadResponse, customerResponse, opfResponse, activityResponse] = await Promise.all([
+      const [leadResponse, customerResponse, opfResponse, activityResponse, quotationResponse] = await Promise.all([
         fetchLeads({ limit: 1000 }),
         fetchCustomers({ limit: 1000 }),
         fetchOPFs({ limit: 1000 }),
         fetchActivities({ limit: 8, sortBy: 'createdAt', sortOrder: 'desc' }),
+        fetchLeads({ status: 'Proposal Sent', quotationType: 'rent', limit: 1000 }),
       ])
 
       setLeads(leadResponse.data ?? [])
       setCustomers(customerResponse.data ?? [])
       setOpfs(opfResponse.data ?? [])
       setActivities(activityResponse.data ?? [])
+      setQuotationCount(quotationResponse.pagination.total)
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error)
+      setLeads([])
+      setCustomers([])
+      setOpfs([])
+      setActivities([])
+      setQuotationCount(0)
     } finally {
       setLoading(false)
     }
@@ -271,8 +281,7 @@ export default function DashboardPage() {
 
   const dataset = useMemo(() => {
     const activeCustomers = selectedScope.scopeCustomers.filter((customer) => customer.status === 'Active').length
-    const quotations = selectedScope.scopeLeads.filter((lead) => lead.leadStatus === 'Proposal Sent' || Boolean(lead.quotationId)).length
-    const orderCloser = selectedScope.scopeLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length
+    const orderCloser = selectedScope.scopeOpfs.length
 
     const currentMonthLeads = selectedScope.scopeLeads
     const previousMonthLeads = selectedScope.previousLeads
@@ -303,9 +312,9 @@ export default function DashboardPage() {
       {
         key: 'quotations',
         label: 'QUOTATIONS',
-        value: quotations,
-        currentValue: currentMonthLeads.filter((lead) => lead.leadStatus === 'Proposal Sent' || Boolean(lead.quotationId)).length,
-        previousValue: previousMonthLeads.filter((lead) => lead.leadStatus === 'Proposal Sent' || Boolean(lead.quotationId)).length,
+        value: quotationCount,
+        currentValue: quotationCount,
+        previousValue: 0,
         icon: FileText,
         iconBg: 'bg-blue-100',
         iconColor: 'text-blue-700',
@@ -315,12 +324,12 @@ export default function DashboardPage() {
         key: 'orderCloser',
         label: 'CLOSED ORDERS',
         value: orderCloser,
-        currentValue: currentMonthLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length,
-        previousValue: previousMonthLeads.filter((lead) => lead.leadStatus === 'Won' || lead.isConverted).length,
+        currentValue: currentMonthOpfs.length,
+        previousValue: previousMonthOpfs.length,
         icon: TrendingUp,
         iconBg: 'bg-indigo-100',
         iconColor: 'text-indigo-700',
-        description: 'Won sales opportunities',
+        description: 'OPF records in CRM',
       },
     ]
 
@@ -381,7 +390,7 @@ export default function DashboardPage() {
 
     return {
       activeCustomers,
-      quotations,
+      quotations: quotationCount,
       orderCloser,
       metrics,
       totalPipelineValue,
@@ -400,7 +409,7 @@ export default function DashboardPage() {
       trendData,
       maxValue,
     }
-  }, [selectedMonth, selectedScope, selectedYearNumber])
+  }, [quotationCount, selectedMonth, selectedScope, selectedYearNumber])
 
   const kpiCards = dataset.metrics.map((metric) => {
     const diff = metric.currentValue - metric.previousValue

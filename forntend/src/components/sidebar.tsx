@@ -16,28 +16,33 @@ import {
   FileText,
   Building2,
 } from 'lucide-react'
+import { hasPermission } from '@/lib/permissions'
 
 export function Sidebar() {
   const { pathname } = useLocation()
   const [isExpanded, setIsExpanded] = useState(false)
 
   const menuItems = [
-    { href: '/sales/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/sales/contacts', label: 'Contact', icon: Contact },
-    { href: '/sales/mail-campaign', label: 'Mail Campaign', icon: Mail },
-    { href: '/sales/leads', label: 'Lead', icon: Zap },
-    { href: '/sales/activities', label: 'Activity', icon: Activity },
-    { href: '/sales/calendar', label: 'Calendar', icon: Package2 },
-    { href: '/sales/customers', label: 'Customer', icon: Users },
-    { href: '/sales/quotations', label: 'Quotation', icon: FileText },
-    { href: '/sales/suppliers', label: 'Supplier', icon: Package2 },
-    { href: '/sales/funnels', label: 'Funnel', icon: Users },
-    { href: '/sales/opf', label: 'OPF', icon: Building2 },
-    { href: '/sales/renewals', label: 'Renewals', icon: Package2 },
-    { href: '/reports', label: 'Reports', icon: LayoutDashboard },
-    { href: '/sales/data-admin', label: 'Data Admin', icon: Package },
-    { href: '/sales/employees', label: 'Employees', icon: Users },
-    { href: '/sales/company-profiles', label: 'Company Profiles', icon: Building2 },
+    { href: '/sales/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
+    { href: '/sales/contacts', label: 'Contact', icon: Contact, permission: 'contacts' },
+    { href: '/sales/mail-campaign', label: 'Mail Campaign', icon: Mail, permission: 'mailCampaign' },
+    { href: '/sales/leads', label: 'Lead', icon: Zap, permission: 'leads' },
+    { href: '/sales/activities', label: 'Activity', icon: Activity, permission: 'activities' },
+    { href: '/sales/calendar', label: 'Calendar', icon: Package2, permission: 'calendar' },
+    { href: '/sales/customers', label: 'Customer', icon: Users, permission: 'customers' },
+    { href: '/sales/quotations', label: 'Quotation', icon: FileText, permission: 'quotations' },
+    { href: '/sales/suppliers', label: 'Supplier', icon: Package2, permission: 'suppliers' },
+    { href: '/sales/funnels', label: 'Funnel', icon: Users, permission: 'funnels' },
+    { href: '/sales/opf', label: 'OPF', icon: Building2, permission: 'opf' },
+    { href: '/sales/renewals', label: 'Renewals', icon: Package2, permission: 'renewals' },
+    { href: '/reports', label: 'Reports', icon: LayoutDashboard, permission: 'reports' },
+    { href: '/sales/data-admin', label: 'Data Admin', icon: Package, permission: 'dataAdmin' },
+    { href: '/sales/employees', label: 'Employees', icon: Users, permission: 'employees' },
+    { href: '/sales/company-profiles', label: 'Company Profiles', icon: Building2, permission: 'companyProfiles' },
+    // { href: '/sales/inventory', label: 'Inventory', icon: Package, permission: 'inventory' },
+    // { href: '/sales/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart, permission: 'purchaseOrders' },
+    // { href: '/sales/dc-tracking', label: 'DC Tracking', icon: Truck, permission: 'dcTracking' },
+    // { href: '/sales/bill-sale', label: 'Bill Sale', icon: FileText, permission: 'billSale' },
   ]
 
   return (
@@ -55,7 +60,7 @@ export function Sidebar() {
             SALES
           </div>
           <nav className="space-y-1">
-            {menuItems.map((item) => {
+            {menuItems.filter((item) => hasPermission(item.permission)).map((item) => {
               const Icon = item.icon
               const isActive =
                 pathname === item.href || pathname.startsWith(item.href + '/')

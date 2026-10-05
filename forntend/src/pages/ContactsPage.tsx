@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { Search, Plus, MoreVertical, MessageCircle } from 'lucide-react'
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Tooltip } from '@mui/material'
-import { deleteContact, fetchContacts, moveContactToCustomer, type ContactBatchSummary, type ContactRecord } from '@/lib/contactApi'
+import { deleteContact, fetchContacts, fetchEmployeeBatchGroups, moveContactToCustomer, type ContactRecord, type EmployeeBatchGroup } from '@/lib/contactApi'
+import { PermissionGate } from '@/components/PermissionGate'
+import { getStoredAuth } from '@/lib/auth'
 
 const PAGE_SIZE = 20
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
@@ -14,8 +16,9 @@ export default function ContactsPage() {
   const navigate = useNavigate()
   const [allContacts, setAllContacts] = useState<ContactRecord[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [batchNumber, setBatchNumber] = useState<number | ''>('')
-  const [batches, setBatches] = useState<ContactBatchSummary[]>([])
+  const [employeeGroups, setEmployeeGroups] = useState<EmployeeBatchGroup[]>([])
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+  const [batchId, setBatchId] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(false)
@@ -38,15 +41,26 @@ export default function ContactsPage() {
   const loadContacts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await fetchContacts({ page: 1, limit: 1000, batchNumber: batchNumber || undefined })
+      const response = await fetchContacts({ page: 1, limit: 1000, employeeId: selectedEmployeeId || undefined, batchId: batchId || undefined })
       setAllContacts(response.data || [])
-      setBatches((response.batches || []).sort((left: ContactBatchSummary, right: ContactBatchSummary) => left.batchNumber - right.batchNumber))
     } catch (error) {
       setFeedbackMessage(error instanceof Error ? error.message : 'Unable to load contacts.')
     } finally {
       setIsLoading(false)
     }
-  }, [batchNumber])
+  }, [batchId, selectedEmployeeId])
+
+  useEffect(() => {
+    let active = true
+    fetchEmployeeBatchGroups()
+      .then((groups) => {
+        if (active) setEmployeeGroups(groups)
+      })
+      .catch((error) => {
+        if (active) setFeedbackMessage(error instanceof Error ? error.message : 'Unable to load contact batches.')
+      })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     void loadContacts()
@@ -79,6 +93,9 @@ export default function ContactsPage() {
     if (totalCount === 0) return 'Showing 0 to 0 of 0 entries'
     return `Showing ${(page - 1) * pageSize + 1} to ${Math.min(page * pageSize, totalCount)} of ${totalCount} entries`
   }, [page, pageSize, totalCount])
+  const session = getStoredAuth()
+  const ownerGroup = employeeGroups.find((group) => group.employeeId === session?.user.id || group.employeeEmail?.toLowerCase() === session?.user.email.toLowerCase()) || employeeGroups[0]
+  const ownerName = ownerGroup?.employeeName || session?.user.name || session?.user.email || 'User'
 
   const handleDelete = useCallback(async (id: string) => {
     if (!id) return
@@ -111,16 +128,30 @@ export default function ContactsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="crm-page-heading">Contacts</h1>
+          <p className="mt-1 text-sm font-medium text-gray-600">{ownerName} ({ownerGroup?.customerCount || 0})</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <select value={batchNumber} onChange={(event) => { setBatchNumber(event.target.value ? Number(event.target.value) : ''); setPage(1) }} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-[18px] text-gray-700">
-            <option value="">All Contacts</option>
-            {batches.map((batch) => <option key={batch.batchNumber} value={batch.batchNumber}>{batch.name} ({batch.count})</option>)}
+          <select value={batchId ? `${selectedEmployeeId}:${batchId}` : ''} onChange={(event) => {
+            const [nextEmployeeId = '', nextBatchId = ''] = event.target.value.split(':')
+            setSelectedEmployeeId(nextEmployeeId)
+            setBatchId(nextBatchId)
+            setPage(1)
+          }} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-[18px] text-gray-700">
+            <option value="">All Batches</option>
+            {employeeGroups.map((group) => (
+              <optgroup key={group.employeeId} label={group.employeeName}>
+                {group.batches.filter((batch) => batch._id && batch.employeeId).map((batch) => (
+                  <option key={batch._id} value={`${batch.employeeId}:${batch._id}`}>{batch.name} ({batch.customerCount})</option>
+                ))}
+              </optgroup>
+            ))}
           </select>
-          <button onClick={() => navigate('/sales/contacts/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-[18px] font-medium text-white transition hover:bg-[#1E293B]">
-            <Plus className="h-4 w-4" />
-            ADD NEW
-          </button>
+          <PermissionGate moduleName="contacts" action="create">
+            <button onClick={() => navigate('/sales/contacts/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-[18px] font-medium text-white transition hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" />
+              ADD NEW
+            </button>
+          </PermissionGate>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -337,8 +368,12 @@ const ContactTableRow = memo(function ContactTableRow({
         className="fixed z-[1000] w-44 rounded-lg border border-[#E5E7EB] bg-white py-1 text-left shadow-lg"
         style={{ top: menuPosition.top, left: menuPosition.left }}
       >
-        <button type="button" onClick={() => { onCloseMenu(); onEdit(contact._id) }} className="block w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Edit</button>
-        <button type="button" onClick={() => { onCloseMenu(); onDelete(contact._id) }} className="block w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Delete</button>
+        <PermissionGate moduleName="contacts" action="edit">
+          <button type="button" onClick={() => { onCloseMenu(); onEdit(contact._id) }} className="block w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Edit</button>
+        </PermissionGate>
+        <PermissionGate moduleName="contacts" action="delete">
+          <button type="button" onClick={() => { onCloseMenu(); onDelete(contact._id) }} className="block w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Delete</button>
+        </PermissionGate>
         <button
           type="button"
           onClick={() => { onCloseMenu(); onMoveToCustomer() }}

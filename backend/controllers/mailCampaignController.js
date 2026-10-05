@@ -9,9 +9,11 @@ const EmailLog = require('../models/EmailLog');
 const Counter = require('../models/Counter');
 const Customer = require('../models/Customer');
 const Contact = require('../models/Contact');
+const CustomerBatch = require('../models/CustomerBatch');
 const CompanyProfile = require('../models/CompanyProfile');
 const Lead = require('../models/Lead');
 const Supplier = require('../models/Supplier');
+const { buildEmployeeGroups } = require('./contactController');
 const { sendCampaignEmails } = require('../services/emailService');
 const logger = require('../utils/logger');
 
@@ -144,7 +146,7 @@ const parseCampaignGroups = (value) => {
   });
 };
 
-const resolveContactRecipients = async (groups, batchName = '', batchNumber = null) => {
+const resolveContactRecipients = async (groups, batchName = '', batchNumber = null, employeeId = '', batchId = '') => {
   const requestedContactIds = [...new Set(groups.flatMap((group) => group.contactIds).filter(Boolean))];
   const contactIds = requestedContactIds.filter((id) => mongoose.isValidObjectId(id));
   if (requestedContactIds.length && contactIds.length !== requestedContactIds.length) {
@@ -152,11 +154,15 @@ const resolveContactRecipients = async (groups, batchName = '', batchNumber = nu
     error.name = 'CastError';
     throw error;
   }
-  const contactQuery = contactIds.length
-    ? { _id: { $in: contactIds }, email: { $regex: validEmailRegex } }
-    : { email: { $regex: validEmailRegex } };
+  const contactQuery = employeeId
+    ? contactIds.length
+      ? { _id: { $in: contactIds }, email: { $regex: validEmailRegex }, employeeId }
+      : { email: { $regex: validEmailRegex }, employeeId }
+    : { _id: { $in: [] } };
   if (batchName) contactQuery.batchName = batchName;
   if (Number.isInteger(Number(batchNumber)) && Number(batchNumber) > 0) contactQuery.batchNumber = Number(batchNumber);
+  if (batchId) contactQuery.batchId = batchId;
+  if (employeeId) contactQuery.employeeId = employeeId;
   const contacts = await Contact.find(contactQuery).select('_id email').lean();
   const emailByContactId = new Map(contacts.map((contact) => [String(contact._id), String(contact.email).trim().toLowerCase()]));
 
@@ -344,11 +350,86 @@ const getEmailList = async (Model, fieldName, filter = {}) => {
     .filter((email, index, arr) => arr.indexOf(email) === index);
 };
 
-exports.getRecipientCounts = async (_req, res) => {
+const getCampaignOwner = async (req, requestedEmployeeId) => {
+  if (req.user?.role !== 'admin') {
+    const employeeId = String(req.user?.id || '').trim();
+    const employee = Employee ? await Employee.findById(employeeId).select('employeeName fullName').lean() : null;
+    if (!employee) throw new Error('Authenticated employee record was not found.');
+    return { employeeId, employeeName: employee.employeeName || employee.fullName || employeeId };
+  }
+
+  const employeeId = String(requestedEmployeeId || '').trim();
+  if (!employeeId) return { employeeId: '', employeeName: '' };
+  if (employeeId === String(req.user.id)) return { employeeId, employeeName: String(req.user.name || req.user.email || 'Administrator') };
+  const employee = Employee && employeeId ? await Employee.findById(employeeId).select('employeeName fullName').lean() : null;
+  if (!employee) {
+    const error = new Error('Select an existing employee or Admin for the campaign batch.');
+    error.name = 'ValidationError';
+    throw error;
+  }
+  return { employeeId, employeeName: employee.employeeName || employee.fullName || employeeId };
+};
+
+const invalidBatchSelection = () => {
+  const error = new Error('The selected batch does not belong to the selected employee.');
+  error.name = 'ValidationError';
+  return error;
+};
+
+const resolveCampaignSelection = async (req, requestedBatchId, requestedEmployeeId = '', requestedBatchNumber = null) => {
+  const isAdmin = req.user?.role === 'admin';
+  const authenticatedEmployeeId = isAdmin ? '' : String(req.user?.id || '').trim();
+  let batch = null;
+
+  if (requestedBatchId) {
+    if (!mongoose.isValidObjectId(requestedBatchId)) throw invalidBatchSelection();
+    batch = await CustomerBatch.findById(requestedBatchId).lean();
+  } else if (requestedEmployeeId && Number(requestedBatchNumber) > 0) {
+    const ownerId = isAdmin ? String(requestedEmployeeId) : authenticatedEmployeeId;
+    batch = await CustomerBatch.findOne({ employeeId: ownerId, batchNumber: Number(requestedBatchNumber) }).lean();
+  }
+
+  if (batch && !isAdmin && String(batch.employeeId) !== authenticatedEmployeeId) throw invalidBatchSelection();
+  if (requestedBatchId && !batch) throw invalidBatchSelection();
+
+  if (!isAdmin) {
+    const employee = Employee ? await Employee.findById(authenticatedEmployeeId).select('employeeName fullName').lean() : null;
+    if (!employee) throw new Error('Authenticated employee record was not found.');
+    return {
+      employeeId: authenticatedEmployeeId,
+      employeeName: employee.employeeName || employee.fullName || authenticatedEmployeeId,
+      batchId: batch ? String(batch._id) : '',
+      batchNumber: batch?.batchNumber || null,
+      batchName: batch ? `Batch ${batch.batchNumber}` : '',
+    };
+  }
+
+  if (batch) {
+    const batchOwnerId = String(batch.employeeId);
+    const owner = batchOwnerId === String(req.user.id)
+      ? null
+      : Employee ? await Employee.findById(batchOwnerId).select('employeeName fullName').lean() : null;
+    return {
+      employeeId: batchOwnerId,
+      employeeName: owner?.employeeName || owner?.fullName || batch.employeeName || req.user.name || req.user.email,
+      batchId: String(batch._id),
+      batchNumber: batch.batchNumber,
+      batchName: `Batch ${batch.batchNumber}`,
+    };
+  }
+
+  if (requestedEmployeeId) {
+    const owner = await getCampaignOwner(req, requestedEmployeeId);
+    return { ...owner, batchId: '', batchNumber: null, batchName: '' };
+  }
+  return { employeeId: '', employeeName: '', batchId: '', batchNumber: null, batchName: '' };
+};
+
+exports.getRecipientCounts = async (req, res) => {
   try {
     const [customers, contacts, leads, suppliers, employees] = await Promise.all([
       Customer.countDocuments({ email: { $regex: validEmailRegex } }),
-      Contact.countDocuments({ email: { $regex: validEmailRegex } }),
+      Contact.countDocuments({ ...(req.user?.role === 'admin' ? {} : { employeeId: String(req.user?.id || '') }), email: { $regex: validEmailRegex } }),
       Lead.countDocuments({ email: { $regex: validEmailRegex } }),
       Supplier.countDocuments({ emailId: { $regex: validEmailRegex } }),
       Employee ? Employee.countDocuments({ email: { $regex: validEmailRegex } }) : 0,
@@ -384,7 +465,7 @@ exports.getRecipientData = async (req, res) => {
       if (moduleName === 'Customers') {
         data[moduleName] = await getEmailList(Customer, 'email');
       } else if (moduleName === 'Contacts') {
-        data[moduleName] = await getEmailList(Contact, 'email');
+        data[moduleName] = await getEmailList(Contact, 'email', req.user?.role === 'admin' ? {} : { employeeId: String(req.user?.id || '') });
       } else if (moduleName === 'Leads') {
         data[moduleName] = await getEmailList(Lead, 'email');
       } else if (moduleName === 'Suppliers') {
@@ -396,13 +477,9 @@ exports.getRecipientData = async (req, res) => {
       }
     }
 
-    data.batchNames = await Contact.distinct('batchName', { batchName: { $nin: ['', null] } });
-    data.batches = await Contact.aggregate([
-      { $match: { batchNumber: { $gte: 1 } } },
-      { $group: { _id: '$batchNumber', count: { $sum: 1 } } },
-      { $project: { _id: 0, batchNumber: '$_id', name: { $concat: ['Batch ', { $toString: '$_id' }] }, count: 1 } },
-      { $sort: { batchNumber: 1 } },
-    ]);
+    data.employeeGroups = await buildEmployeeGroups(req, req.user?.role === 'admin');
+    data.batchNames = [...new Set(data.employeeGroups.flatMap((group) => group.batches.map((batch) => batch.name)))];
+    data.batches = data.employeeGroups.flatMap((group) => group.batches.map((batch) => ({ ...batch, employeeId: group.employeeId, employeeName: group.employeeName })));
     res.status(200).json({ success: true, data });
   } catch (error) {
     console.error('Failed to load recipient details:', error);
@@ -888,8 +965,8 @@ exports.getCampaignPreview = async (req, res) => {
 exports.createCampaign = async (req, res) => {
   try {
     const incomingGroups = parseCampaignGroups(req.body.campaignGroups);
-    const batchName = String(req.body.batchName || '').trim();
-    const batchNumber = Number(req.body.batchNumber) > 0 ? Number(req.body.batchNumber) : null;
+    const selection = await resolveCampaignSelection(req, req.body.batchId, req.body.employeeId, req.body.batchNumber);
+    const { employeeId, employeeName, batchId, batchNumber, batchName } = selection;
     const recipientEmails = parseArrayField(req.body.recipientEmails);
     const legacyGroups = incomingGroups.length ? incomingGroups : [{
       groupName: 'Campaign Group 1',
@@ -910,7 +987,7 @@ exports.createCampaign = async (req, res) => {
       deliveryResults: Array.isArray(group.deliveryResults) ? group.deliveryResults : [],
     }));
 
-    const resolvedGroups = await resolveContactRecipients(finalGroups, batchName, batchNumber);
+    const resolvedGroups = await resolveContactRecipients(finalGroups, batchName, batchNumber, employeeId, batchId);
     const flattenedRecipientEmails = [...new Set(resolvedGroups.flatMap((group) => group.recipientEmails))];
     const campaignStatus = req.body.status || 'Draft';
 
@@ -919,6 +996,9 @@ exports.createCampaign = async (req, res) => {
     }
     if (!req.body.subject?.trim()) {
       return res.status(400).json({ success: false, message: 'Subject is required.' });
+    }
+    if (campaignStatus !== 'Draft' && (!employeeId || !batchNumber || !batchId)) {
+      return res.status(400).json({ success: false, message: 'Select an employee and one of their contact batches.' });
     }
     if (!flattenedRecipientEmails.length && campaignStatus !== 'Draft') {
       return res.status(400).json({ success: false, message: 'No Contacts with valid email addresses are available for this campaign.' });
@@ -939,6 +1019,9 @@ exports.createCampaign = async (req, res) => {
       recipientEmails: flattenedRecipientEmails,
       batchName,
       batchNumber,
+      batchId: batchId || null,
+      employeeId,
+      employeeName,
       recipientCount: flattenedRecipientEmails.length,
       campaignBody: sanitize(req.body.campaignBody || finalGroups[0]?.message || ''),
       footer: sanitize(req.body.footer || ''),
@@ -991,8 +1074,8 @@ exports.updateCampaign = async (req, res) => {
     if (!existing) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
     const incomingGroups = parseCampaignGroups(req.body.campaignGroups);
-    const batchName = String(req.body.batchName || existing.batchName || '').trim();
-    const batchNumber = Number(req.body.batchNumber || existing.batchNumber) > 0 ? Number(req.body.batchNumber || existing.batchNumber) : null;
+    const selection = await resolveCampaignSelection(req, req.body.batchId || existing.batchId, req.body.employeeId || existing.employeeId, req.body.batchNumber || existing.batchNumber);
+    const { employeeId, employeeName, batchId, batchNumber, batchName } = selection;
     const recipientEmails = parseArrayField(req.body.recipientEmails || existing.recipientEmails);
     const legacyGroups = incomingGroups.length ? incomingGroups : [{
       groupName: 'Campaign Group 1',
@@ -1013,7 +1096,7 @@ exports.updateCampaign = async (req, res) => {
       deliveryResults: Array.isArray(group.deliveryResults) ? group.deliveryResults : [],
     }));
 
-    const resolvedGroups = await resolveContactRecipients(finalGroups, batchName, batchNumber);
+    const resolvedGroups = await resolveContactRecipients(finalGroups, batchName, batchNumber, employeeId, batchId);
     const flattenedRecipientEmails = [...new Set(resolvedGroups.flatMap((group) => group.recipientEmails))];
     const campaignStatus = req.body.status || existing.status || 'Draft';
 
@@ -1029,6 +1112,9 @@ exports.updateCampaign = async (req, res) => {
       recipientEmails: flattenedRecipientEmails,
       batchName,
       batchNumber,
+      batchId: batchId || null,
+      employeeId,
+      employeeName,
       recipientCount: flattenedRecipientEmails.length,
       campaignBody: sanitize(req.body.campaignBody || finalGroups[0]?.message || existing.campaignBody || ''),
       footer: sanitize(req.body.footer || existing.footer || ''),
@@ -1047,7 +1133,7 @@ exports.updateCampaign = async (req, res) => {
       campaignGroups: resolvedGroups,
     };
 
-    if (!payload.campaignName || !resolvedGroups.length || (campaignStatus !== 'Draft' && !flattenedRecipientEmails.length)) {
+    if (!payload.campaignName || !resolvedGroups.length || (campaignStatus !== 'Draft' && (!employeeId || !batchNumber || !flattenedRecipientEmails.length))) {
       return res.status(400).json({ success: false, message: 'Please select at least one contact with a valid email address.' });
     }
     if (campaignStatus === 'Scheduled' && (!payload.scheduledDate || !payload.scheduledTime)) {
@@ -1116,7 +1202,7 @@ exports.sendCampaign = async (req, res) => {
       }
       subject = targetGroup.subject || campaign.subject || '';
       htmlBody = targetGroup.message || campaign.campaignBody || '<p>Campaign email</p>';
-      const [refreshedGroup] = await resolveContactRecipients([targetGroup], campaign.batchName || '', campaign.batchNumber);
+      const [refreshedGroup] = await resolveContactRecipients([targetGroup], campaign.batchName || '', campaign.batchNumber, campaign.employeeId || '', String(campaign.batchId || ''));
       recipients = refreshedGroup.recipientEmails;
       targetGroup.contactIds = refreshedGroup.contactIds;
       targetGroup.recipientEmails = refreshedGroup.recipientEmails;
@@ -1124,7 +1210,7 @@ exports.sendCampaign = async (req, res) => {
       targetGroup.sentDate = '';
       await campaign.save();
     } else {
-      const refreshedGroups = await resolveContactRecipients(campaign.campaignGroups || [{ contactIds: [] }], campaign.batchName || '', campaign.batchNumber);
+      const refreshedGroups = await resolveContactRecipients(campaign.campaignGroups || [{ contactIds: [] }], campaign.batchName || '', campaign.batchNumber, campaign.employeeId || '', String(campaign.batchId || ''));
       recipients = refreshedGroups.flatMap((group) => group.recipientEmails);
       campaign.campaignGroups = refreshedGroups;
       campaign.recipientEmails = [...new Set(recipients)];

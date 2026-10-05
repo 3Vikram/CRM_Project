@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuthHeaders } from './apiAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -112,31 +113,43 @@ export async function fetchOPFs(params: {
   if (params.approvalStatus && params.approvalStatus !== 'all') searchParams.set('approvalStatus', params.approvalStatus);
   if (params.product && params.product !== 'all') searchParams.set('product', params.product);
 
-  const response = await axios.get(`${API_BASE_URL}/opf?${searchParams.toString()}`);
+  const response = await axios.get(`${API_BASE_URL}/opf?${searchParams.toString()}`, {
+    headers: getAuthHeaders(),
+  });
   return response.data as OPFListResponse;
 }
 
 export async function fetchOPFById(id: string) {
-  const response = await axios.get(`${API_BASE_URL}/opf/${id}`);
+  const response = await axios.get(`${API_BASE_URL}/opf/${id}`, {
+    headers: getAuthHeaders(),
+  });
   return response.data?.data ?? null;
 }
 
 export async function createOPF(payload: FormData) {
   const response = await axios.post(`${API_BASE_URL}/opf`, payload, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
   });
   return response.data;
 }
 
 export async function updateOPF(id: string, payload: FormData) {
   const response = await axios.put(`${API_BASE_URL}/opf/${id}`, payload, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'multipart/form-data',
+    },
   });
   return response.data;
 }
 
 export async function deleteOPF(id: string) {
-  const response = await axios.delete(`${API_BASE_URL}/opf/${id}`);
+  const response = await axios.delete(`${API_BASE_URL}/opf/${id}`, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
@@ -144,6 +157,8 @@ export async function sendOPFPdf(id: string, pdfData: string, recipientEmail: st
   const response = await axios.post(`${API_BASE_URL}/opf/${id}/send-pdf`, {
     pdfData,
     recipientEmail,
+  }, {
+    headers: getAuthHeaders(),
   });
   return response.data;
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Eye, Pencil, Trash2 } from 'lucide-react'
 import { deleteCompanyProfile, fetchCompanyProfiles, type CompanyProfileRecord } from '@/lib/companyProfileApi'
+import { PermissionGate } from '@/components/PermissionGate'
 
 const PAGE_SIZE = 20
 
@@ -64,10 +65,12 @@ export default function CompanyProfilesPage() {
           {/* <p className="text-gray-600">View all saved company profiles and quotation integration settings.</p> */}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => navigate('/sales/company-profiles/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
-            <Plus className="h-4 w-4" />
-            Add New
-          </button>
+          <PermissionGate moduleName="companyProfiles" action="create">
+            <button onClick={() => navigate('/sales/company-profiles/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" />
+              Add New
+            </button>
+          </PermissionGate>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -167,14 +170,18 @@ export default function CompanyProfilesPage() {
                   <td className="border border-[#E5E7EB] px-3 py-2 align-top text-[11px] leading-5">{profile.cin || '-'}</td>
                   <td className="border border-[#E5E7EB] px-3 py-2 align-top text-[11px] leading-5">{profile.iec || '-'}</td>
                   <td className="border border-[#E5E7EB] px-3 py-2 align-top text-[11px] leading-5">
-                    <button onClick={() => navigate(`/sales/company-profiles/edit/${profile._id}`)} className="inline-flex items-center justify-center rounded-lg bg-[#F2EFE8] px-2 py-1 text-[11px] font-semibold text-slate-800 hover:bg-[#E7E3DA]">
-                      Edit
-                    </button>
+                    <PermissionGate moduleName="companyProfiles" action="edit">
+                      <button onClick={() => navigate(`/sales/company-profiles/edit/${profile._id}`)} className="inline-flex items-center justify-center rounded-lg bg-[#F2EFE8] px-2 py-1 text-[11px] font-semibold text-slate-800 hover:bg-[#E7E3DA]">
+                        Edit
+                      </button>
+                    </PermissionGate>
                   </td>
                   <td className="border border-[#E5E7EB] px-3 py-2 align-top text-[11px] leading-5">
-                    <button onClick={() => handleDelete(profile._id)} className="inline-flex items-center justify-center rounded-lg bg-[#FEF2F2] px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-[#FEE2E2]">
-                      Delete
-                    </button>
+                    <PermissionGate moduleName="companyProfiles" action="delete">
+                      <button onClick={() => handleDelete(profile._id)} className="inline-flex items-center justify-center rounded-lg bg-[#FEF2F2] px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-[#FEE2E2]">
+                        Delete
+                      </button>
+                    </PermissionGate>
                   </td>
                 </tr>
               ))}

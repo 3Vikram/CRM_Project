@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { StatCard } from '@/components/stat-card'
 import { LeadDetailsDrawer } from '@/components/LeadDetailsDrawer'
+import { PermissionGate } from '@/components/PermissionGate'
 import { Toast } from '@/components/toast'
 import { fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/lib/leadApi'
 import { fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi'
@@ -260,11 +261,11 @@ export default function LeadsPage({
           <h1 className="crm-page-heading">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {showAddButton && (
+          {showAddButton && <PermissionGate moduleName="leads" action="create">
             <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> {addButtonLabel}
             </button>
-          )}
+          </PermissionGate>}
           <button className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
             <Download className="h-4 w-4" /> Download Report
           </button>
@@ -362,7 +363,7 @@ export default function LeadsPage({
                             }}
                           >
                             <button onClick={() => handleAction('view', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Eye className="h-4 w-4" /> View Lead</button>
-                            <button onClick={() => handleAction('edit', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /> Edit Lead</button>
+                            <PermissionGate moduleName="leads" action="edit"><button onClick={() => handleAction('edit', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /> Edit Lead</button></PermissionGate>
                             <button onClick={() => handleAction('owner', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Users className="h-4 w-4" /> Assign Owner</button>
                             <button onClick={() => handleAction('followup', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Schedule Follow-up</button>
                             <button onClick={() => handleAction('activity', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Move To Activity</button>
@@ -370,7 +371,7 @@ export default function LeadsPage({
                             <button onClick={() => handleAction('quotation', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><FileText className="h-4 w-4" /> Generate Quotation</button>
                             <button onClick={() => handleAction('convert', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><CheckCircle2 className="h-4 w-4" /> Convert To Customer</button>
                             <button onClick={() => handleAction('scrap', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><XCircle className="h-4 w-4" /> Scrap Lead</button>
-                            <button onClick={() => handleAction('delete', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" /> Delete</button>
+                            <PermissionGate moduleName="leads" action="delete"><button onClick={() => handleAction('delete', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" /> Delete</button></PermissionGate>
                           </div>,
                           document.body
                         )}

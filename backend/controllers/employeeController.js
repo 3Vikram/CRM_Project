@@ -3,38 +3,38 @@ const Employee = require('../models/Employee');
 const Counter = require('../models/Counter');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 
+const permissionModules = [
+  'customers', 'contacts', 'leads', 'activities', 'mailCampaign', 'suppliers',
+  'quotations', 'opf', 'calendar', 'funnels', 'renewals', 'reports', 'dataAdmin',
+  'employees', 'companyProfiles', 'inventory', 'purchaseOrders', 'dcTracking', 'billSale',
+];
+
 const defaultPermissions = () => ({
-  dashboard: true,
-  customers: { view: true, create: false, edit: false, delete: false },
-  contacts: { view: true, create: false, edit: false, delete: false },
-  leads: { view: true, create: false, edit: false, delete: false },
-  activities: { view: true, create: false, edit: false, delete: false },
-  mailCampaign: { view: true, create: false, edit: false, delete: false },
-  suppliers: { view: true, create: false, edit: false, delete: false },
-  quotations: { view: true, create: false, edit: false, delete: false },
-  opf: { view: true, create: false, edit: false, delete: false },
+  dashboard: false,
+  ...Object.fromEntries(permissionModules.map((moduleName) => [moduleName, {
+    view: false,
+    create: false,
+    edit: false,
+    delete: false,
+  }])),
 });
 
 const normalizePermissionBlock = (value = {}) => {
   const source = value && typeof value === 'object' ? value : {};
-  const block = (moduleName, fallback) => ({
-    view: Boolean(source?.[moduleName]?.view ?? fallback.view),
-    create: Boolean(source?.[moduleName]?.create ?? fallback.create),
-    edit: Boolean(source?.[moduleName]?.edit ?? fallback.edit),
-    delete: Boolean(source?.[moduleName]?.delete ?? fallback.delete),
+  const normalized = defaultPermissions();
+  normalized.dashboard = Boolean(source.dashboard ?? false);
+
+  permissionModules.forEach((moduleName) => {
+    const block = source[moduleName] && typeof source[moduleName] === 'object' ? source[moduleName] : {};
+    normalized[moduleName] = {
+      view: Boolean(block.view ?? false),
+      create: Boolean(block.create ?? false),
+      edit: Boolean(block.edit ?? false),
+      delete: Boolean(block.delete ?? false),
+    };
   });
 
-  return {
-    dashboard: Boolean(source.dashboard ?? true),
-    customers: block('customers', { view: true, create: false, edit: false, delete: false }),
-    contacts: block('contacts', { view: true, create: false, edit: false, delete: false }),
-    leads: block('leads', { view: true, create: false, edit: false, delete: false }),
-    activities: block('activities', { view: true, create: false, edit: false, delete: false }),
-    mailCampaign: block('mailCampaign', { view: true, create: false, edit: false, delete: false }),
-    suppliers: block('suppliers', { view: true, create: false, edit: false, delete: false }),
-    quotations: block('quotations', { view: true, create: false, edit: false, delete: false }),
-    opf: block('opf', { view: true, create: false, edit: false, delete: false }),
-  };
+  return normalized;
 };
 
 const normaliseEmployeePayload = (body = {}) => {
@@ -62,7 +62,7 @@ const normaliseEmployeePayload = (body = {}) => {
   const phone = payload.phone || payload.contactNo || '';
 
   const next = {
-    employeeCode: employeeCode ? String(employeeCode).trim().toUpperCase() : '',
+    employeeCode: employeeCode ? String(employeeCode).trim().toUpperCase() : undefined,
     officialEmployeeId: employeeCode ? String(employeeCode).trim().toUpperCase() : '',
     employeeName: employeeName ? String(employeeName).trim() : '',
     fullName: employeeName ? String(employeeName).trim() : '',
@@ -134,6 +134,8 @@ const serializeEmployee = (employee) => {
     address: source.address || '',
     notes: source.notes || '',
     createdBy: source.createdBy || 'Admin',
+    crudOption: Array.isArray(source.crudOption) ? source.crudOption : [],
+    modulesOption: Array.isArray(source.modulesOption) ? source.modulesOption : [],
     permissions: normalizePermissionBlock(source.permissions || defaultPermissions()),
     createdAt: source.createdAt || null,
     updatedAt: source.updatedAt || null,
@@ -211,12 +213,13 @@ exports.createEmployee = async (req, res) => {
     if (!payload.employeeName || !payload.email) {
       return res.status(400).json({ success: false, message: 'Employee name and email are required.' });
     }
-
-    if (payload.password) {
-      payload.passwordHash = await hashEmployeePassword(payload.password);
-      payload.passwordSalt = '';
-      delete payload.password;
+    if (!payload.password || !String(payload.password).trim()) {
+      return res.status(400).json({ success: false, message: 'Employee password is required.' });
     }
+
+    payload.passwordHash = await hashEmployeePassword(payload.password);
+    payload.passwordSalt = '';
+    delete payload.password;
 
     if (!payload.employeeCode) {
       payload.employeeCode = await generateEmployeeCode();

@@ -1,5 +1,8 @@
 const Contact = require('../models/Contact');
 const Customer = require('../models/Customer');
+const CustomerBatch = require('../models/CustomerBatch');
+const Employee = require('../models/Employee');
+const Counter = require('../models/Counter');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = require('../utils/queryUtils');
@@ -7,6 +10,25 @@ const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = r
 const normalizePhone = (value = '') => value.replace(/[^\d+]/g, '').trim();
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const importEmailPattern = /^\S+@\S+\.\S+$/;
+
+const getEmployeeIdentity = async (req) => {
+  if (req.user?.role === 'admin') return {
+    employeeId: String(req.user.id),
+    employeeEmail: String(req.user.email || '').trim().toLowerCase(),
+    employeeName: String(req.user.name || req.user.email || 'Administrator').trim(),
+  };
+
+  const employeeId = String(req.user?.id || '').trim();
+  if (!employeeId) throw new Error('Authenticated employee identity is missing.');
+  const employee = await Employee.findById(employeeId).select('employeeName fullName email').lean();
+  if (!employee) throw new Error('Authenticated employee record was not found.');
+
+  return {
+    employeeId,
+    employeeEmail: String(employee.email || req.user.email || '').trim().toLowerCase(),
+    employeeName: employee.employeeName || employee.fullName || String(req.user.name || employeeId),
+  };
+};
 
 const buildWhatsAppUrl = (number) => {
   const normalized = normalizePhone(number);
@@ -69,8 +91,15 @@ exports.getContacts = async (req, res) => {
       search = '',
       batchName = '',
       batchNumber = '',
+      batchId = '',
+      employeeId = '',
     } = req.query;
+    const effectiveEmployeeId = String(employeeId || '').trim();
     const query = {};
+    if (batchId && !effectiveEmployeeId) {
+      return res.status(400).json({ success: false, message: 'An employee ID is required when filtering by batch.' });
+    }
+    if (effectiveEmployeeId) query.employeeId = effectiveEmployeeId;
     const searchValue = regexFromSearch(search);
 
     if (searchValue) {
@@ -84,6 +113,7 @@ exports.getContacts = async (req, res) => {
     }
     if (batchName) query.batchName = batchName;
     if (batchNumber && Number.isInteger(Number(batchNumber))) query.batchNumber = Number(batchNumber);
+    if (batchId) query.batchId = batchId;
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
@@ -97,6 +127,10 @@ exports.getContacts = async (req, res) => {
       email: 1,
       batchName: 1,
       batchNumber: 1,
+      employeeId: 1,
+      employeeEmail: 1,
+      employeeName: 1,
+      batchId: 1,
       createdAt: 1,
     };
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'customerName', 'contactName', 'email', 'contactNumber']);
@@ -112,8 +146,10 @@ exports.getContacts = async (req, res) => {
       Contact.countDocuments(query),
     ]);
 
+    const batchMatch = { $or: [{ batchNumber: { $gte: 1 } }, { batchName: { $nin: ['', null] } }] };
+    if (effectiveEmployeeId) batchMatch.employeeId = effectiveEmployeeId;
     const batches = await Contact.aggregate([
-      { $match: { $or: [{ batchNumber: { $gte: 1 } }, { batchName: { $nin: ['', null] } }] } },
+      { $match: batchMatch },
       { $group: {
         _id: { $ifNull: ['$batchNumber', { $convert: { input: { $arrayElemAt: [{ $split: ['$batchName', ' '] }, 1] }, to: 'int', onError: null, onNull: null } }] },
         name: { $first: '$batchName' },
@@ -123,10 +159,12 @@ exports.getContacts = async (req, res) => {
       { $project: { _id: 0, batchNumber: '$_id', name: { $cond: [{ $gt: ['$_id', 0] }, { $concat: ['Batch ', { $toString: '$_id' }] }, '$name'] }, count: 1 } },
       { $sort: { batchNumber: 1 } },
     ]);
+    const employeeGroups = await buildEmployeeGroups();
     res.status(200).json({
       success: true,
       data: contacts.map((contact) => normalizeContactRecord(contact)),
       batches,
+      employeeGroups,
       pagination: {
         total,
         page: pageNum,
@@ -139,9 +177,109 @@ exports.getContacts = async (req, res) => {
   }
 };
 
+const buildEmployeeGroups = async () => {
+  const [employees, contactOwners, batchCounts, batches] = await Promise.all([
+    Employee.find({}).select('employeeName fullName email').lean(),
+    Contact.aggregate([
+      { $match: { employeeId: { $nin: ['', null] } } },
+      { $group: {
+        _id: '$employeeId',
+        employeeEmail: { $first: '$employeeEmail' },
+        employeeName: { $first: '$employeeName' },
+        count: { $sum: 1 },
+      } },
+    ]),
+    Contact.aggregate([
+      { $match: { employeeId: { $nin: ['', null] }, batchNumber: { $gte: 1 } } },
+      { $group: { _id: { employeeId: '$employeeId', batchNumber: '$batchNumber' }, count: { $sum: 1 } } },
+    ]),
+    CustomerBatch.find({}).sort({ employeeId: 1, batchNumber: 1 }).lean(),
+  ]);
+
+  const groups = new Map();
+  const ownersById = new Map();
+  const ownersByEmail = new Map();
+  const addOwner = ({ employeeId = '', employeeEmail = '', employeeName = '' }, preferEmployee = false) => {
+    const id = String(employeeId || '').trim();
+    const email = String(employeeEmail || '').trim().toLowerCase();
+    if (!id && !email) return null;
+
+    let owner = ownersById.get(id) || (email ? ownersByEmail.get(email) : null);
+    if (!owner) {
+      const key = email ? `email:${email}` : `id:${id}`;
+      owner = {
+        employeeId: id,
+        employeeEmail: email,
+        employeeName: employeeName || id || email,
+        customerCount: 0,
+        batches: [],
+      };
+      groups.set(key, owner);
+    }
+    if (id) ownersById.set(id, owner);
+    if (email) ownersByEmail.set(email, owner);
+    if (preferEmployee) {
+      owner.employeeId = id || owner.employeeId;
+      owner.employeeEmail = email || owner.employeeEmail;
+      owner.employeeName = employeeName || owner.employeeName;
+    } else if (!owner.employeeName || owner.employeeName === owner.employeeId) {
+      owner.employeeName = employeeName || owner.employeeName;
+    }
+    return owner;
+  };
+
+  employees.forEach((employee) => {
+    const employeeId = String(employee._id);
+    addOwner({
+      employeeId,
+      employeeEmail: employee.email,
+      employeeName: employee.employeeName || employee.fullName || employeeId,
+    }, true);
+  });
+
+  contactOwners.forEach(({ _id, employeeEmail, employeeName, count }) => {
+    const owner = addOwner({ employeeId: String(_id), employeeEmail, employeeName });
+    if (owner) owner.customerCount += count;
+  });
+
+  const batchCountByOwner = new Map(batchCounts.map(({ _id, count }) => [`${_id.employeeId}:${_id.batchNumber}`, count]));
+  batches.forEach((batch) => {
+    const employeeId = String(batch.employeeId || '').trim();
+    const owner = addOwner({ employeeId, employeeEmail: batch.employeeEmail, employeeName: batch.employeeName });
+    if (!owner) return;
+    const count = batchCountByOwner.get(`${employeeId}:${batch.batchNumber}`) || 0;
+    owner.batches.push({
+      _id: String(batch._id),
+      employeeId,
+      batchNumber: batch.batchNumber,
+      name: `Batch ${batch.batchNumber}`,
+      customerCount: count,
+      count,
+      fileName: batch.fileName,
+      createdDate: batch.createdDate,
+    });
+  });
+
+  return Array.from(groups.values())
+    .map((owner) => ({
+      ...owner,
+      batches: owner.batches.sort((left, right) => left.batchNumber - right.batchNumber),
+    }))
+    .sort((left, right) => left.employeeName.localeCompare(right.employeeName));
+};
+
+exports.getEmployeeBatchGroups = async (req, res) => {
+  try {
+    res.status(200).json({ success: true, data: await buildEmployeeGroups() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.getContactById = async (req, res) => {
   try {
-    const contact = await Contact.findById(req.params.id).select({ __v: 0 }).populate('customerId', 'customerName companyName').lean();
+    const identity = await getEmployeeIdentity(req);
+    const contact = await Contact.findOne({ _id: req.params.id, employeeId: identity.employeeId }).select({ __v: 0 }).populate('customerId', 'customerName companyName').lean();
     if (!contact) {
       return res.status(404).json({ success: false, message: 'Contact not found' });
     }
@@ -153,7 +291,8 @@ exports.getContactById = async (req, res) => {
 
 exports.moveContactToCustomer = async (req, res) => {
   try {
-    const contact = await Contact.findById(req.params.id);
+    const identity = await getEmployeeIdentity(req);
+    const contact = await Contact.findOne({ _id: req.params.id, employeeId: identity.employeeId });
     if (!contact) {
       return res.status(404).json({ success: false, message: 'Contact not found' });
     }
@@ -233,6 +372,7 @@ exports.createContact = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Contact Name, Contact Number, and Email are required.' });
     }
 
+    const identity = await getEmployeeIdentity(req);
     const contact = await Contact.create({
       customerId: resolvedCustomerId || undefined,
       customerName,
@@ -241,6 +381,7 @@ exports.createContact = async (req, res) => {
       mail: mail || '',
       contactNumber,
       email,
+      ...identity,
     });
 
     res.status(201).json({ success: true, message: 'Contact created successfully', data: normalizeContactRecord(contact.toObject ? contact.toObject() : contact) });
@@ -301,32 +442,35 @@ exports.importContacts = async (req, res) => {
     skipped += contactsToInsert.length - newContacts.length;
 
     if (!newContacts.length) return res.status(200).json({ success: true, message: 'No new contacts to import.', imported: 0, skipped });
-    const [highestBatch] = await Contact.aggregate([
-      { $match: { $or: [{ batchNumber: { $gte: 1 } }, { batchName: { $nin: ['', null] } }] } },
-      {
-        $project: {
-          batchNumber: {
-            $ifNull: [
-              '$batchNumber',
-              {
-                $convert: {
-                  input: { $arrayElemAt: [{ $split: ['$batchName', ' '] }, 1] },
-                  to: 'int',
-                  onError: 0,
-                  onNull: 0,
-                },
-              },
-            ],
-          },
-        },
-      },
-      { $sort: { batchNumber: -1 } },
-      { $limit: 1 },
+    const identity = await getEmployeeIdentity(req);
+    const counterName = `contactBatch:${identity.employeeId}`;
+    const [latestContactBatch, latestStoredBatch] = await Promise.all([
+      Contact.findOne({ employeeId: identity.employeeId, batchNumber: { $gte: 1 } }).sort({ batchNumber: -1 }).select('batchNumber').lean(),
+      CustomerBatch.findOne({ employeeId: identity.employeeId }).sort({ batchNumber: -1 }).select('batchNumber').lean(),
     ]);
-    const batchNumber = Number(highestBatch?.batchNumber || 0) + 1;
+    const highestExistingBatch = Math.max(latestContactBatch?.batchNumber || 0, latestStoredBatch?.batchNumber || 0);
+    await Counter.findOneAndUpdate(
+      { name: counterName },
+      { $max: { value: highestExistingBatch } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    const counter = await Counter.findOneAndUpdate(
+      { name: counterName },
+      { $inc: { value: 1 } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    const batchNumber = counter.value;
     const batchName = `Batch ${batchNumber}`;
-    const inserted = await Contact.insertMany(newContacts.map((contact) => ({ ...contact, batchName, batchNumber })), { ordered: false });
-    res.status(201).json({ success: true, message: `Contacts imported successfully: ${inserted.length} (${batchName})`, imported: inserted.length, skipped, batchName, batchNumber });
+    const inserted = await Contact.insertMany(newContacts.map((contact) => ({ ...contact, ...identity, batchName, batchNumber })), { ordered: false });
+    const batch = await CustomerBatch.create({
+      ...identity,
+      batchNumber,
+      customerCount: inserted.length,
+      customers: inserted.map((contact) => contact._id),
+      fileName: req.file.originalname,
+    });
+    await Contact.updateMany({ _id: { $in: inserted.map((contact) => contact._id) } }, { $set: { batchId: batch._id } });
+    res.status(201).json({ success: true, message: `Contacts imported successfully: ${inserted.length} (${batchName})`, imported: inserted.length, skipped, batchName, batchNumber, employeeId: identity.employeeId, employeeName: identity.employeeName, fileName: req.file.originalname });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message || 'Unable to process the Excel file.' });
   }
@@ -334,6 +478,7 @@ exports.importContacts = async (req, res) => {
 
 exports.updateContact = async (req, res) => {
   try {
+    const identity = await getEmployeeIdentity(req);
     const payload = normalizeContactPayload(req.body);
     const { customerId, customerName, contactName, designation = '', mail = '', contactNumber, email } = payload;
 
@@ -345,7 +490,7 @@ exports.updateContact = async (req, res) => {
       }
     }
 
-    const contact = await Contact.findByIdAndUpdate(req.params.id, {
+    const contact = await Contact.findOneAndUpdate({ _id: req.params.id, employeeId: identity.employeeId }, {
       customerId: resolvedCustomerId || undefined,
       customerName,
       contactName,
@@ -369,7 +514,8 @@ exports.updateContact = async (req, res) => {
 
 exports.deleteContact = async (req, res) => {
   try {
-    const contact = await Contact.findByIdAndDelete(req.params.id);
+    const identity = await getEmployeeIdentity(req);
+    const contact = await Contact.findOneAndDelete({ _id: req.params.id, employeeId: identity.employeeId });
     if (!contact) {
       return res.status(404).json({ success: false, message: 'Contact not found' });
     }
@@ -386,7 +532,9 @@ module.exports = {
   createContact: exports.createContact,
   importContacts: exports.importContacts,
   importUpload,
+  getEmployeeBatchGroups: exports.getEmployeeBatchGroups,
   updateContact: exports.updateContact,
   deleteContact: exports.deleteContact,
   buildWhatsAppUrl,
+  buildEmployeeGroups,
 };

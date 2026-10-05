@@ -336,7 +336,7 @@ export default function OPFGenerateFormPage() {
       const response = wasEdit && id ? await updateOPF(id, formData) : await createOPF(formData)
       const savedOPFId = response?.data?._id || id
       if (!savedOPFId) throw new Error('OPF was saved, but its ID was not returned')
-      navigate(`/sales/opf/${savedOPFId}`, {
+      navigate(`/sales/opf/${savedOPFId}?page=1`, {
         state: wasEdit ? { message: 'OPF updated successfully' } : undefined,
       })
     } catch (error) {

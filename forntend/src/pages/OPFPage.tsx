@@ -15,6 +15,7 @@ import {
 import { Toast } from '@/components/toast'
 import { fetchOPFs, deleteOPF, type OPFRecord } from '@/lib/opfApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
+import { PermissionGate } from '@/components/PermissionGate'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -351,15 +352,11 @@ export default function OPFPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-700">
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => navigate(`/sales/opf/${item._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View OPF">
+                      <button type="button" onClick={() => window.open(`/sales/opf/${item._id}`, '_blank')} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View OPF">
                         <Eye className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => navigate(`/sales/opf/edit/${item._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit OPF">
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button type="button" onClick={() => handleDelete(item._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete OPF">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <PermissionGate moduleName="opf" action="edit"><button type="button" onClick={() => navigate(`/sales/opf/edit/${item._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit OPF"><Pencil className="h-4 w-4" /></button></PermissionGate>
+                      <PermissionGate moduleName="opf" action="delete"><button type="button" onClick={() => handleDelete(item._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete OPF"><Trash2 className="h-4 w-4" /></button></PermissionGate>
                     </div>
                   </td>
                 </tr>

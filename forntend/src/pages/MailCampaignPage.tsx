@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, Download, Search, Mail, FileText, Clock3, Send, Trash2
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import { StatCard } from '@/components/stat-card'
 import { deleteCampaign, getCampaigns, MailCampaignRecord } from '@/lib/mailCampaignApi'
+import { PermissionGate } from '@/components/PermissionGate'
 
 type CampaignStatus = 'Draft' | 'Scheduled' | 'Sent'
 
@@ -97,10 +98,9 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
             <Download className="h-4 w-4" />
             Download Report
           </button>
-          <button onClick={() => navigate('/sales/mail-campaign/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1E293B]">
-            <Plus className="h-4 w-4" />
-            Campaign
-          </button>
+          <PermissionGate moduleName="mailCampaign" action="create">
+            <button onClick={() => navigate('/sales/mail-campaign/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> Campaign</button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -163,10 +163,12 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
                   <td className={`${tableCellClass} text-center`}>{campaign.opens}</td>
                   <td className={`${tableCellClass} text-center`}>{campaign.clicks}</td>
                   <td className={`${tableCellClass} text-center`}>
-                    <button type="button" onClick={() => setDeleteTarget(campaign)} disabled={deletingCampaignId === campaign.campaignId} className="inline-flex items-center gap-1 rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60" aria-label={`Delete ${campaign.campaignName}`}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {deletingCampaignId === campaign.campaignId ? 'Deleting...' : 'Delete'}
-                    </button>
+                    <PermissionGate moduleName="mailCampaign" action="delete">
+                      <button type="button" onClick={() => setDeleteTarget(campaign)} disabled={deletingCampaignId === campaign.campaignId} className="inline-flex items-center gap-1 rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60" aria-label={`Delete ${campaign.campaignName}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {deletingCampaignId === campaign.campaignId ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </PermissionGate>
                   </td>
                 </tr>
               ))}

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/lib/leadApi'
+import { PermissionGate } from '@/components/PermissionGate'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -139,6 +140,11 @@ export default function QuotationDashboardPage() {
     }
   }
 
+  const handleOpenQuotationPdf = (id: string) => {
+    const pdfRoute = new URL(`/sales/quotations/view/${encodeURIComponent(id)}?openPdf=1`, window.location.origin)
+    window.open(pdfRoute.toString(), '_blank', 'noopener,noreferrer')
+  }
+
   const downloadReport = () => {
     const headers = ['Quotation ID', 'Created By', 'Customer Name', 'Contact Person', 'Products', 'Grand Total', 'Created Date', 'Expected Closure', 'Delivery']
     const rows = filteredQuotations.map((quote) => [
@@ -177,12 +183,9 @@ export default function QuotationDashboardPage() {
           </button>
           <h1 className="crm-page-heading">{quotationType === 'sold' ? 'Sold Quotation Dashboard' : 'Rent Quotation Dashboard'}</h1>
         </div>
-        <button
-          onClick={() => navigate(`/sales/quotations/new/${quotationType}`)}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
-        >
-          <Plus className="h-4 w-4" /> ADD NEW
-        </button>
+        <PermissionGate moduleName="quotations" action="create">
+          <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
+        </PermissionGate>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -322,15 +325,11 @@ export default function QuotationDashboardPage() {
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.quotationDetails?.delivery || '-'}</td>
                   <td className="px-4 py-3 text-gray-700">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => navigate(`/sales/quotations/view/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
+                      <button onClick={() => handleOpenQuotationPdf(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Open quotation PDF in a new tab">
                         <Eye className="h-4 w-4" />
                       </button>
-                      <button onClick={() => navigate(`/sales/quotations/edit/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => handleDelete(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <PermissionGate moduleName="quotations" action="edit"><button onClick={() => navigate(`/sales/quotations/edit/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /></button></PermissionGate>
+                      <PermissionGate moduleName="quotations" action="delete"><button onClick={() => handleDelete(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]"><Trash2 className="h-4 w-4" /></button></PermissionGate>
                     </div>
                   </td>
                 </tr>

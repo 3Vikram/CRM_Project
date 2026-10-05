@@ -1,4 +1,5 @@
 import { getCachedResponse } from './apiCache';
+import { getAuthHeaders } from './apiAuth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -102,7 +103,7 @@ export async function fetchCompanyProfiles(params: { search?: string; page?: num
 
   const cacheKey = `company-profiles:${searchParams.toString()}`;
   return getCachedResponse<CompanyProfileListResponse>(cacheKey, async () => {
-    const response = await fetch(`${API_BASE_URL}/company-profiles?${searchParams.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/company-profiles?${searchParams.toString()}`, { headers: getAuthHeaders() });
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => ({}));
       throw new Error(errorPayload.message || 'Failed to load company profiles');
@@ -112,7 +113,7 @@ export async function fetchCompanyProfiles(params: { search?: string; page?: num
 }
 
 export async function fetchCompanyProfileById(id: string) {
-  const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`);
+  const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`, { headers: getAuthHeaders() });
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to load company profile');
@@ -135,6 +136,7 @@ export async function createCompanyProfile(payload: CompanyProfilePayload, files
 
   const response = await fetch(`${API_BASE_URL}/company-profiles`, {
     method: 'POST',
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -159,6 +161,7 @@ export async function updateCompanyProfile(id: string, payload: Partial<CompanyP
 
   const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`, {
     method: 'PUT',
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -169,7 +172,7 @@ export async function updateCompanyProfile(id: string, payload: Partial<CompanyP
 }
 
 export async function deleteCompanyProfile(id: string) {
-  const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`, { method: 'DELETE' });
+  const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to delete company profile');

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteCustomer, fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
+import { PermissionGate } from '@/components/PermissionGate'
 import {
   Search,
   Plus,
@@ -218,13 +219,15 @@ export default function CustomersPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleAddNew}
-            className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
-          >
-            <Plus className="h-4 w-4" />
-            Add New
-          </button>
+          <PermissionGate moduleName="customers" action="create">
+            <button
+              onClick={handleAddNew}
+              className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
+            >
+              <Plus className="h-4 w-4" />
+              Add New
+            </button>
+          </PermissionGate>
           <button
             onClick={handleDownloadReport}
             className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
@@ -500,12 +503,16 @@ const CustomerTableRow = memo(function CustomerTableRow({
           <button onClick={() => onView(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="View">
             <Eye className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => onEdit(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => onDelete(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <PermissionGate moduleName="customers" action="edit">
+            <button onClick={() => onEdit(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </PermissionGate>
+          <PermissionGate moduleName="customers" action="delete">
+            <button onClick={() => onDelete(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </PermissionGate>
         </div>
       </td>
     </tr>

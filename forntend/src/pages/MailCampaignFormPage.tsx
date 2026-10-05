@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { TiptapEditor } from '@/components/TiptapEditor'
 import { createCampaign, fetchRecipientData, getCampaignById, sendCampaign, updateCampaign } from '@/lib/mailCampaignApi'
 import { fetchCompanyProfiles, type CompanyProfileRecord } from '@/lib/companyProfileApi'
+import { getStoredAuth } from '@/lib/auth'
 
 const alignmentOptions = ['Image Before Text', 'Image After Text']
 
@@ -22,9 +23,12 @@ export default function MailCampaignFormPage() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
+  const [batchId, setBatchId] = useState('')
   const [batchName, setBatchName] = useState('')
   const [batchNumber, setBatchNumber] = useState<number | ''>('')
-  const [batches, setBatches] = useState<Array<{ batchNumber: number; name: string; count: number }>>([])
+  const [employeeId, setEmployeeId] = useState('')
+  const [employeeName, setEmployeeName] = useState('')
+  const [employeeGroups, setEmployeeGroups] = useState<Array<{ employeeId: string; employeeEmail?: string; employeeName: string; customerCount: number; batches: Array<{ _id?: string; batchNumber: number; name: string; customerCount: number; count: number }> }>>([])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const [error, setError] = useState('')
@@ -60,16 +64,33 @@ export default function MailCampaignFormPage() {
       setImagePreviewUrl(resolveImageUrl(campaign.image))
       setScheduledDate(campaign.scheduledDate || '')
       setScheduledTime(campaign.scheduledTime || '')
+      setBatchId(campaign.batchId || '')
       setBatchName(campaign.batchName || '')
       setBatchNumber(campaign.batchNumber || '')
+      setEmployeeId(campaign.employeeId || '')
+      setEmployeeName(campaign.employeeName || '')
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign.'))
   }, [id])
 
   useEffect(() => {
+    if (batchId || !employeeId || !batchNumber) return
+    const existingBatch = employeeGroups
+      .find((group) => group.employeeId === employeeId)
+      ?.batches.find((batch) => batch.batchNumber === batchNumber)
+    if (existingBatch?._id) setBatchId(existingBatch._id)
+  }, [batchId, batchNumber, employeeGroups, employeeId])
+
+  useEffect(() => {
     void fetchRecipientData(['Contacts']).then((response) => {
-      const availableBatches = Array.isArray(response?.data?.batches) ? response.data.batches : []
-      setBatches(availableBatches.sort((left: { batchNumber: number }, right: { batchNumber: number }) => left.batchNumber - right.batchNumber))
-    }).catch(() => setBatches([]))
+      const availableGroups: typeof employeeGroups = Array.isArray(response?.data?.employeeGroups) ? response.data.employeeGroups : []
+      setEmployeeGroups(availableGroups)
+      const session = getStoredAuth()
+      if (session?.user.role === 'employee') {
+        const ownGroup = availableGroups.find((group) => group.employeeId === session.user.id)
+        setEmployeeId(session.user.id)
+        setEmployeeName(ownGroup?.employeeName || session.user.name)
+      }
+    }).catch(() => setEmployeeGroups([]))
   }, [])
 
   const handleImageChange = (file: File | null) => {
@@ -86,6 +107,10 @@ export default function MailCampaignFormPage() {
     }
     if (!subject.trim()) {
       setError('Subject is required.')
+      return
+    }
+    if (action !== 'Draft' && (!employeeId || !batchNumber || !batchId)) {
+      setError('Select an employee and one of their contact batches before sending or scheduling.')
       return
     }
     if (action === 'Scheduled' && (!scheduledDate || !scheduledTime)) {
@@ -108,6 +133,9 @@ export default function MailCampaignFormPage() {
     formData.append('scheduledTime', action === 'Scheduled' ? scheduledTime : '')
     formData.append('batchName', batchName)
     formData.append('batchNumber', batchNumber ? String(batchNumber) : '')
+    formData.append('batchId', batchId)
+    formData.append('employeeId', employeeId)
+    formData.append('employeeName', employeeName)
     if (image) formData.append('image', image)
 
     try {
@@ -166,14 +194,22 @@ export default function MailCampaignFormPage() {
               </select>
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-gray-700">Batch</span>
-              <select value={batchNumber} onChange={(event) => {
-                const nextBatchNumber = event.target.value ? Number(event.target.value) : ''
-                setBatchNumber(nextBatchNumber)
-                setBatchName(nextBatchNumber ? `Batch ${nextBatchNumber}` : '')
-              }} className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#CEC9BD]">
-                <option value="">All Batches</option>
-                {batches.map((batch) => <option key={batch.batchNumber} value={batch.batchNumber}>{batch.name} ({batch.count})</option>)}
+              <span className="mb-2 block text-sm font-semibold text-gray-700">Employee / Batch</span>
+              <select value={batchId} onChange={(event) => {
+                const selectedGroup = employeeGroups.find((group) => group.batches.some((batch) => batch._id === event.target.value))
+                const selectedBatch = selectedGroup?.batches.find((batch) => batch._id === event.target.value)
+                setBatchId(event.target.value)
+                setEmployeeId(selectedGroup?.employeeId || '')
+                setEmployeeName(selectedGroup?.employeeName || '')
+                setBatchNumber(selectedBatch?.batchNumber || '')
+                setBatchName(selectedBatch?.name || '')
+              }} className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#CEC9BD] disabled:opacity-70">
+                <option value="">Select employee / batch</option>
+                {employeeGroups.map((group) => (
+                  <optgroup key={group.employeeId} label={`${group.employeeName} (${group.customerCount})`}>
+                    {group.batches.map((batch) => <option key={batch._id || `${group.employeeId}:${batch.batchNumber}`} value={batch._id || ''}>{batch.name} ({batch.customerCount} contacts)</option>)}
+                  </optgroup>
+                ))}
               </select>
             </label>
           </div>

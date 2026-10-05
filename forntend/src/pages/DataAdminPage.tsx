@@ -77,7 +77,7 @@ export default function DataAdminPage() {
                 <Upload className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-3 text-sm text-red-600">*csv format only acceptable</p>
+            <p className="mt-3 text-sm text-red-600">*Excel or CSV format accepted</p>
           </div>
 
           <div className="min-w-0">

@@ -1,4 +1,5 @@
 const express = require('express');
+const { authMiddleware, requirePermission } = require('../middleware/authMiddleware');
 const router = express.Router();
 const {
   uploads,
@@ -17,21 +18,21 @@ const {
   getRecipientData,
 } = require('../controllers/mailCampaignController');
 
-router.get('/recipient-counts', getRecipientCounts);
-router.get('/recipient-data', getRecipientData);
+router.get('/recipient-counts', authMiddleware, requirePermission('mailCampaign', 'view'), getRecipientCounts);
+router.get('/recipient-data', authMiddleware, requirePermission('mailCampaign', 'view'), getRecipientData);
 router.get('/track/diagnostic/:trackingId', getTrackingDiagnostic);
 router.get('/track/open/:trackingId', trackOpen);
 router.get('/track/click/:trackingId', trackClick);
 router.get('/open/:trackingId', trackOpen);
 router.get('/tracking/open/:trackingId', trackOpen);
 router.get('/tracking/click/:token', trackClick);
-router.get('/:id/report', getCampaignReport);
-router.get('/:id/preview', getCampaignPreview);
-router.get('/', getCampaigns);
-router.get('/:id', getCampaignById);
-router.post('/', uploads, createCampaign);
-router.put('/:id', uploads, updateCampaign);
-router.post('/:id/send', sendCampaign);
-router.delete('/:id', deleteCampaign);
+router.get('/:id/report', authMiddleware, requirePermission('mailCampaign', 'view'), getCampaignReport);
+router.get('/:id/preview', authMiddleware, requirePermission('mailCampaign', 'view'), getCampaignPreview);
+router.get('/', authMiddleware, requirePermission('mailCampaign', 'view'), getCampaigns);
+router.get('/:id', authMiddleware, requirePermission('mailCampaign', 'view'), getCampaignById);
+router.post('/', authMiddleware, requirePermission('mailCampaign', 'create'), uploads, createCampaign);
+router.put('/:id', authMiddleware, requirePermission('mailCampaign', 'edit'), uploads, updateCampaign);
+router.post('/:id/send', authMiddleware, requirePermission('mailCampaign', 'edit'), sendCampaign);
+router.delete('/:id', authMiddleware, requirePermission('mailCampaign', 'delete'), deleteCampaign);
 
 module.exports = router;

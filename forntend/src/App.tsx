@@ -2,8 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Sidebar } from '@/components/sidebar'
 import { TopBar } from '@/components/top-bar'
 import { getStoredAuth } from '@/lib/auth'
-import ModuleSelectPage from '@/pages/ModuleSelectPage'
+import { hasPermission } from '@/lib/permissions'
 import AdminLoginPage from '@/pages/AdminLoginPage'
+import ModuleSelectPage from '@/pages/ModuleSelectPage'
+import SalesLoginPage from '@/pages/SalesLoginPage'
+import SalesProfilePage from '@/pages/SalesProfilePage'
 import DashboardPage from '@/pages/DashboardPage'
 import CustomersPage from '@/pages/CustomersPage'
 import CustomerFormPage from '@/pages/CustomerFormPage'
@@ -45,20 +48,53 @@ import EmployeeFormPage from '@/pages/EmployeeFormPage'
 import ReportsPage from '@/pages/ReportsPage'
 import ReportDetailPage from '@/pages/ReportDetailPage'
 
+const getRoutePermission = (pathname: string) => {
+  if (pathname.startsWith('/sales/profile')) return null
+  if (pathname.startsWith('/sales/dashboard')) return 'dashboard'
+  if (pathname.startsWith('/sales/customers') || pathname === '/customers') return 'customers'
+  if (pathname.startsWith('/sales/contacts')) return 'contacts'
+  if (pathname.startsWith('/sales/suppliers')) return 'suppliers'
+  if (pathname.startsWith('/sales/leads')) return 'leads'
+  if (pathname.startsWith('/sales/activities')) return 'activities'
+  if (pathname.startsWith('/sales/calendar')) return 'calendar'
+  if (pathname.startsWith('/sales/mail-campaign')) return 'mailCampaign'
+  if (pathname.startsWith('/sales/quotations')) return 'quotations'
+  if (pathname.startsWith('/sales/opf')) return 'opf'
+  if (pathname.startsWith('/sales/funnels')) return 'funnels'
+  if (pathname.startsWith('/sales/renewals')) return 'renewals'
+  if (pathname.startsWith('/sales/reports') || pathname === '/reports' || pathname.startsWith('/reports/')) return 'reports'
+  if (pathname.startsWith('/sales/data-admin')) return 'dataAdmin'
+  if (pathname.startsWith('/sales/employees')) return 'employees'
+  if (pathname.startsWith('/sales/company-profiles')) return 'companyProfiles'
+  if (pathname.startsWith('/sales/inventory')) return 'inventory'
+  if (pathname.startsWith('/sales/purchase-orders')) return 'purchaseOrders'
+  if (pathname.startsWith('/sales/dc-tracking')) return 'dcTracking'
+  if (pathname.startsWith('/sales/bill-sale')) return 'billSale'
+  return null
+}
+
+function AccessDeniedPage() {
+  return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center"><div className="rounded-lg border border-[#E7E3DA] bg-white px-8 py-10 text-center shadow-sm"><h1 className="text-2xl font-semibold text-[#1F1D1A]">Access denied</h1><p className="mt-2 text-sm text-[#6B6657]">You do not have permission to view this module.</p></div></div>
+}
+
 function SalesLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const auth = getStoredAuth('admin')
+  const session = getStoredAuth()
+  const loggedIn = typeof window !== 'undefined' && Boolean(session?.token)
 
-  if (!auth || auth.user.role !== 'admin') {
-    return <Navigate to="/admin-login" replace state={{ from: location.pathname }} />
+  if (!loggedIn) {
+    return <Navigate to="/sales" replace state={{ from: location.pathname }} />
   }
+
+  const requiredPermission = getRoutePermission(location.pathname)
+  const canView = !requiredPermission || hasPermission(requiredPermission)
 
   return (
     <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
       <TopBar />
       <div className="mt-16 flex h-[calc(100vh-4rem)] overflow-hidden">
         <Sidebar />
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">{canView ? children : <AccessDeniedPage />}</main>
       </div>
     </div>
   )
@@ -77,17 +113,24 @@ export default function App() {
         <Route path="/" element={<ModuleSelectPage />} />
 
         {/* Sales module — full CRM lives here */}
+        <Route path="/sales" element={<SalesLoginPage />} />
         <Route
-          path="/sales"
-          element={getStoredAuth('admin') ? <Navigate to="/sales/dashboard" replace /> : <AdminLoginPage />}
+          path="/sales/profile"
+          element={
+            <SalesLayout>
+              <SalesProfilePage />
+            </SalesLayout>
+          }
         />
         <Route
           path="/sales/dashboard"
-          element={
+          element={typeof window !== 'undefined' && Boolean(getStoredAuth()?.token) ? (
             <SalesLayout>
               <DashboardPage />
             </SalesLayout>
-          }
+          ) : (
+            <Navigate to="/sales" replace />
+          )}
         />
         <Route
           path="/sales/customers"

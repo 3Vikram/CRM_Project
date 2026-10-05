@@ -6,6 +6,7 @@ import { Search, Plus, Download, Eye, Pencil, Trash2, Building2 } from 'lucide-r
 import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteSupplier, fetchSuppliers, type SupplierRecord } from '@/lib/supplierApi'
+import { PermissionGate } from '@/components/PermissionGate'
 import { clearApiCache } from '@/lib/apiCache'
 
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
@@ -129,10 +130,12 @@ export default function SuppliersPage() {
           <h1 className="crm-page-heading">Supplier List</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
-            <Plus className="h-4 w-4" />
-            ADD NEW
-          </button>
+          <PermissionGate moduleName="suppliers" action="create">
+            <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" />
+              ADD NEW
+            </button>
+          </PermissionGate>
           <button onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
             <Download className="h-4 w-4" />
             Download Report
@@ -205,12 +208,16 @@ export default function SuppliersPage() {
                             <button type="button" onClick={() => handleView(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="View">
                               <Eye className="h-3.5 w-3.5" />
                             </button>
-                            <button type="button" onClick={() => handleEdit(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button type="button" onClick={() => setPendingDeleteSupplier(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            <PermissionGate moduleName="suppliers" action="edit">
+                              <button type="button" onClick={() => handleEdit(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </PermissionGate>
+                            <PermissionGate moduleName="suppliers" action="delete">
+                              <button type="button" onClick={() => setPendingDeleteSupplier(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </PermissionGate>
                           </div>
                         </td>
                       </tr>

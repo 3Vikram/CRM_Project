@@ -216,7 +216,7 @@ export default function RenewalsPage() {
                 <td className="max-w-[220px] border-r border-[#D1D5DB] px-4 py-3">{opf.notes || '-'}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3">{getRenewalStatus(days)}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3 text-xs text-gray-600">Created {formatDate(opf.createdDate)}<br />Updated {formatDate(opf.updatedAt)}</td>
-                <td className="px-4 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => navigate(`/sales/opf/${opf._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View OPF"><Eye className="h-4 w-4" /></button><button type="button" onClick={() => navigate(`/sales/opf/edit/${opf._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit OPF"><Pencil className="h-4 w-4" /></button></div></td>
+                <td className="px-4 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => window.open(`/sales/opf/${opf._id}`, '_blank')} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View OPF"><Eye className="h-4 w-4" /></button><button type="button" onClick={() => navigate(`/sales/opf/edit/${opf._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit OPF"><Pencil className="h-4 w-4" /></button></div></td>
               </tr>
             ))}
           </tbody>

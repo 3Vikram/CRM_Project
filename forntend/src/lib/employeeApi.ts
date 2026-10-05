@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuthHeaders } from './apiAuth';
 
 const API_BASE_URLS = Array.from(
   new Set([
@@ -13,7 +14,15 @@ async function requestWithFallback(method: 'get' | 'post' | 'put' | 'delete', ur
 
   for (const baseUrl of API_BASE_URLS) {
     try {
-      const response = await axios({ method, url: `${baseUrl}${url}`, ...config });
+      const response = await axios({
+        method,
+        url: `${baseUrl}${url}`,
+        ...config,
+        headers: {
+          ...getAuthHeaders(),
+          ...((config?.headers as Record<string, string> | undefined) || {}),
+        },
+      });
       return response;
     } catch (error) {
       lastError = error;
@@ -40,6 +49,17 @@ export interface EmployeePermissions {
   suppliers: EmployeePermissionBlock;
   quotations: EmployeePermissionBlock;
   opf: EmployeePermissionBlock;
+  calendar: EmployeePermissionBlock;
+  funnels: EmployeePermissionBlock;
+  renewals: EmployeePermissionBlock;
+  reports: EmployeePermissionBlock;
+  dataAdmin: EmployeePermissionBlock;
+  employees: EmployeePermissionBlock;
+  companyProfiles: EmployeePermissionBlock;
+  inventory: EmployeePermissionBlock;
+  purchaseOrders: EmployeePermissionBlock;
+  dcTracking: EmployeePermissionBlock;
+  billSale: EmployeePermissionBlock;
 }
 
 export interface EmployeeRecord {
@@ -58,6 +78,9 @@ export interface EmployeeRecord {
   joiningDate?: string | null;
   dateOfJoin?: string | null;
   dateOfBirth?: string | null;
+  profilePhoto?: string;
+  signature?: string;
+  canUpdate?: boolean;
   employeeType?: string;
   reportingTo?: string;
   orderApprovalTo?: string;
@@ -131,6 +154,16 @@ export async function fetchEmployeeById(id: string) {
   return response.data?.data ?? null;
 }
 
+export async function fetchCurrentEmployeeProfile() {
+  const response = await requestWithFallback('get', '/auth/me');
+  return response.data?.data as EmployeeRecord;
+}
+
+export async function updateCurrentEmployeeProfile(payload: FormData) {
+  const response = await requestWithFallback('put', '/auth/me', { data: payload });
+  return response.data?.data as EmployeeRecord;
+}
+
 export async function createEmployee(payload: EmployeePayload) {
   const response = await requestWithFallback('post', '/employees', { data: payload });
   return response.data;
@@ -150,14 +183,3 @@ export const employeeRoles = ['Sales Head', 'Sales Manager', 'Sales Executive', 
 export const employeeDepartments = ['Sales', 'Marketing', 'Operations', 'Support', 'Administration'];
 export const employeeStatusOptions = ['Active', 'Inactive', 'On Leave'];
 
-export const defaultEmployeePermissions = (): EmployeePermissions => ({
-  dashboard: true,
-  customers: { view: true, create: false, edit: false, delete: false },
-  contacts: { view: true, create: false, edit: false, delete: false },
-  leads: { view: true, create: false, edit: false, delete: false },
-  activities: { view: true, create: false, edit: false, delete: false },
-  mailCampaign: { view: true, create: false, edit: false, delete: false },
-  suppliers: { view: true, create: false, edit: false, delete: false },
-  quotations: { view: true, create: false, edit: false, delete: false },
-  opf: { view: true, create: false, edit: false, delete: false },
-});

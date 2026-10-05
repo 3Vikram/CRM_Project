@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuthHeaders } from './apiAuth';
 import { getCachedResponse } from './apiCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -98,7 +99,9 @@ export async function fetchLeads(params: { page?: number; limit?: number; search
 
   const cacheKey = `leads:${searchParams.toString()}`;
   return getCachedResponse<LeadListResponse>(cacheKey, async () => {
-    const response = await axios.get(`${API_BASE_URL}/leads?${searchParams.toString()}`);
+    const response = await axios.get(`${API_BASE_URL}/leads?${searchParams.toString()}`, {
+      headers: getAuthHeaders(),
+    });
     return {
       data: response.data?.data ?? [],
       pagination: response.data?.pagination ?? { total: 0, page: 1, limit: 10, totalPages: 1 },
@@ -109,24 +112,32 @@ export async function fetchLeads(params: { page?: number; limit?: number; search
 export async function fetchLeadById(id: string) {
   const cacheKey = `lead:${id}`;
   return getCachedResponse<LeadRecord | null>(cacheKey, async () => {
-    const response = await axios.get(`${API_BASE_URL}/leads/${id}`);
+    const response = await axios.get(`${API_BASE_URL}/leads/${id}`, {
+      headers: getAuthHeaders(),
+    });
     return response.data?.data ?? null;
   }, 30_000);
 }
 
 export async function createLead(payload: Partial<LeadRecord>) {
-  const response = await axios.post(`${API_BASE_URL}/leads`, payload);
+  const response = await axios.post(`${API_BASE_URL}/leads`, payload, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function updateLead(id: string, payload: Partial<LeadRecord>) {
-  const response = await axios.put(`${API_BASE_URL}/leads/${id}`, payload);
+  const response = await axios.put(`${API_BASE_URL}/leads/${id}`, payload, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function deleteLead(id: string) {
   try {
-    const response = await axios.delete(`${API_BASE_URL}/leads/${encodeURIComponent(id)}`);
+    const response = await axios.delete(`${API_BASE_URL}/leads/${encodeURIComponent(id)}`, {
+      headers: getAuthHeaders(),
+    });
     return response.data;
   } catch (error) {
     console.error('Delete lead error:', axios.isAxiosError(error) ? error.response?.data || error.message : error);
@@ -135,32 +146,44 @@ export async function deleteLead(id: string) {
 }
 
 export async function moveLeadToActivity(id: string) {
-  const response = await axios.post(`${API_BASE_URL}/leads/move-activity`, { id });
+  const response = await axios.post(`${API_BASE_URL}/leads/move-activity`, { id }, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function moveLeadToFunnel(id: string) {
-  const response = await axios.post(`${API_BASE_URL}/leads/move-funnel`, { id });
+  const response = await axios.post(`${API_BASE_URL}/leads/move-funnel`, { id }, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function generateLeadQuotation(id: string) {
-  const response = await axios.post(`${API_BASE_URL}/leads/generate-quotation`, { id });
+  const response = await axios.post(`${API_BASE_URL}/leads/generate-quotation`, { id }, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function convertLeadToCustomer(id: string) {
-  const response = await axios.post(`${API_BASE_URL}/leads/convert-customer`, { id });
+  const response = await axios.post(`${API_BASE_URL}/leads/convert-customer`, { id }, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function scrapLead(id: string, reason: string) {
-  const response = await axios.post(`${API_BASE_URL}/leads/scrap`, { id, reason });
+  const response = await axios.post(`${API_BASE_URL}/leads/scrap`, { id, reason }, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function triggerMailOpenEvent(payload: Partial<LeadRecord> & { email: string }) {
-  const response = await axios.post(`${API_BASE_URL}/leads/mailcampaign/open-event`, payload);
+  const response = await axios.post(`${API_BASE_URL}/leads/mailcampaign/open-event`, payload, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
@@ -168,6 +191,8 @@ export async function sendQuotationPdf(id: string, pdfData: string, recipientEma
   const response = await axios.post(`${API_BASE_URL}/leads/${id}/send-pdf`, {
     pdfData,
     recipientEmail,
+  }, {
+    headers: getAuthHeaders(),
   });
   return response.data;
 }

@@ -1,10 +1,9 @@
 'use client'
 
-import { Bell } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { clearStoredAuth } from '@/lib/auth'
 import synovLogo from "../assets.png";
+import { clearStoredAuth } from '@/lib/auth'
 
 interface TopBarProps {
   userName?: string
@@ -17,12 +16,31 @@ export function TopBar({
   userRole = 'Sales · Bengaluru',
   userInitials = 'AP',
 }: TopBarProps) {
-  const [notificationCount] = useState(3)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const navigate = useNavigate()
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleProfile = () => {
+    setIsMenuOpen(false)
+    navigate('/sales/profile')
+  }
+
   const handleLogout = () => {
+    setIsMenuOpen(false)
+    localStorage.removeItem('sales_logged_in')
     clearStoredAuth()
-    navigate('/admin-login', { replace: true })
+    navigate('/sales', { replace: true })
   }
 
   return (
@@ -38,37 +56,34 @@ export function TopBar({
         </div>
       </div>
 
-      <div className="flex items-center gap-6">
-        {/* Bell Notification */}
-        <button className="relative cursor-pointer rounded-lg p-2 transition-colors hover:bg-[#E7E3DA]">
-          <Bell className="h-5 w-5 text-[#6B6657]" />
-          {notificationCount > 0 && (
-            <div className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-red-500">
-              <span className="text-xs font-bold text-white">{notificationCount}</span>
-            </div>
-          )}
+      <div className="relative flex items-center" ref={menuRef}>
+        <button
+          type="button"
+          aria-label="Open profile menu"
+          onClick={() => setIsMenuOpen((prev) => !prev)}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D6D1C7] bg-[#F8F7F3] text-[#1F1D1A] transition hover:bg-[#EAE5DC]"
+        >
+          <span aria-hidden="true" className="text-2xl leading-none">👤</span>
         </button>
 
-        {/* User Profile */}
-        <div className="flex items-center gap-3 border-l border-[#E7E3DA] pl-4">
-          <div className="flex cursor-pointer items-center gap-3 transition-opacity hover:opacity-80">
-            <div className="text-right">
-              <div className="text-sm font-medium text-[#1F1D1A]">{userName}</div>
-              <div className="text-xs text-[#6B6657]">{userRole}</div>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E7E3DA]">
-              <span className="text-sm font-semibold text-[#1F1D1A]">{userInitials}</span>
-            </div>
+        {isMenuOpen ? (
+          <div className="absolute right-0 top-full mt-2 w-40 overflow-hidden rounded-lg border border-[#E7E3DA] bg-white shadow-lg">
+            <button
+              type="button"
+              onClick={handleProfile}
+              className="flex w-full items-center px-3 py-2 text-left text-sm text-[#1F1D1A] transition hover:bg-[#F8F7F3]"
+            >
+              Profile
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center px-3 py-2 text-left text-sm text-[#1F1D1A] transition hover:bg-[#F8F7F3]"
+            >
+              Logout
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-md border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs font-medium text-[#1F1D1A] transition hover:bg-[#F3F4F6]"
-          >
-            Logout
-          </button>
-        </div>
+        ) : null}
       </div>
     </div>
   )

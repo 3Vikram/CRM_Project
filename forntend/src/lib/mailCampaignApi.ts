@@ -1,7 +1,16 @@
 import axios from 'axios'
+import { getAuthHeaders } from './apiAuth'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/mail-campaigns` : 'http://localhost:5001/api/mail-campaigns',
+})
+
+api.interceptors.request.use((config) => {
+  const authHeaders = getAuthHeaders()
+  Object.entries(authHeaders).forEach(([name, value]) => {
+    config.headers.set(name, value)
+  })
+  return config
 })
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -59,6 +68,9 @@ export interface MailCampaignRecord {
   recipientCount: number
   batchName?: string
   batchNumber?: number
+  batchId?: string
+  employeeId?: string
+  employeeName?: string
   campaignBody: string
   footer: string
   image: string

@@ -39,8 +39,12 @@ const ContactSchema = new mongoose.Schema(
       required: [true, 'Email is required'],
       match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
     },
+    employeeId: { type: String, trim: true, default: '' },
+    employeeEmail: { type: String, trim: true, lowercase: true, default: '' },
+    employeeName: { type: String, trim: true, default: '' },
     batchName: { type: String, trim: true, default: '' },
     batchNumber: { type: Number, min: 1, default: null },
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerBatch', default: null },
     calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
   },
   { timestamps: true }
@@ -54,5 +58,6 @@ ContactSchema.index({ email: 1, contactNumber: 1, customerId: 1 });
 ContactSchema.index({ contactNumber: 1, email: 1, customerName: 1 });
 ContactSchema.index({ batchName: 1, email: 1 });
 ContactSchema.index({ batchNumber: 1, email: 1 });
+ContactSchema.index({ employeeId: 1, batchNumber: 1 });
 
 module.exports = mongoose.model('Contact', ContactSchema);

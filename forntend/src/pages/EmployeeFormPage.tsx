@@ -4,18 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { fetchCompanyProfiles } from '@/lib/companyProfileApi'
-import { createEmployee, defaultEmployeePermissions, fetchEmployeeById, fetchEmployees, updateEmployee, type EmployeePayload } from '@/lib/employeeApi'
+import { createEmployee, fetchEmployeeById, fetchEmployees, updateEmployee, type EmployeePayload } from '@/lib/employeeApi'
 
-const defaultCrudOptions = ['Create', 'Read', 'Update', 'Delete']
+const defaultCrudOptions = ['Create', 'View', 'Edit', 'Delete']
 const defaultModuleOptions = [
   'Dashboard',
-  'Contact',
+  'Contacts',
   'Mail Campaign',
   'Lead',
   'Activity',
   'Calendar',
   'Customer',
-  'Quotation',
+  'Quotations',
   'Supplier',
   'Funnel',
   'OPF',
@@ -31,7 +31,6 @@ const defaultModuleOptions = [
 ]
 const employeeTypeOptions = ['Select', 'Admin', 'Account', 'Manager', 'User']
 const departmentOptions = ['Sales', 'Marketing', 'Operations', 'Support', 'Administration']
-
 const formatArrayValues = (value: string[] | string | undefined) => {
   if (!value) return []
   if (Array.isArray(value)) return value
@@ -58,7 +57,6 @@ const initialForm: EmployeePayload = {
   branchCode: '',
   crudOption: [],
   modulesOption: [],
-  permissions: defaultEmployeePermissions(),
 }
 
 interface MultiSelectDropdownProps {
@@ -233,7 +231,6 @@ export default function EmployeeFormPage() {
           branchCode: employee.branchCode || '',
           crudOption: employee.crudOption || [],
           modulesOption: employee.modulesOption || [],
-          permissions: employee.permissions || defaultEmployeePermissions(),
         })
       }
     }
@@ -251,17 +248,12 @@ export default function EmployeeFormPage() {
   }
 
   const handleReset = () => {
-    setForm({ ...initialForm, permissions: defaultEmployeePermissions() })
+    setForm(initialForm)
     setSubmitError(null)
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-
-    if (!form.officialEmployeeId?.trim()) {
-      setSubmitError('Official employee id is required.')
-      return
-    }
 
     if (!form.employeeName?.trim()) {
       setSubmitError('Full name is required.')
@@ -273,7 +265,7 @@ export default function EmployeeFormPage() {
       return
     }
 
-    if (!form.password?.trim()) {
+    if (!isEditing && !form.password?.trim()) {
       setSubmitError('Password is required.')
       return
     }
@@ -302,7 +294,7 @@ export default function EmployeeFormPage() {
         employeeName: form.employeeName.trim(),
         fullName: form.employeeName.trim(),
         email: form.email.trim(),
-        password: form.password.trim(),
+        password: form.password?.trim() ? form.password : '',
         phone: form.phone?.trim() || form.contactNo?.trim() || '',
         contactNo: form.contactNo?.trim() || form.phone?.trim() || '',
         designation: form.designation?.trim() || '',
@@ -318,7 +310,6 @@ export default function EmployeeFormPage() {
         branchCode: form.branchCode?.trim() || '',
         crudOption: selectedCrudOptions,
         modulesOption: selectedModuleOptions,
-        permissions: form.permissions ?? defaultEmployeePermissions(),
       }
 
       if (isEditing && id) {
@@ -371,7 +362,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Password *</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">{isEditing ? 'New Password (optional)' : 'Password *'}</span>
               <input type="password" value={form.password || ''} onChange={(event) => handleChange('password', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 

@@ -9,9 +9,11 @@ const {
   importUpload,
   updateContact,
   deleteContact,
+  getEmployeeBatchGroups,
 } = require('../controllers/contactController');
 
 router.get('/', getContacts);
+router.get('/batch-groups', getEmployeeBatchGroups);
 router.get('/:id', getContactById);
 router.post('/:id/move-to-customer', moveContactToCustomer);
 router.post('/import', importUpload.single('file'), importContacts);

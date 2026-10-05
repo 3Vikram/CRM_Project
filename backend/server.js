@@ -20,6 +20,7 @@ const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
+const { authMiddleware, requirePermission, requireAdmin } = require('./middleware/authMiddleware');
 
 const app = express();
 
@@ -28,19 +29,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.use('/api/customers', customerRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/suppliers', supplierRoutes);
+app.use('/api/customers', authMiddleware, requirePermission('customers'), customerRoutes);
+app.use('/api/contacts', authMiddleware, requirePermission('contacts'), contactRoutes);
+app.use('/api/suppliers', authMiddleware, requirePermission('suppliers'), supplierRoutes);
 app.use('/api/mail-campaigns', mailCampaignRoutes);
-app.use('/api/leads', leadRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/calendar', calendarRoutes);
-app.use('/api/company-profiles', companyProfileRoutes);
-app.use('/api/opf', opfRoutes);
-app.use('/api/employees', employeeRoutes);
+app.use('/api/leads', authMiddleware, leadRoutes);
+app.use('/api/activities', authMiddleware, requirePermission('activities'), activityRoutes);
+app.use('/api/calendar', authMiddleware, requirePermission('calendar'), calendarRoutes);
+app.use('/api/company-profiles', authMiddleware, requirePermission('companyProfiles'), companyProfileRoutes);
+app.use('/api/opf', authMiddleware, requirePermission('opf'), opfRoutes);
+app.use('/api/employees', authMiddleware, requireAdmin, employeeRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/locations', locationRoutes);
+app.use('/api/reports', authMiddleware, requirePermission('reports'), reportRoutes);
+app.use('/api/locations', authMiddleware, locationRoutes);
 
 app.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError || error?.message?.startsWith('Unsupported file type:')) {

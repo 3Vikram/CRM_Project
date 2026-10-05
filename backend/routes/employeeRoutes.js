@@ -1,4 +1,5 @@
 const express = require('express');
+const { requirePermission } = require('../middleware/authMiddleware');
 const router = express.Router();
 const {
   getEmployees,
@@ -8,10 +9,10 @@ const {
   deleteEmployee,
 } = require('../controllers/employeeController');
 
-router.get('/', getEmployees);
-router.get('/:id', getEmployeeById);
-router.post('/', createEmployee);
-router.put('/:id', updateEmployee);
-router.delete('/:id', deleteEmployee);
+router.get('/', requirePermission('employees', 'view'), getEmployees);
+router.get('/:id', requirePermission('employees', 'view'), getEmployeeById);
+router.post('/', requirePermission('employees', 'create'), createEmployee);
+router.put('/:id', requirePermission('employees', 'edit'), updateEmployee);
+router.delete('/:id', requirePermission('employees', 'delete'), deleteEmployee);
 
 module.exports = router;

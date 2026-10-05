@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { Toast } from '@/components/toast';
 import { deleteActivity, fetchActivities, type ActivityRecord } from '@/lib/activityApi';
+import { PermissionGate } from '@/components/PermissionGate';
 import { fetchCustomers } from '@/lib/customerApi';
 
 const createdByOptions = ['Admin', 'Anaya Patel', 'Rahul Sharma', 'Rhea Shah', 'Maya Nair', 'System'];
@@ -179,9 +180,11 @@ export default function ActivityPage() {
           <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
             <Download className="h-4 w-4" /> Download Report
           </button>
-          <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
-            <Plus className="h-4 w-4" /> Add New
-          </button>
+          <PermissionGate moduleName="activities" action="create">
+            <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" /> Add New
+            </button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -271,12 +274,8 @@ export default function ActivityPage() {
                         <button type="button" onClick={() => setSelectedActivity(activity)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700">
                           <Eye className="h-3.5 w-3.5" /> View
                         </button>
-                        <button type="button" onClick={() => navigate(`/sales/activities/edit/${activity._id}`)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700">
-                          <Pencil className="h-3.5 w-3.5" /> Edit
-                        </button>
-                        <button type="button" onClick={() => setActivityPendingDeletion(activity)} className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
-                          <Trash2 className="h-3.5 w-3.5" /> Delete
-                        </button>
+                        <PermissionGate moduleName="activities" action="edit"><button type="button" onClick={() => navigate(`/sales/activities/edit/${activity._id}`)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700"><Pencil className="h-3.5 w-3.5" /> Edit</button></PermissionGate>
+                        <PermissionGate moduleName="activities" action="delete"><button type="button" onClick={() => setActivityPendingDeletion(activity)} className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"><Trash2 className="h-3.5 w-3.5" /> Delete</button></PermissionGate>
                       </div>
                     </td>
                   </tr>

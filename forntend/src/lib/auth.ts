@@ -7,7 +7,20 @@ export interface AuthSessionData {
     name: string;
     email: string;
     role: AuthRole;
+    permissions?: EmployeePermissions;
   };
+}
+
+export interface PermissionBlock {
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+export interface EmployeePermissions {
+  dashboard: boolean;
+  [moduleName: string]: boolean | PermissionBlock;
 }
 
 const EMPLOYEE_AUTH_KEY = 'synov_employee_auth';

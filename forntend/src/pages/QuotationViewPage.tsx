@@ -22,15 +22,11 @@ const parseTaxPercent = (value: unknown): number => {
   return safeNumber(match[1])
 }
 
-const formatCurrency = (value: unknown): string => {
-  const numericValue = safeNumber(value)
-  if (numericValue === 0) return '₹0'
+const formatAmount = (value: unknown): string => {
   return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(numericValue)
+  }).format(safeNumber(value))
 }
 
 const formatDate = (date?: string | null): string => {
@@ -96,6 +92,7 @@ const numberToIndianWords = (value: number): string => {
 export default function QuotationViewPage() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const isPdfTab = new URLSearchParams(window.location.search).get('openPdf') === '1'
   const [quotation, setQuotation] = useState<LeadRecord | null>(null)
   const [companyProfile, setCompanyProfile] = useState<CompanyProfileRecord | null>(null)
   const [customer, setCustomer] = useState<CustomerApiRecord | null>(null)
@@ -104,7 +101,9 @@ export default function QuotationViewPage() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [isSendingEmail, setIsSendingEmail] = useState(false)
+  const [isGeneratingBrowserPdf, setIsGeneratingBrowserPdf] = useState(isPdfTab)
   const printRef = useRef<HTMLDivElement | null>(null)
+  const hasStartedPdfTab = useRef(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -154,6 +153,49 @@ export default function QuotationViewPage() {
 
     void loadData()
   }, [id])
+
+  useEffect(() => {
+    if (!isPdfTab || isLoading || !quotation || !printRef.current || hasStartedPdfTab.current) return
+
+    hasStartedPdfTab.current = true
+    const quotationElement = printRef.current
+    const openGeneratedPdf = async () => {
+      try {
+        const pdfUrl = await new Promise<string>((resolve, reject) => {
+          html2pdf()
+            .set({
+              margin: [0, 0, 0, 0],
+              image: { type: 'jpeg', quality: 0.98 },
+              html2canvas: {
+                scale: 2,
+                useCORS: true,
+                scrollX: 0,
+                scrollY: 0,
+                backgroundColor: '#ffffff',
+              },
+              jsPDF: {
+                unit: 'mm',
+                format: 'a4',
+                orientation: 'portrait',
+              },
+            })
+            .from(quotationElement)
+            .toPdf()
+            .get('pdf')
+            .then((pdf: any) => resolve(URL.createObjectURL(pdf.output('blob'))))
+            .catch(reject)
+        })
+
+        window.location.replace(pdfUrl)
+      } catch (pdfError) {
+        setIsGeneratingBrowserPdf(false)
+        setError(pdfError instanceof Error ? pdfError.message : 'Unable to generate quotation PDF.')
+        hasStartedPdfTab.current = false
+      }
+    }
+
+    void openGeneratedPdf()
+  }, [isLoading, isPdfTab, quotation])
 
   if (isLoading) {
     return (
@@ -348,7 +390,7 @@ export default function QuotationViewPage() {
   const validityValue = quotation.quotationDetails?.validity || '30'
   const paymentValue = quotation.quotationDetails?.payment || 'Payment terms as agreed between both parties.'
 
-  const termsList = [
+  const termsList: { label?: string; value: string }[] = [
     { label: 'Taxes & Duties', value: 'All Inclusive.' },
     { label: 'Payment Terms', value: paymentValue },
     { label: 'Order Cancellation', value: 'Orders once placed cannot be cancelled under any circumstances.' },
@@ -356,174 +398,220 @@ export default function QuotationViewPage() {
     { label: 'Purchase Order', value: 'PO to be placed in the name of Synov IT Services Pvt Ltd, Bangalore.' },
     { label: 'Delivery', value: `Within ${deliveryValue} from the date of receipt of PO.` },
     { label: 'Quote Validity', value: `This quote is valid for ${validityValue} days only. Orders received beyond quote validity will not be accepted.` },
-    { label: 'Prices quoted', value: 'Prices quoted are exclusive of any additional charges unless mentioned explicitly.' },
+    { value: 'Prices quoted are as per quantity mentioned. Any changes in quantity, prices will change accordingly.' },
     { label: 'Licenses/Subscription', value: 'Synov IT Services Pvt Ltd will only liaise between customer and OEM /Vendor and is responsible only to deliver licenses/subscription as per quote provided. License/Subscription EULA as per OEM/Vendor.' },
     { label: 'Support', value: 'As per OEM/Vendor terms unless mentioned specifically.' },
-    { label: 'Courier charges', value: 'Courier charges should be borne by the client if the delivery location is outside Bengaluru.' },
+    { value: 'Courier charges should be borne by the client if the delivery location is outside Bengaluru.' },
     { label: 'Implementation & Training', value: 'The prices quoted do not include Implementation, Training or any other professional services unless mentioned specifically.' },
   ]
 
   return (
-    <div className="bg-white text-black" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="quotation-preview-page min-h-full bg-[#e5e5e5] text-black">
+      {isGeneratingBrowserPdf && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-white text-sm text-slate-700" role="status">
+          Preparing quotation PDF...
+        </div>
+      )}
       <style>{`
-        .quotation-document {
+        .quotation-view-shell {
           width: 100%;
-          max-width: none;
+          max-width: 794px;
           margin: 0 auto;
-          padding: 28px 3% 34px !important;
+          padding: 20px;
           box-sizing: border-box;
-          font-size: 14px;
+          background: #ffffff;
+          color: #000000;
+          font-family: "Times New Roman", Times, serif;
+        }
+        .quotation-frame {
+          width: 100%;
+          box-sizing: border-box;
+          border: 1px solid #000000;
+          background: #ffffff;
+          color: #000000;
+        }
+        .quotation-view-shell .quotation-frame * {
+          box-sizing: border-box;
+          color: #000000 !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 12px !important;
+          font-weight: normal !important;
+          line-height: 15px !important;
         }
         .quotation-header {
-          display: grid !important;
-          grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-          align-items: center !important;
-          gap: 28px;
-          margin: 0 0 28px !important;
-          padding-bottom: 20px;
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          padding: 5px 6px 4px;
         }
-        .quotation-meta {
-          max-width: 460px;
-          line-height: 1.55;
+        .quotation-header-meta,
+        .quotation-view-shell .quotation-frame .quotation-header-meta * {
+          font-size: 13.33px !important;
+          font-weight: bold !important;
+          line-height: 17px !important;
+        }
+        .quotation-view-shell .quotation-frame .quotation-header-title {
+          align-self: end;
+          margin: 0;
+          font-size: 24px !important;
+          font-weight: bold !important;
+          line-height: 29px !important;
+          text-align: center;
+          text-decoration: underline;
+          text-transform: uppercase;
+          white-space: nowrap;
         }
         .quotation-logo {
-          grid-column: 3;
-          grid-row: 1;
-          min-height: 92px;
-          align-items: center !important;
+          justify-self: end;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
         }
         .quotation-logo img {
-          margin: 0 !important;
-          height: 88px !important;
-          max-width: 240px !important;
+          display: block;
+          width: auto;
+          height: 90px;
+          object-fit: contain;
         }
-        .quotation-title {
-          grid-column: 2;
-          grid-row: 1;
-          white-space: nowrap;
-          font-size: 20px !important;
+        .quotation-section {
+          padding: 0 6px;
         }
-        .quotation-recipient {
-          margin-top: 0 !important;
-          padding-top: 4px;
-          line-height: 1.55;
+        .quotation-view-shell .quotation-frame .quotation-subject {
+          margin-top: 15px;
+          font-weight: bold !important;
         }
-        .quotation-subject {
-          margin-top: 22px !important;
-          line-height: 1.5;
+        .quotation-view-shell .quotation-frame .quotation-subject * {
+          font-weight: bold !important;
         }
         .quotation-introduction {
-          margin-top: 22px !important;
-          line-height: 1.65 !important;
-        }
-        .quotation-introduction > div + div {
-          margin-top: 9px !important;
+          margin-top: 15px;
         }
         .quotation-products-table {
-          margin-top: 24px !important;
+          width: calc(100% + 2px);
+          margin: 21px 0 0 -1px;
+          overflow: visible;
         }
-        .quotation-products-table table {
-          font-size: inherit;
+        .q-table {
+          width: 100%;
+          table-layout: fixed;
+          border-collapse: separate;
+          border-spacing: 0;
         }
-        .quotation-products-table th,
-        .quotation-products-table td {
-          line-height: 1.4;
+        .q-table th,
+        .q-table td {
+          border: none;
+          border-right: 1px solid #000000;
+          border-bottom: 1px solid #000000;
+          padding: 7px 4px;
+          font-size: 10.67px !important;
+          line-height: 13px !important;
+          text-align: center;
           vertical-align: middle;
         }
-        .quotation-products-table thead tr {
-          height: 34px !important;
+        .q-table thead th {
+          border-top: 1px solid #000000;
         }
-        .quotation-products-table tbody tr:not(:last-child) td {
-          padding-top: 10px !important;
-          padding-bottom: 10px !important;
+        .quotation-view-shell .quotation-frame .quotation-products-table th {
+          font-weight: bold !important;
+        }
+        .quotation-view-shell .quotation-frame .quotation-products-table td.quotation-description-cell {
+          padding: 7px 10px !important;
+        }
+        .q-table tr > *:last-child {
+          border-right: none;
+        }
+        .quotation-view-shell .quotation-frame .quotation-tax-line {
+          display: block;
+          line-height: 13px !important;
+        }
+        .quotation-view-shell .quotation-frame .quotation-tax-separator {
+          color: #555555 !important;
+        }
+        .quotation-view-shell .quotation-frame .quotation-grand-total td,
+        .quotation-view-shell .quotation-frame .quotation-grand-total td * {
+          font-weight: bold !important;
         }
         .quotation-terms {
-          margin-top: 30px !important;
-          line-height: 1.55 !important;
+          margin-top: 21px;
+          padding: 0 6px;
         }
-        .quotation-terms > div {
-          margin-bottom: 8px !important;
+        .quotation-view-shell .quotation-frame .quotation-terms-heading {
+          font-weight: bold !important;
         }
-        .quotation-terms li {
-          margin-bottom: 4px !important;
-          line-height: 1.5 !important;
+        .quotation-term {
+          font-weight: normal !important;
         }
         .quotation-closing {
-          margin-top: 28px !important;
-          line-height: 1.55 !important;
+          margin-top: 15px;
+          padding: 0 6px;
+        }
+        .quotation-closing p {
+          margin: 0;
+          font-weight: normal !important;
         }
         .quotation-closing p + p {
-          margin-top: 16px !important;
+          margin-top: 15px;
         }
-        .quotation-closing > div {
-          margin-top: 18px !important;
-          line-height: 1.55;
+        .quotation-signoff {
+          margin-top: 15px;
         }
-        .quotation-branding-block {
-          margin-top: 34px;
+        .quotation-signoff div {
+          margin: 0;
+          font-weight: normal !important;
         }
         .quotation-partner-logo {
-          padding-top: 20px !important;
+          display: flex;
+          justify-content: center;
+          margin-top: 28px;
         }
         .quotation-partner-logo img {
-          height: 135px !important;
-          max-width: min(100%, 520px);
+          display: block;
+          width: 97%;
+          height: auto;
+        }
+        .quotation-footer-rule {
+          width: 79%;
+          margin: 4px auto 22px;
+          border-top: 1px solid #2b2b2b;
         }
         .quotation-footer {
-          margin-top: 30px !important;
-          padding-top: 16px !important;
-          line-height: 1.55;
+          padding: 0 6px 16px;
+          text-align: center;
+          font-size: 12px !important;
+          line-height: 15px !important;
+        }
+        .quotation-footer > div {
+          font-size: 12px !important;
+          line-height: 15px !important;
+        }
+        @layer base {
+          .quotation-view-shell .quotation-frame * { font-size: 12px !important; }
+          .quotation-view-shell .q-meta div { font-size: 13.33px !important; }
+          .quotation-view-shell .q-title { font-size: 24px !important; }
+          .quotation-view-shell .q-table th,
+          .quotation-view-shell .q-table td,
+          .quotation-view-shell .q-table * { font-size: 10.67px !important; }
         }
         @media (max-width: 720px) {
-          .quotation-document {
-            padding: 20px 16px 28px !important;
-          }
-          .quotation-header {
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 14px;
-            padding-bottom: 16px;
-          }
-          .quotation-title {
-            grid-column: 1 / -1;
-            grid-row: 2;
-            justify-self: center;
-            font-size: 20px !important;
-          }
-          .quotation-logo {
-            grid-column: 2;
-            grid-row: 1;
-            min-height: 70px;
-          }
-          .quotation-logo img {
-            height: 64px !important;
-            max-width: 150px !important;
-          }
           .quotation-products-table {
             overflow-x: auto;
           }
-          .quotation-products-table table {
-            min-width: 720px;
-          }
-          .quotation-partner-logo img {
-            height: 100px !important;
+          .q-table {
+            min-width: 690px;
           }
         }
-
         @page {
           size: A4 portrait;
-          margin: 8mm;
+          margin: 0;
         }
-
         @media print {
           body * {
             visibility: hidden !important;
           }
-
           .quotation-view-shell,
           .quotation-view-shell * {
             visibility: visible !important;
           }
-
           html,
           body,
           #root {
@@ -537,106 +625,25 @@ export default function QuotationViewPage() {
             background: #ffffff !important;
             display: block !important;
           }
-
           .quotation-actions {
             display: none !important;
           }
-
           .quotation-view-shell {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
             width: 100% !important;
             max-width: 194mm !important;
-            height: auto !important;
-            min-height: 0 !important;
-            margin: 0 !important;
+            margin: 0 auto !important;
             padding: 0 !important;
-            box-sizing: border-box !important;
             background: #ffffff !important;
-            box-shadow: none !important;
-            max-width: 194mm !important;
-            overflow: visible !important;
           }
-
-          .quotation-view-shell > div {
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-            box-sizing: border-box !important;
-            overflow: visible !important;
-            max-height: none !important;
-            height: auto !important;
-          }
-
-          .quotation-view-shell table {
-            width: 100% !important;
-            max-width: 100% !important;
-            table-layout: fixed !important;
-            border-collapse: collapse !important;
-            box-sizing: border-box !important;
-            overflow-wrap: anywhere !important;
-            word-break: break-word !important;
-          }
-
           .quotation-products-table {
-            width: 100% !important;
-            max-width: 100% !important;
             overflow: visible !important;
-            box-sizing: border-box !important;
           }
-
-          .quotation-view-shell th,
-          .quotation-view-shell td {
-            max-width: 0 !important;
-            box-sizing: border-box !important;
-            overflow-wrap: anywhere !important;
-            word-break: break-word !important;
-            white-space: normal !important;
+          .q-table {
+            min-width: 0 !important;
           }
-
-          .quotation-view-shell thead {
-            display: table-header-group !important;
-          }
-
-          .quotation-view-shell tr,
-          .quotation-view-shell .quotation-branding-block,
-          .quotation-view-shell .quotation-footer {
+          .quotation-products-table tr {
             break-inside: avoid;
             page-break-inside: avoid;
-          }
-
-          .quotation-view-shell tbody tr {
-            break-inside: auto;
-            page-break-inside: auto;
-          }
-
-          .quotation-branding-block {
-            position: static !important;
-            display: block !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            max-height: none !important;
-          }
-
-          .quotation-footer {
-            position: static !important;
-            display: block !important;
-            margin: auto 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            max-height: none !important;
-          }
-
-          .quotation-footer div {
-            page-break-inside: auto !important;
-            break-inside: auto !important;
-            height: auto !important;
           }
         }
       `}</style>
@@ -697,45 +704,26 @@ export default function QuotationViewPage() {
           />
         )}
 
-        <div ref={printRef} className="quotation-view-shell w-full max-w-none mx-0">
-          <div className="quotation-document bg-white p-1.5 md:p-2" style={{ borderRadius: 0, boxShadow: 'none' }}>
-            <div className="quotation-header mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 leading-tight">
-            <div className="quotation-meta max-w-[460px] min-w-0 text-[14px] font-bold text-black">
-              <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start' }}>
-                <span className="font-semibold">Date</span>
-                <span>:</span>
-                <span className="min-w-0 break-all">{formatDate(quotation.createdDate)}</span>
+        <div ref={printRef} className="quotation-view-shell">
+          <div className="quotation-frame">
+            <div className="quotation-header">
+              <div className="quotation-header-meta">
+                <div>Date: {formatDate(quotation.createdDate)}</div>
+                <div>Ref No: {referenceNo}</div>
+                <div>GSTIN/UIN: {companyProfile?.gstNo || '—'}</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start', marginTop: '2px' }}>
-                <span className="font-semibold">Ref No</span>
-                <span>:</span>
-                <span className="min-w-0 break-all">{referenceNo}</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '92px 12px minmax(0, 1fr)', columnGap: '6px', alignItems: 'start', marginTop: '2px' }}>
-                <span className="font-semibold">GSTIN/UIN</span>
-                <span>:</span>
-                <span className="min-w-0 break-all">{companyProfile?.gstNo || '—'}</span>
+
+              <h1 className="quotation-header-title">QUOTATION</h1>
+
+              <div className="quotation-logo">
+                {companyLogoUrl ? (
+                  <img src={companyLogoUrl} alt={companyProfile?.companyName || 'Company logo'} />
+                ) : null}
               </div>
             </div>
 
-            <div className="quotation-logo flex items-start justify-end">
-              {companyLogoUrl ? (
-                <img
-                  src={companyLogoUrl}
-                  alt={companyProfile?.companyName || 'Company logo'}
-                  className="-mt-5 h-[110px] w-auto max-w-[300px] object-contain"
-                />
-              ) : null}
-            </div>
-
-            <h1 className="quotation-title m-0 text-[20px] font-bold uppercase text-black underline decoration-[1.5px] underline-offset-4" style={{ letterSpacing: 'normal' }}>
-              QUOTATION
-            </h1>
-          </div>
-
-          <div className="quotation-recipient mt-3 text-[14px] text-black">
-            <div className="mb-1 font-bold uppercase">To,</div>
-            <div className="leading-snug text-[14px] font-medium">
+            <div className="quotation-section quotation-recipient">
+              <div>To,</div>
               <div>{quotation.contactPerson || '—'}</div>
               <div>{quotation.companyName || '—'}</div>
               {(() => {
@@ -751,220 +739,134 @@ export default function QuotationViewPage() {
                 return addressParts.length > 0 ? <div>{addressParts.join(', ')}</div> : null
               })()}
             </div>
-          </div>
 
-          <div className="quotation-subject mt-3 text-[14px] text-black">
-            <span className="font-semibold">Subject:</span>
-            <span className="ml-1 font-medium uppercase">{subject}</span>
-          </div>
+            <div className="quotation-section quotation-introduction">
+              <div>Dear Sir/Madam,</div>
+              <div>We are pleased to send our best quote for the following products enquired.</div>
+            </div>
 
-          <div className="quotation-introduction mt-3 text-[14px] leading-relaxed text-black">
-            <div className="font-semibold">Dear Sir/Madam,</div>
-            <div className="mt-1 font-medium">We are pleased to send our best quote for the following products enquired.</div>
-          </div>
-
-         {/* <div className="mt-2 overflow-hidden" style={{ border: '0.3px solid #000000' }}> */}
-        <div className="quotation-products-table mt-2 overflow-hidden">
-          <table className="w-full text-[14px] text-black" style={{ fontFamily: '"Times New Roman", Times, serif', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: '5%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '22%' }} />
-                <col style={{ width: '6%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '15%' }} />
-              </colgroup>
-              <thead>
-                <tr style={{ height: '22px' }}>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '5%', border: '0.3px solid #000000' }}>SL.<br />No.</th>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '15%', border: '0.3px solid #000000' }}>Product</th>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '25%', border: '0.3px solid #000000' }}>Description</th>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '6%', border: '0.3px solid #000000' }}>Qty</th>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '11%', border: '0.3px solid #000000' }}>Unit<br />Price(INR)</th>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '11%', border: '0.3px solid #000000' }}>Sub<br />Total(INR)</th>
-                  <th colSpan={2} className="px-1 py-1 text-center font-bold align-middle" style={{ width: '14%', border: '0.3px solid #000000' }}>GST (INR)</th>
-                  <th className="px-1 py-1 text-center font-bold align-middle" style={{ width: '13%', border: '0.3px solid #000000' }}>Total<br />Price(INR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.length > 0 ? (
-                  products.map((product, index) => {
-                    const subtotal = getProductSubtotal(product)
-                    const taxPercent = parseTaxPercent(product.tax)
-                    const cgstRate = taxPercent / 2
-                    const sgstRate = taxPercent / 2
-                    const cgst = (subtotal * cgstRate) / 100
-                    const sgst = (subtotal * sgstRate) / 100
-                    const total = subtotal + cgst + sgst
-                    const taxBreakdown = getTaxBreakdown(product.tax)
-                    const leftTaxValue = taxBreakdown.leftLabel.toLowerCase().includes('igst') ? (subtotal * taxPercent) / 100 : cgst
-                    const rightTaxValue = taxBreakdown.rightLabel.toLowerCase().includes('igst') ? 0 : sgst
-
-                    return (
-                      <tr key={`${product.productName || 'product'}-${index}`} style={{ height: 'auto' }}>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{index + 1}</td>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{product.productName || '—'}</td>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', wordWrap: 'break-word', verticalAlign: 'middle', whiteSpace: 'normal', textAlign: 'center', padding: '8px 6px' }}>{product.productDescription || '—'}</td>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{safeNumber(product.quantity)}</td>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(product.unitPrice)}</td>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(subtotal)}</td>
-                        <td
-                          className="px-1 py-1 text-center align-middle text-[14px]"
-                          style={{
-                            border: '0.3px solid #000000',
-                            verticalAlign: 'middle',
-                            textAlign: 'center',
-                            padding: '8px 6px',
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                            <div className="font-bold">{taxBreakdown.leftLabel} {taxBreakdown.leftRate ? `${taxBreakdown.leftRate}%` : ''}</div>
-                            <div style={{ width: '80%', borderTop: '1px dashed #b5b5b5', margin: '0 4px' }} />
-                            <div>{formatCurrency(leftTaxValue)}</div>
-                          </div>
-                        </td>
-
-                        <td
-                          className="px-1 py-1 text-center align-middle text-[14px]"
-                          style={{
-                            border: '0.3px solid #000000',
-                            verticalAlign: 'middle',
-                            textAlign: 'center',
-                            padding: '8px 6px',
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                            <div className="font-bold">{taxBreakdown.rightLabel} {taxBreakdown.rightRate ? `${taxBreakdown.rightRate}%` : ''}</div>
-                            <div style={{ width: '80%', borderTop: '1px dashed #b5b5b5', margin: '0 4px' }} />
-                            <div>{formatCurrency(rightTaxValue)}</div>
-                          </div>
-                        </td>
-                        <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', verticalAlign: 'middle', textAlign: 'center', padding: '8px 6px' }}>{formatCurrency(total)}</td>
-                      </tr>
-                    )
-                  })
-                ) : (
+            <div className="quotation-products-table">
+              <table className="q-table">
+                <colgroup>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '21%' }} />
+                  <col style={{ width: '5.5%' }} />
+                  <col style={{ width: '11.5%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} />
+                  <col style={{ width: '12%' }} />
+                </colgroup>
+                <thead>
                   <tr>
-                    <td colSpan={9} className="px-1 py-2 text-center text-slate-600" style={{ border: '0.3px solid #000000' }}>
-                      No products added.
-                    </td>
+                    <th>Sl.<br />No.</th>
+                    <th>Product</th>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit<br />Price(INR)</th>
+                    <th>Sub<br />Total(INR)</th>
+                    <th colSpan={2}>GST (INR)</th>
+                    <th>Total<br />Price(INR)</th>
                   </tr>
-                )}
+                </thead>
+                <tbody>
+                  {products.length > 0 ? (
+                    products.map((product, index) => {
+                      const subtotal = getProductSubtotal(product)
+                      const taxPercent = parseTaxPercent(product.tax)
+                      const cgstRate = taxPercent / 2
+                      const sgstRate = taxPercent / 2
+                      const cgst = (subtotal * cgstRate) / 100
+                      const sgst = (subtotal * sgstRate) / 100
+                      const total = subtotal + cgst + sgst
+                      const taxBreakdown = getTaxBreakdown(product.tax)
+                      const leftTaxValue = taxBreakdown.leftLabel.toLowerCase().includes('igst') ? (subtotal * taxPercent) / 100 : cgst
+                      const rightTaxValue = taxBreakdown.rightLabel.toLowerCase().includes('igst') ? 0 : sgst
 
-                <tr style={{ height: '18px', fontWeight: 'bold' }}>
-                  <td colSpan={5} className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>Grand Total</td>
-                  <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>{formatCurrency(subtotalTotal)}</td>
-                  <td colSpan={2} className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>{formatCurrency(totalCGST + totalSGST)}</td>
-                  <td className="px-1 py-1 text-center align-middle" style={{ border: '0.3px solid #000000', fontWeight: 'bold', textAlign: 'center' }}>{formatCurrency(grandTotal)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                      return (
+                        <tr key={`${product.productName || 'product'}-${index}`}>
+                          <td>{index + 1}</td>
+                          <td>{product.productName || '—'}</td>
+                          <td className="quotation-description-cell">{product.productDescription || '—'}</td>
+                          <td>{safeNumber(product.quantity)}</td>
+                          <td>{formatAmount(product.unitPrice)}</td>
+                          <td>{formatAmount(subtotal)}</td>
+                          <td>
+                            <div className="quotation-tax-line">{taxBreakdown.leftLabel} {taxBreakdown.leftRate ? `${taxBreakdown.leftRate}%` : ''}</div>
+                            <div className="quotation-tax-line quotation-tax-separator">-----------</div>
+                            <div className="quotation-tax-line">{formatAmount(leftTaxValue)}</div>
+                          </td>
+                          <td>
+                            <div className="quotation-tax-line">{taxBreakdown.rightLabel} {taxBreakdown.rightRate ? `${taxBreakdown.rightRate}%` : ''}</div>
+                            <div className="quotation-tax-line quotation-tax-separator">-----------</div>
+                            <div className="quotation-tax-line">{formatAmount(rightTaxValue)}</div>
+                          </td>
+                          <td>{formatAmount(total)}</td>
+                        </tr>
+                      )
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={9}>No products added.</td>
+                    </tr>
+                  )}
 
-<div
-  className="quotation-terms mt-3 text-[14px] text-black"
-  style={{
-    fontFamily: '"Times New Roman", Times, serif',
-    lineHeight: '1.3',
-  }}
->
-  <div
-    style={{
-      fontWeight: 'bold',
-      marginBottom: '3px',
-    }}
-  >
-    Terms &amp; Conditions:
-  </div>
+                  <tr className="quotation-grand-total">
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td colSpan={2}>Grand Total</td>
+                    <td>{formatAmount(subtotalTotal)}</td>
+                    <td colSpan={2}>{formatAmount(totalCGST + totalSGST)}</td>
+                    <td>{formatAmount(grandTotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-  <ol
-    style={{
-      listStyleType: 'decimal',
-      listStylePosition: 'outside',
-      paddingLeft: '18px',
-      margin: 0,
-    }}
-  >
-    {termsList.map((term, index) => (
-      <li
-        key={`${term.label}-${index}`}
-        style={{
-          margin: 0,
-          padding: 0,
-          lineHeight: '1.3',
-          fontWeight: 'normal',
-        }}
-      >
-        <span style={{ fontWeight: 'normal' }}>
-          {term.label}:
-        </span>{' '}
-        <span style={{ fontWeight: 'normal' }}>
-          {term.value}
-        </span>
-      </li>
-    ))}
-  </ol>
-</div>
+            <div className="quotation-terms">
+              <div className="quotation-terms-heading">Terms &amp; Conditions:</div>
+              {termsList.map((term, index) => (
+                <div className="quotation-term" key={`${term.label || term.value}-${index}`}>
+                  {index + 1}. {term.label ? `${term.label}: ` : ''}{term.value}
+                </div>
+              ))}
+            </div>
 
-            <div
-          className="quotation-closing mt-4 leading-tight text-black"
-  style={{
-    fontFamily: '"Times New Roman", Times, serif',
-    fontSize: '14px',
-  }}
->
-  <p className="m-0">
-    Please do not hesitate to contact me in case of any clarifications.
-  </p>
+            <div className="quotation-closing">
+              <p>Please do not hesitate to contact me in case of any clarifications.</p>
+              <p>Thank you for giving us opportunity to serve you. Looking forward to your valuable order.</p>
+              <div className="quotation-signoff">
+                <div>From {companyProfile?.companyName || 'Synov IT Services Pvt Ltd'}</div>
+                <div>{quotation.createdBy || 'Authorized person / Created By'}</div>
+                <div>Phone: {companyProfile?.companyContactNo || '—'}</div>
+              </div>
+            </div>
 
-  <p className="mt-3 mb-0">
-    Thank you for giving us opportunity to serve you. Looking forward to your valuable order.
-  </p>
-
-  <div className="mt-3">
-    <div className="font-bold text-black">
-      From {companyProfile?.companyName || 'Synov IT Services Pvt Ltd'}
-    </div>
-
-    <div className="mt-1">
-      {quotation.createdBy || 'Authorized person / Created By'}
-    </div>
-
-    <div className="mt-1">
-      Phone: {companyProfile?.companyContactNo || '—'}
-    </div>
-  </div>
-</div>
-
-          <div className="quotation-branding-block">
             {partnerLogoUrl && (
-              <div className="quotation-partner-logo mt-0 flex justify-center pt-4">
-                <img
-                  src={partnerLogoUrl}
-                  alt="Company partner logo"
-                  className="h-[75px] w-auto max-w-full object-contain md:h-[180px]"
-                />
+              <div className="quotation-partner-logo">
+                <img src={partnerLogoUrl} alt="Company partner logo" />
               </div>
             )}
 
-            <div className="quotation-footer mt-4 border-t border-[#2b2b2b] pt-3 text-center text-[14px] text-black">
-              <div className="font-bold text-black">{companyProfile?.companyName || 'Company Name'}</div>
-              <div className="mt-1">
-                {companyProfile?.address || ''}
-                {companyProfile?.city ? `, ${companyProfile.city}` : ''}
-                {companyProfile?.state ? `, ${companyProfile.state}` : ''}
-                {companyProfile?.pin ? ` - ${companyProfile.pin}` : ''}
+            <div className="quotation-footer-rule" />
+            <div className="quotation-footer">
+              <div>
+                {(() => {
+                  const addressParts = [companyProfile?.address, companyProfile?.city, companyProfile?.state].filter(Boolean)
+                  const address = addressParts.join(', ')
+                  return [address, companyProfile?.pin].filter(Boolean).join(' ')
+                })()}
               </div>
-              <div className="mt-1">
-                {companyProfile?.companyContactNo ? `Phone: ${companyProfile.companyContactNo}` : ''}
-                {companyProfile?.email ? ` | Email: ${companyProfile.email}` : ''}
-                {companyProfile?.website ? ` | Website: ${companyProfile.website}` : ''}
+              <div>
+                {[
+                  companyProfile?.companyContactNo ? `Ph: ${companyProfile.companyContactNo}` : '',
+                  companyProfile?.email ? `Email: ${companyProfile.email}` : '',
+                  companyProfile?.website ? `URL: ${companyProfile.website}` : '',
+                ].filter(Boolean).join(', ')}
               </div>
             </div>
-          </div>
           </div>
         </div>
       </div>

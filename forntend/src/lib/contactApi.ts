@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { clearApiCache, getCachedResponse } from './apiCache';
+import { getStoredAuth } from './auth';
+import { getAuthHeaders } from './apiAuth';
 
 const API_BASE_URLS = Array.from(
   new Set(
@@ -22,6 +24,10 @@ async function requestWithFallback(method: 'get' | 'post' | 'put' | 'delete', ur
         method,
         url: `${baseUrl}${url}`,
         ...config,
+        headers: {
+          ...getAuthHeaders(),
+          ...((config?.headers as Record<string, string> | undefined) || {}),
+        },
       });
       return response;
     } catch (error) {
@@ -46,6 +52,9 @@ export interface ContactRecord {
   email: string;
   batchName?: string;
   batchNumber?: number;
+  employeeId?: string;
+  employeeName?: string;
+  batchId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -66,15 +75,37 @@ export interface ContactBatchSummary {
   count: number
 }
 
-export async function fetchContacts(params: { search?: string; page?: number; limit?: number; batchName?: string; batchNumber?: number } = {}) {
+export interface EmployeeBatchSummary {
+  _id?: string
+  employeeId: string
+  batchNumber: number
+  name: string
+  customerCount: number
+  count: number
+  fileName?: string
+  createdDate?: string
+}
+
+export interface EmployeeBatchGroup {
+  employeeId: string
+  employeeEmail?: string
+  employeeName: string
+  customerCount: number
+  batches: EmployeeBatchSummary[]
+}
+
+export async function fetchContacts(params: { search?: string; page?: number; limit?: number; batchName?: string; batchNumber?: number; batchId?: string; employeeId?: string } = {}) {
   const query = new URLSearchParams();
   if (params.search) query.set('search', params.search);
   if (params.page) query.set('page', String(params.page));
   if (params.limit) query.set('limit', String(params.limit));
   if (params.batchName) query.set('batchName', params.batchName);
   if (params.batchNumber) query.set('batchNumber', String(params.batchNumber));
+  if (params.batchId) query.set('batchId', params.batchId);
+  if (params.employeeId) query.set('employeeId', params.employeeId);
 
-  const cacheKey = `contacts:${query.toString()}`;
+  const session = getStoredAuth();
+  const cacheKey = `contacts:${session?.user.role || 'anonymous'}:${session?.user.id || ''}:${query.toString()}`;
   return getCachedResponse(cacheKey, async () => {
     const response = await requestWithFallback('get', '/contacts', {
       params: {
@@ -83,6 +114,8 @@ export async function fetchContacts(params: { search?: string; page?: number; li
         limit: params.limit ?? '',
         batchName: params.batchName || '',
         batchNumber: params.batchNumber || '',
+        batchId: params.batchId || '',
+        employeeId: params.employeeId || '',
       },
     });
     return response.data ?? { data: [], batches: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 1 } };
@@ -140,7 +173,12 @@ export async function importContacts(file: File) {
   formData.append('file', file);
   const response = await requestWithFallback('post', '/contacts/import', { data: formData });
   clearApiCache();
-  return response.data as { success: boolean; message: string; imported?: number; skipped?: number; batchName?: string; batchNumber?: number };
+  return response.data as { success: boolean; message: string; imported?: number; skipped?: number; batchName?: string; batchNumber?: number; employeeId?: string; employeeName?: string; fileName?: string };
+}
+
+export async function fetchEmployeeBatchGroups() {
+  const response = await requestWithFallback('get', '/contacts/batch-groups');
+  return (response.data?.data || []) as EmployeeBatchGroup[];
 }
 
 export async function fetchCustomersForContacts() {

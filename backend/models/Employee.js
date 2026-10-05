@@ -2,55 +2,66 @@ const mongoose = require('mongoose');
 
 const permissionSchema = new mongoose.Schema(
   {
-    dashboard: { type: Boolean, default: true },
+    dashboard: { type: Boolean, default: false },
     customers: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     contacts: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     leads: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     activities: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     mailCampaign: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     suppliers: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     quotations: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
     opf: {
-      view: { type: Boolean, default: true },
+      view: { type: Boolean, default: false },
       create: { type: Boolean, default: false },
       edit: { type: Boolean, default: false },
       delete: { type: Boolean, default: false },
     },
+    calendar: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    funnels: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    renewals: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    reports: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    dataAdmin: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    employees: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    companyProfiles: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    inventory: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    purchaseOrders: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    dcTracking: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
+    billSale: { view: { type: Boolean, default: false }, create: { type: Boolean, default: false }, edit: { type: Boolean, default: false }, delete: { type: Boolean, default: false } },
   },
   { _id: false }
 );
@@ -88,15 +99,11 @@ const EmployeeSchema = new mongoose.Schema(
       unique: true,
       match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
     },
-    password: {
-      type: String,
-      trim: true,
-      default: '',
-    },
     passwordHash: {
       type: String,
       trim: true,
       default: '',
+      select: false,
     },
     passwordSalt: {
       type: String,
@@ -147,6 +154,16 @@ const EmployeeSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    profilePhoto: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    signature: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     employeeType: {
       type: String,
       trim: true,
@@ -192,17 +209,7 @@ const EmployeeSchema = new mongoose.Schema(
     },
     permissions: {
       type: permissionSchema,
-      default: () => ({
-        dashboard: true,
-        customers: { view: true, create: false, edit: false, delete: false },
-        contacts: { view: true, create: false, edit: false, delete: false },
-        leads: { view: true, create: false, edit: false, delete: false },
-        activities: { view: true, create: false, edit: false, delete: false },
-        mailCampaign: { view: true, create: false, edit: false, delete: false },
-        suppliers: { view: true, create: false, edit: false, delete: false },
-        quotations: { view: true, create: false, edit: false, delete: false },
-        opf: { view: true, create: false, edit: false, delete: false },
-      }),
+      default: () => ({}),
     },
   },
   { timestamps: true }

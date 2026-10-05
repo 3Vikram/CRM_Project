@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuthHeaders } from './apiAuth';
 import { getCachedResponse } from './apiCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -98,8 +99,11 @@ export async function fetchCustomers(params: { search?: string; page?: number; l
   if (params.createdDate && params.createdDate !== 'all') searchParams.set('createdDate', params.createdDate);
 
   const cacheKey = `customers:${searchParams.toString()}`;
+  const authHeaders = getAuthHeaders();
   if (params.fresh) {
-    const response = await fetch(`${API_BASE_URL}/customers?${searchParams.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/customers?${searchParams.toString()}`, {
+      headers: authHeaders,
+    });
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => ({}));
       throw new Error(errorPayload.message || 'Failed to load customers');
@@ -107,7 +111,9 @@ export async function fetchCustomers(params: { search?: string; page?: number; l
     return response.json() as Promise<CustomerListResponse>;
   }
   return getCachedResponse<CustomerListResponse>(cacheKey, async () => {
-    const response = await fetch(`${API_BASE_URL}/customers?${searchParams.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/customers?${searchParams.toString()}`, {
+      headers: authHeaders,
+    });
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => ({}));
       throw new Error(errorPayload.message || 'Failed to load customers');
@@ -117,7 +123,9 @@ export async function fetchCustomers(params: { search?: string; page?: number; l
 }
 
 export async function fetchCustomerById(id: string) {
-  const response = await fetch(`${API_BASE_URL}/customers/${id}`);
+  const response = await fetch(`${API_BASE_URL}/customers/${id}`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to load customer');
@@ -144,6 +152,7 @@ export async function createCustomer(payload: CustomerPayload, files: File[] = [
 
   const response = await fetch(`${API_BASE_URL}/customers`, {
     method: 'POST',
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -172,6 +181,7 @@ export async function updateCustomer(id: string, payload: CustomerPayload, files
 
   const response = await fetch(`${API_BASE_URL}/customers/${id}`, {
     method: 'PUT',
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!response.ok) {
@@ -182,7 +192,10 @@ export async function updateCustomer(id: string, payload: CustomerPayload, files
 }
 
 export async function deleteCustomer(id: string) {
-  const response = await fetch(`${API_BASE_URL}/customers/${id}`, { method: 'DELETE' });
+  const response = await fetch(`${API_BASE_URL}/customers/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to delete customer');

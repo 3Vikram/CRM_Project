@@ -63,6 +63,8 @@ export default function AdminLoginPage() {
           <img src={synovLogo} alt="Synov IT Services logo" className="h-16 w-auto object-contain" />
         </div>
 
+        <h1 className="mb-6 text-center text-2xl font-semibold tracking-tight text-foreground">Sales sign in</h1>
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="admin-email" className="mb-2 block text-sm font-medium text-foreground">Email</label>
@@ -119,7 +121,7 @@ export default function AdminLoginPage() {
             disabled={isSubmitting}
             className="w-full rounded-lg bg-primary px-4 py-3 text-base font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {isSubmitting ? 'Signing in...' : 'Sign In'}
+            {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>
