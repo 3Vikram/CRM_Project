@@ -362,6 +362,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
         return {
           id: asset.id,
           index: index + 1,
+          assetId: asset.assetId || '-',
           invoiceDate: formattedDate,
           invoiceNumber: asset.invoiceNumber || '-',
           serialNumber: asset.serialNumber || '-',
@@ -455,6 +456,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
 
         return {
           id: asset.id,
+          assetId: asset.assetId || '-',
           purchaseDate,
           supplierName: asset.vendorName || '-',
           productName: asset.productName || asset.name || '-',
@@ -495,6 +497,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
   const totalDisplayedAssets = rows.length
 
   const returnedDashboardColumns: GridColDef[] = [
+    { field: 'assetId', headerName: 'Asset ID', flex: 0.9, minWidth: 140, sortable: true },
     { field: 'supplierName', headerName: 'Supplier Name', flex: 1.25, minWidth: 170, sortable: true },
     { field: 'serialNumber', headerName: 'Serial Number', flex: 1.15, minWidth: 165, sortable: true },
     { field: 'productName', headerName: 'Product Name', flex: 1.35, minWidth: 175, sortable: true },
@@ -544,6 +547,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
           { field: 'index', headerName: '#', width: 70, sortable: false, renderCell: (params) => params.row.index },
         ]
       : []),
+    { field: 'assetId', headerName: 'Asset ID', flex: 0.9, minWidth: 140, sortable: true },
     { field: 'invoiceDate', headerName: 'Invoice Date', flex: 1.1, minWidth: 140, sortable: true },
     ...(isInStockPage
       ? []

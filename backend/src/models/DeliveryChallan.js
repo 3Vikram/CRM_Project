@@ -16,6 +16,11 @@ const DeliveryChallanItemSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    hsnSac: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     quantity: {
       type: Number,
       required: true,
@@ -30,6 +35,11 @@ const DeliveryChallanItemSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    uom: {
+      type: String,
+      default: '',
+      trim: true,
     },
     lineTotal: {
       type: Number,
@@ -58,6 +68,54 @@ const DeliveryChallanSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    opfNo: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    accountManager: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    poNo: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    poDate: {
+      type: Date,
+      default: null,
+    },
+    despatchDocumentNo: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    dcType: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    validityInDays: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    deliveryInDays: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    expectedClosure: {
+      type: Date,
+      default: null,
+    },
+    currency: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     deliveryNote: {
       type: String,
       default: '',
@@ -73,9 +131,13 @@ const DeliveryChallanSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    returnDate: {
+      type: Date,
+      default: null,
+    },
     status: {
       type: String,
-      default: 'Pending',
+      default: 'Open',
       trim: true,
     },
     signatureRequired: {

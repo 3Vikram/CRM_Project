@@ -1,6 +1,6 @@
 'use client'
 
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Package,
   BoxesIcon,
@@ -10,13 +10,23 @@ import {
   RotateCcw,
   Mail,
   Calculator,
+  LogOut,
+  FileText,
+  FileCheck2,
 } from 'lucide-react'
 import { Inventory2Outlined } from '@mui/icons-material'
 import { useState } from 'react'
+import { INVENTORY_SESSION_KEY } from '@/lib/inventoryAuth'
 
 export function InventorySidebar() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const [expandedSections, setExpandedSections] = useState<string[]>(['INVENTORY'])
+
+  const handleLogout = () => {
+    localStorage.removeItem(INVENTORY_SESSION_KEY)
+    navigate('/inventory/login', { replace: true })
+  }
 
   const toggleSection = (section: string) => {
     setExpandedSections((prev) =>
@@ -38,6 +48,8 @@ export function InventorySidebar() {
         { href: '/inventory/out-stock', label: 'Out Stock', icon: Package },
         { href: '/inventory/returned-assets', label: 'Returned', icon: RotateCcw },
         { href: '/inventory/products', label: 'Products', icon: Inventory2Outlined },
+        { href: '/inventory/delivery-challan', label: 'Delivery Challan', icon: FileText },
+        { href: '/inventory/returned-challan', label: 'Returned Challan', icon: FileCheck2 },
       ],
     },
     {
@@ -55,10 +67,10 @@ export function InventorySidebar() {
       <div className="p-6 border-b border-[#0F4A63]">
         <Link to="/" className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full border border-white/15 bg-white/10 flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">3V</span>
+            <span className="text-white font-semibold text-sm">SI</span>
           </div>
           <div>
-            <div className="font-semibold text-sm tracking-[0.16em] text-white">3 VIKRAM</div>
+            <div className="font-semibold text-sm tracking-[0.16em] text-white">SYNOV IT SERVICES</div>
             <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Inventory</div>
           </div>
         </Link>
@@ -100,6 +112,16 @@ export function InventorySidebar() {
         ))}
       </div>
 
+      <div className="border-t border-[#0F4A63] p-3">
+        <button
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-slate-300 transition-colors hover:bg-[#0B3A53] hover:text-white"
+          onClick={handleLogout}
+          type="button"
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="text-sm font-medium">Log out</span>
+        </button>
+      </div>
     </div>
   )
 }

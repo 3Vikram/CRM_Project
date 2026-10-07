@@ -23,7 +23,7 @@ const modules = [
     icon: Package,
     iconBg: 'bg-amber-100',
     iconColor: 'text-amber-700',
-    to: '/inventory',
+    to: '/inventory/login',
     accent: 'ring-amber-200 hover:ring-amber-300',
   },
   {

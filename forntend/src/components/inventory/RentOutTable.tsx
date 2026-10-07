@@ -355,6 +355,7 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
   }
 
   const columns: GridColDef[] = [
+    { field: 'assetId', headerName: 'Asset ID', flex: 0.9, minWidth: 140 },
     { field: 'customerName', headerName: 'Customer Name', flex: 1.2, minWidth: 170, renderCell: (params) => <Box sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4, py: 0.75 }}>{params.value || ''}</Box> },
     { field: 'documentNumber', headerName: 'Document Number', flex: 1.1, minWidth: 170, renderCell: (params) => <Box sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4, py: 0.75 }}>{params.value || ''}</Box> },
     { field: 'productSerialNumber', headerName: 'Serial Number', flex: 1.1, minWidth: 220, renderCell: (params) => {

@@ -2,8 +2,173 @@ import express from 'express';
 import { randomUUID } from 'crypto';
 import { Asset } from '../models/Asset.js';
 import { AssetMovement } from '../models/AssetMovement.js';
+import { AssetIdSequence } from '../models/AssetIdSequence.js';
 
 const router = express.Router();
+const ASSET_ID_SEQUENCE_KEY = 'asset-id';
+let assetIdMigrationPromise;
+
+const formatAssetId = (sequence) => `SISPL-${String(sequence).padStart(5, '0')}`;
+
+const getNextAssetId = async () => {
+  const sequence = await AssetIdSequence.findOneAndUpdate(
+    { _id: ASSET_ID_SEQUENCE_KEY },
+    { $inc: { value: 1 } },
+    { new: true }
+  ).lean();
+
+  if (!sequence) throw new Error('Unable to allocate the next Asset ID');
+  return formatAssetId(sequence.value);
+};
+
+const migrateAssetIds = async () => {
+  await Asset.init();
+  try {
+    await AssetIdSequence.findOneAndUpdate(
+      { _id: ASSET_ID_SEQUENCE_KEY },
+      { $setOnInsert: { value: 0, migrationComplete: false } },
+      { upsert: true, new: true }
+    );
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+  }
+
+  const token = randomUUID();
+  while (true) {
+    const currentSequence = await AssetIdSequence.findById(ASSET_ID_SEQUENCE_KEY).lean();
+    if (currentSequence?.migrationComplete) return;
+
+    const now = new Date();
+    const lock = await AssetIdSequence.findOneAndUpdate(
+      {
+        _id: ASSET_ID_SEQUENCE_KEY,
+        migrationComplete: { $ne: true },
+        $or: [
+          { migrationLockExpiresAt: { $exists: false } },
+          { migrationLockExpiresAt: null },
+          { migrationLockExpiresAt: { $lt: now } },
+        ],
+      },
+      {
+        $set: {
+          migrationLockToken: token,
+          migrationLockExpiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+        },
+      },
+      { new: true }
+    ).lean();
+
+    if (lock?.migrationComplete) return;
+    if (lock?.migrationLockToken === token) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  try {
+    const assets = await Asset.find({}, '_id assetId').sort({ _id: 1 }).lean();
+    const existingSequence = assets.reduce((maximum, asset) => {
+      const match = String(asset.assetId || '').match(/^SISPL-(\d+)$/);
+      return match ? Math.max(maximum, Number(match[1])) : maximum;
+    }, 0);
+    await AssetIdSequence.updateOne(
+      { _id: ASSET_ID_SEQUENCE_KEY },
+      { $max: { value: existingSequence } }
+    );
+    const refreshMigrationLock = async () => {
+      const result = await AssetIdSequence.updateOne(
+        { _id: ASSET_ID_SEQUENCE_KEY, migrationLockToken: token },
+        { $set: { migrationLockExpiresAt: new Date(Date.now() + 10 * 60 * 1000) } }
+      );
+      if (!result.matchedCount) throw new Error('Asset ID migration lock was lost');
+    };
+
+    const legacyAssets = assets.filter((asset) => /^AST-\d+$/.test(String(asset.assetId || '')));
+    const assetsWithoutId = assets.filter((asset) => !String(asset.assetId || '').trim());
+
+    const replaceAssetId = async (asset, legacyAssetId) => {
+      while (true) {
+        const candidate = await getNextAssetId();
+        try {
+          const result = await Asset.updateOne(
+            { _id: asset._id, assetId: legacyAssetId },
+            { $set: { assetId: candidate } }
+          );
+          if (result.matchedCount) return;
+          const current = await Asset.findById(asset._id).select('assetId').lean();
+          if (!current || current.assetId !== legacyAssetId) return;
+        } catch (error) {
+          if (error?.code !== 11000) throw error;
+        }
+      }
+    };
+
+    const assignMissingAssetId = async (asset) => {
+      while (true) {
+        const candidate = await getNextAssetId();
+        try {
+          const result = await Asset.updateOne(
+            {
+              _id: asset._id,
+              $or: [
+                { assetId: { $exists: false } },
+                { assetId: null },
+                { assetId: /^\s*$/ },
+              ],
+            },
+            { $set: { assetId: candidate } }
+          );
+          if (result.matchedCount) return;
+          const current = await Asset.findById(asset._id).select('assetId').lean();
+          if (!current || String(current.assetId || '').trim()) return;
+        } catch (error) {
+          if (error?.code !== 11000) throw error;
+        }
+      }
+    };
+
+    for (const asset of legacyAssets) {
+      await refreshMigrationLock();
+      await replaceAssetId(asset, asset.assetId);
+    }
+    for (const asset of assetsWithoutId) {
+      await refreshMigrationLock();
+      await assignMissingAssetId(asset);
+    }
+
+    await AssetIdSequence.updateOne(
+      { _id: ASSET_ID_SEQUENCE_KEY, migrationLockToken: token },
+      {
+        $set: { migrationComplete: true },
+        $unset: { migrationLockToken: '', migrationLockExpiresAt: '' },
+      }
+    );
+  } catch (error) {
+    await AssetIdSequence.updateOne(
+      { _id: ASSET_ID_SEQUENCE_KEY, migrationLockToken: token },
+      { $set: { migrationLockExpiresAt: new Date() } }
+    );
+    throw error;
+  }
+};
+
+const ensureAssetIdMigration = async () => {
+  if (!assetIdMigrationPromise) {
+    assetIdMigrationPromise = migrateAssetIds().catch((error) => {
+      assetIdMigrationPromise = undefined;
+      throw error;
+    });
+  }
+  await assetIdMigrationPromise;
+};
+
+router.use(async (_req, res, next) => {
+  try {
+    await ensureAssetIdMigration();
+    next();
+  } catch (error) {
+    console.error('Failed to initialize Asset IDs:', error);
+    res.status(500).json({ error: 'Failed to initialize Asset IDs' });
+  }
+});
 
 const normalizeName = (value = '') => String(value || '').trim().toLowerCase();
 const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -107,42 +272,12 @@ const buildStatusQuery = (status) => {
   return normalized;
 };
 
-const createNextAssetId = async () => {
-  const lastAsset = await Asset.findOne({ assetId: { $regex: /^AST-\d+$/ } }).sort({ assetId: -1 }).lean();
-  if (!lastAsset?.assetId) return 'AST-0001';
-
-  const match = lastAsset.assetId.match(/^AST-(\d+)$/);
-  if (!match) return 'AST-0001';
-
-  const next = Number(match[1]) + 1;
-  return `AST-${String(next).padStart(4, '0')}`;
-};
-
-const getUniqueAssetId = async () => {
-  const candidate = await createNextAssetId();
-  const existing = await Asset.findOne({ assetId: candidate });
-  if (!existing) return candidate;
-
-  const match = candidate.match(/^AST-(\d+)$/);
-  if (!match) throw new Error('Unable to determine the next Asset ID');
-
-  let next = Number(match[1]) + 1;
-  while (next < Number.MAX_SAFE_INTEGER) {
-    const nextCandidate = `AST-${String(next).padStart(4, '0')}`;
-    const existingNext = await Asset.findOne({ assetId: nextCandidate });
-    if (!existingNext) return nextCandidate;
-    next += 1;
-  }
-
-  throw new Error('Unable to determine the next available Asset ID');
-};
-
 const ensureAssetId = async (asset) => {
-  if (asset.assetId) return asset.assetId;
+  if (String(asset.assetId || '').trim()) return asset.assetId;
 
   let attempts = 0;
   while (attempts < 100) {
-    const nextAssetId = await getUniqueAssetId();
+    const nextAssetId = await getNextAssetId();
     asset.assetId = nextAssetId;
 
     try {
@@ -489,8 +624,6 @@ router.get('/stats', async (req, res) => {
   try {
     const assets = await Asset.find({}, 'quantity availableQuantity status price');
 
-    await Promise.all(assets.filter((asset) => !asset.assetId).map((asset) => ensureAssetId(asset)));
-
     const totalAssets = assets.length;
     const inStockCount = assets.filter((asset) => normalizeAssetStatus(asset.status) === 'available').length;
     const outwardingCount = assets.filter((asset) => normalizeAssetStatus(asset.status) === 'outwarding').length;
@@ -809,7 +942,6 @@ router.post('/assets', async (req, res) => {
     console.log('Incoming Asset:', req.body);
     const {
       name,
-      assetId,
       category,
       productId,
       productModel,
@@ -873,13 +1005,6 @@ router.post('/assets', async (req, res) => {
       }
     }
 
-    if (assetId) {
-      const duplicateAssetId = await Asset.findOne({ assetId: String(assetId).trim() });
-      if (duplicateAssetId) {
-        return res.status(409).json({ error: 'Asset ID already exists' });
-      }
-    }
-
     const existingAsset = await Asset.findOne(buildNameQuery(assetName, assetSerialNumber));
 
     if (isInwardSubmission && existingAsset) {
@@ -924,7 +1049,6 @@ router.post('/assets', async (req, res) => {
       name: assetName,
       productName: assetName,
       productId: productId || null,
-      assetId: assetId || undefined,
       category: assetCategory || '',
       productModel: productModel || '',
       hsnSac: hsnSac || '',
@@ -1148,6 +1272,7 @@ router.post('/outward', async (req, res) => {
 
     res.status(201).json({
       id: asset._id.toString(),
+      assetId: asset.assetId,
       name: asset.name,
       quantity: asset.quantity,
       availableQuantity: asset.availableQuantity,
@@ -1247,6 +1372,7 @@ router.post('/return', async (req, res) => {
 
       return res.status(201).json({
         id: asset._id.toString(),
+        assetId: asset.assetId,
         name: asset.name,
         quantity: asset.quantity,
         availableQuantity: asset.availableQuantity,
@@ -1322,6 +1448,7 @@ router.post('/return', async (req, res) => {
 
     res.status(201).json({
       id: asset._id.toString(),
+      assetId: asset.assetId,
       name: asset.name,
       quantity: asset.quantity,
       availableQuantity: asset.availableQuantity,
@@ -1419,6 +1546,7 @@ router.get('/assets/serial/:serialNumber/history', async (req, res) => {
     res.json({
       asset: {
         id: asset._id.toString(),
+        assetId: asset.assetId || '',
         productName: asset.productName || asset.name || '',
         productDescription: asset.productDescription || asset.description || '',
         productModel: asset.productModel || '',
@@ -1475,7 +1603,6 @@ router.put('/assets/:id', async (req, res) => {
   try {
     const {
       name,
-      assetId,
       category,
       productModel,
       serialNumber,
@@ -1519,9 +1646,6 @@ router.put('/assets/:id', async (req, res) => {
     if (nextName) {
       asset.name = nextName;
       asset.productName = nextName;
-    }
-    if (assetId !== undefined && assetId) {
-      asset.assetId = assetId;
     }
     if (category !== undefined) asset.category = category;
     if (productModel !== undefined) asset.productModel = productModel;
@@ -1593,7 +1717,7 @@ router.put('/assets/:id', async (req, res) => {
     // triggering unrelated document validation errors during save (eg. enum mismatches).
     const updatePayload = {};
     const allowedFields = [
-      'name', 'productName', 'assetId', 'category', 'productModel',
+      'name', 'productName', 'category', 'productModel',
       'serialNumber', 'productSerialNumber', 'manufacturer', 'location',
       'quantity', 'availableQuantity', 'minStockLevel', 'price', 'purchaseDate',
       'warrantyExpiry', 'warrantyDate', 'description', 'productDescription',
