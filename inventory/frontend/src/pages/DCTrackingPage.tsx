@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Plus, Save, Trash2, RotateCcw, User, Package, Eye, Pencil } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
@@ -26,11 +26,13 @@ type ProductRow = {
   productId: string
   productName: string
   description: string
+  serialNumber: string
   hsnSac: string
   quantity: string
   uom: string
   unitPrice: string
   tax: string
+  isFromOpf: boolean
 }
 
 type DeliveryChallanForm = {
@@ -99,7 +101,52 @@ type DeliveryChallanRecord = {
   }>
 }
 
+type SalesOPFRecord = {
+  _id: string
+  opfNo?: string
+}
+
+type SalesOPFDetails = SalesOPFRecord & {
+  customerName?: string
+  contactPerson?: string
+  customerPONo?: string
+  customerPODate?: string
+  product?: string
+  description?: string
+  quantity?: number | string
+  unitPrice?: number | string
+  tax?: string
+  serialNumber?: string
+  products?: Array<{
+    product?: string
+    productName?: string
+    description?: string
+    productDescription?: string
+    serialNumber?: string
+    quantity?: number | string
+    unitPrice?: number | string
+    tax?: string | number
+  }>
+}
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const SALES_API_URL = 'http://localhost:5001/api'
+
+const getSalesAuthHeaders = (): Record<string, string> => {
+  for (const key of ['synov_employee_auth', 'synov_admin_auth']) {
+    const value = window.localStorage.getItem(key) || window.sessionStorage.getItem(key)
+    if (!value) continue
+
+    try {
+      const auth = JSON.parse(value) as { token?: string }
+      if (auth.token) return { Authorization: `Bearer ${auth.token}` }
+    } catch {
+      // Ignore malformed Sales auth data, matching the Sales auth helper.
+    }
+  }
+
+  return {}
+}
 
 const makeRowId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -109,11 +156,13 @@ const createEmptyRow = (): ProductRow => ({
   productId: '',
   productName: '',
   description: '',
+  serialNumber: '',
   hsnSac: '',
   quantity: '',
   uom: '',
   unitPrice: '',
   tax: '',
+  isFromOpf: false,
 })
 
 const emptyForm = (): DeliveryChallanForm => ({
@@ -151,6 +200,11 @@ const mapChallanToDashboardRow = (challan: DeliveryChallanRecord): DashboardRow 
 })
 
 export default function DCTrackingPage() {
+  const opfFetchSequence = useRef(0)
+  const [opfOptions, setOpfOptions] = useState<SalesOPFRecord[]>([])
+  const [opfLoadStatus, setOpfLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [opfCustomerNameLocked, setOpfCustomerNameLocked] = useState(false)
+  const [opfContactPersonLocked, setOpfContactPersonLocked] = useState(false)
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [rows, setRows] = useState<ProductRow[]>([createEmptyRow()])
@@ -159,6 +213,7 @@ export default function DCTrackingPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingDcId, setEditingDcId] = useState<string | null>(null)
   const [form, setForm] = useState<DeliveryChallanForm>(emptyForm)
+  const [dispatchName, setDispatchName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [previewChallan, setPreviewChallan] = useState<DeliveryChallanDocument | null>(null)
@@ -167,6 +222,38 @@ export default function DCTrackingPage() {
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
 
   useEffect(() => {
+    const fetchOPFs = async () => {
+      try {
+        const records: SalesOPFRecord[] = []
+        let page = 1
+        let totalPages = 1
+
+        do {
+          const response = await fetch(`${SALES_API_URL}/opf?page=${page}&limit=100`, {
+            headers: getSalesAuthHeaders(),
+          })
+          const result = await response.json()
+          if (!response.ok || result.success !== true || !Array.isArray(result.data)) {
+            throw new Error(result.message || 'Unable to fetch OPF numbers from Sales')
+          }
+
+          records.push(...result.data.filter(
+            (record: SalesOPFRecord) => record?._id && record.opfNo
+          ))
+          totalPages = Number(result.pagination?.totalPages) || 1
+          page += 1
+        } while (page <= totalPages)
+
+        setOpfOptions(records)
+        setOpfLoadStatus('loaded')
+      } catch (error) {
+        console.error('Unable to fetch OPF numbers from Sales:', error)
+        setOpfLoadStatus('error')
+        setToastType('error')
+        setToastMessage(error instanceof Error ? error.message : 'Unable to fetch OPF numbers from Sales')
+      }
+    }
+
     const fetchDeliveryChallans = async () => {
       try {
         const response = await fetch(`${API_URL}/api/delivery-challans`)
@@ -208,6 +295,7 @@ export default function DCTrackingPage() {
       }
     }
 
+    void fetchOPFs()
     void fetchCustomerOptions()
     void fetchProducts()
     void fetchDeliveryChallans()
@@ -363,8 +451,11 @@ export default function DCTrackingPage() {
 
   const resetForm = () => {
     setForm(emptyForm())
+    setDispatchName('')
     setRows([createEmptyRow()])
     setEditingDcId(null)
+    setOpfCustomerNameLocked(false)
+    setOpfContactPersonLocked(false)
   }
 
   const openGenerateForm = () => {
@@ -374,6 +465,9 @@ export default function DCTrackingPage() {
 
   const openEditForm = (row: DashboardRow) => {
     setEditingDcId(row.id)
+    setDispatchName('')
+    setOpfCustomerNameLocked(false)
+    setOpfContactPersonLocked(false)
     setForm({
       ...emptyForm(),
       customerName: row.customerName === '—' ? '' : row.customerName,
@@ -409,11 +503,13 @@ export default function DCTrackingPage() {
             productId: item.productId || '',
             productName: item.productName || '',
             description: item.description || '',
+            serialNumber: '',
             hsnSac: item.hsnSac || '',
             quantity: String(item.quantity ?? ''),
             uom: item.uom || '',
             unitPrice: String(item.unitPrice ?? ''),
             tax: String(item.tax ?? ''),
+            isFromOpf: false,
           }))
         )
       })
@@ -422,6 +518,76 @@ export default function DCTrackingPage() {
         setToastMessage(error instanceof Error ? error.message : 'Unable to load delivery challan')
       })
     setShowForm(true)
+  }
+
+  const handleOpfChange = async (opfId: string) => {
+    const fetchSequence = ++opfFetchSequence.current
+    const selectedOpf = opfOptions.find((opf) => opf._id === opfId)
+    setForm((prev) => ({
+      ...prev,
+      opfNo: selectedOpf?.opfNo || opfId,
+      customerName: '',
+      contactPerson: '',
+      poNo: '',
+      poDate: '',
+    }))
+    setRows([createEmptyRow()])
+    setOpfCustomerNameLocked(Boolean(opfId))
+    setOpfContactPersonLocked(Boolean(opfId))
+    if (!selectedOpf) return
+
+    try {
+      const response = await fetch(`${SALES_API_URL}/opf/${encodeURIComponent(selectedOpf._id)}`, {
+        headers: getSalesAuthHeaders(),
+      })
+      const result = await response.json()
+      if (!response.ok || result.success !== true || !result.data) {
+        throw new Error(result.message || 'Unable to fetch the selected OPF details from Sales')
+      }
+
+      if (fetchSequence !== opfFetchSequence.current) return
+
+      const opf = result.data as SalesOPFDetails
+      const customerName = opf.customerName?.trim() || ''
+      const contactPerson = opf.contactPerson?.trim() || ''
+      setForm((prev) => ({
+        ...prev,
+        customerName,
+        contactPerson,
+        poNo: opf.customerPONo?.trim() || '',
+        poDate: opf.customerPODate ? String(opf.customerPODate).slice(0, 10) : '',
+      }))
+      const opfProducts = Array.isArray(opf.products) && opf.products.length > 0
+        ? opf.products
+        : [opf]
+      setRows(opfProducts.map((product) => {
+        const productName = (product.productName || product.product || '').trim()
+        const taxValue = String(product.tax || '').match(/\d+(?:\.\d+)?/)?.[0] || ''
+        return {
+          ...createEmptyRow(),
+          productId: productOptions.find(
+            (option) => option.productName.trim().toLowerCase() === productName.toLowerCase()
+          )?.id || '',
+          productName,
+          description: (product.description || product.productDescription || '').trim(),
+          serialNumber: product.serialNumber?.trim() || '',
+          quantity: product.quantity == null ? '' : String(product.quantity),
+          unitPrice: product.unitPrice == null ? '' : String(product.unitPrice),
+          tax: taxValue,
+          isFromOpf: true,
+        }
+      }))
+
+      if (!customerName || !contactPerson) {
+        setToastType('info')
+        setToastMessage('The selected OPF is missing customer or contact information.')
+      }
+    } catch (error) {
+      if (fetchSequence !== opfFetchSequence.current) return
+      console.error('Unable to fetch selected OPF details from Sales:', error)
+      setToastType('error')
+      setToastMessage(error instanceof Error ? error.message : 'Unable to fetch the selected OPF details from Sales')
+    }
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -647,12 +813,9 @@ export default function DCTrackingPage() {
 
   const renderForm = () => (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 mb-2">
-            New Delivery Challan
-          </p>
-          <h1 className="text-4xl font-serif font-bold text-gray-900 mb-2">
+          <h1 className="mb-0 text-3xl font-serif font-bold text-gray-900 sm:text-4xl">
             Delivery Challan
           </h1>
         </div>
@@ -676,8 +839,33 @@ export default function DCTrackingPage() {
             Delivery Challan Details
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {renderTextField('OPF No', 'opfNo')}
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="opfNo">
+                OPF No
+              </label>
+              <select
+                id="opfNo"
+                value={opfOptions.find((opf) => opf.opfNo === form.opfNo)?._id || form.opfNo}
+                onChange={(event) => void handleOpfChange(event.target.value)}
+                className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+              >
+                <option value="">Select OPF No</option>
+                {form.opfNo && !opfOptions.some((opf) => opf.opfNo === form.opfNo) && (
+                  <option value={form.opfNo}>{form.opfNo}</option>
+                )}
+                {opfOptions.map((opf) => (
+                  <option key={opf._id} value={opf._id}>
+                    {opf.opfNo}
+                  </option>
+                ))}
+                {opfLoadStatus === 'loading' && <option disabled>Loading OPF numbers...</option>}
+                {opfLoadStatus === 'loaded' && opfOptions.length === 0 && (
+                  <option disabled>No OPF numbers available</option>
+                )}
+                {opfLoadStatus === 'error' && <option disabled>Unable to load OPF numbers</option>}
+              </select>
+            </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="customerName">
                 Customer Name <span className="text-red-500">*</span>
@@ -685,11 +873,15 @@ export default function DCTrackingPage() {
               <select
                 id="customerName"
                 required
+                disabled={Boolean(form.opfNo) || opfCustomerNameLocked}
                 value={form.customerName}
                 onChange={(event) => updateFormValue('customerName', event.target.value)}
                 className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
               >
                 <option value="">Select customer</option>
+                {form.customerName && !customerOptions.some((customer) => customer.name === form.customerName) && (
+                  <option value={form.customerName}>{form.customerName}</option>
+                )}
                 {customerOptions.map((customer) => (
                   <option key={customer.id || customer.name} value={customer.name}>
                     {customer.name}
@@ -704,6 +896,7 @@ export default function DCTrackingPage() {
               <input
                 id="contactPerson"
                 list="contact-person-options"
+                disabled={Boolean(form.opfNo) || opfContactPersonLocked}
                 value={form.contactPerson}
                 onChange={(event) => updateFormValue('contactPerson', event.target.value)}
                 className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
@@ -714,8 +907,30 @@ export default function DCTrackingPage() {
                 ))}
               </datalist>
             </div>
-            {renderTextField('PO No', 'poNo')}
-            {renderTextField('PO Date', 'poDate', 'date')}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="poNo">
+                PO No
+              </label>
+              <input
+                id="poNo"
+                readOnly={Boolean(form.opfNo)}
+                value={form.poNo}
+                onChange={(event) => updateFormValue('poNo', event.target.value)}
+                className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="poDate">
+                PO Closure Date
+              </label>
+              <input
+                id="poDate"
+                type="date"
+                readOnly
+                value={form.poDate}
+                className="w-full rounded-xl border border-[#D9D3C7] bg-gray-50 px-3 py-2.5 text-sm text-gray-800 outline-none"
+              />
+            </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="dcType">
                 DC Type
@@ -731,10 +946,6 @@ export default function DCTrackingPage() {
                 <option value="Non Returnable">Non Returnable</option>
               </select>
             </div>
-            {renderTextField('Validity (In Days)', 'validityInDays', 'number')}
-            {renderTextField('Delivery (In Days)', 'deliveryInDays', 'number')}
-            {renderTextField('Expected Closure', 'expectedClosure', 'date')}
-            {renderTextField('Currency', 'currency')}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="dispatchedThrough">
                 Despatched Through
@@ -742,7 +953,10 @@ export default function DCTrackingPage() {
               <select
                 id="dispatchedThrough"
                 value={form.dispatchedThrough}
-                onChange={(event) => updateFormValue('dispatchedThrough', event.target.value)}
+                onChange={(event) => {
+                  setDispatchName('')
+                  updateFormValue('dispatchedThrough', event.target.value)
+                }}
                 className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
               >
                 <option value="">Select Despatched Through</option>
@@ -750,7 +964,20 @@ export default function DCTrackingPage() {
                 <option value="Courier">Courier</option>
               </select>
             </div>
-            {renderTextField('Destination', 'destination')}
+            {form.dispatchedThrough && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="dispatchName">
+                  {form.dispatchedThrough === 'Person' ? 'Person Name' : 'Courier Name'}
+                </label>
+                <input
+                  id="dispatchName"
+                  type="text"
+                  value={dispatchName}
+                  onChange={(event) => setDispatchName(event.target.value)}
+                  className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                />
+              </div>
+            )}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="status">
                 Status
@@ -765,7 +992,7 @@ export default function DCTrackingPage() {
                 <option value="Close">Close</option>
               </select>
             </div>
-            <div className="sm:col-span-2 xl:col-span-4">
+            <div className="sm:col-span-2 xl:col-span-3">
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="deliveryNote">
                 Delivery Note
               </label>
@@ -815,23 +1042,31 @@ export default function DCTrackingPage() {
                   )}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
                       Product <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={row.productId}
-                      onChange={(event) => updateRow(row.id, 'productId', event.target.value)}
-                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
-                    >
-                      <option value="">Select product</option>
-                      {productOptions.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.productName}
-                        </option>
-                      ))}
-                    </select>
+                    {row.isFromOpf ? (
+                      <input
+                        value={row.productName}
+                        onChange={(event) => updateRow(row.id, 'productName', event.target.value)}
+                        className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                      />
+                    ) : (
+                      <select
+                        value={row.productId}
+                        onChange={(event) => updateRow(row.id, 'productId', event.target.value)}
+                        className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                      >
+                        <option value="">Select product</option>
+                        {productOptions.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.productName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   <div>
@@ -848,12 +1083,13 @@ export default function DCTrackingPage() {
 
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700">
-                      HSN/SAC
+                      Serial Number
                     </label>
                     <input
-                      value={row.hsnSac}
-                      onChange={(event) => updateRow(row.id, 'hsnSac', event.target.value)}
-                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                      value={row.serialNumber}
+                      onChange={(event) => updateRow(row.id, 'serialNumber', event.target.value)}
+                      placeholder="Serial Number"
+                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
                     />
                   </div>
 
@@ -867,19 +1103,9 @@ export default function DCTrackingPage() {
                       step="1"
                       value={row.quantity}
                       onChange={(event) => updateRow(row.id, 'quantity', event.target.value)}
+                      readOnly={row.isFromOpf}
                       placeholder="0"
-                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-700">
-                      UOM
-                    </label>
-                    <input
-                      value={row.uom}
-                      onChange={(event) => updateRow(row.id, 'uom', event.target.value)}
-                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                      className={`w-full rounded-xl border border-[#D9D3C7] px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 ${row.isFromOpf ? 'bg-gray-50' : 'bg-white focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]'}`}
                     />
                   </div>
 
@@ -893,8 +1119,9 @@ export default function DCTrackingPage() {
                       step="0.01"
                       value={row.unitPrice}
                       onChange={(event) => updateRow(row.id, 'unitPrice', event.target.value)}
+                      readOnly={row.isFromOpf}
                       placeholder="0.00"
-                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                      className={`w-full rounded-xl border border-[#D9D3C7] px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 ${row.isFromOpf ? 'bg-gray-50' : 'bg-white focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]'}`}
                     />
                   </div>
 
@@ -908,8 +1135,9 @@ export default function DCTrackingPage() {
                       step="0.01"
                       value={row.tax}
                       onChange={(event) => updateRow(row.id, 'tax', event.target.value)}
+                      readOnly={row.isFromOpf}
                       placeholder="0"
-                      className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
+                      className={`w-full rounded-xl border border-[#D9D3C7] px-3 py-2.5 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 ${row.isFromOpf ? 'bg-gray-50' : 'bg-white focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]'}`}
                     />
                   </div>
                   <div className="flex items-end pb-0.5">

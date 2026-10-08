@@ -253,6 +253,58 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
           .dc-preview-document .dc-items thead { display: table-header-group; }
           .dc-preview-document .dc-items tbody tr { height: auto !important; min-height: 0 !important; break-inside: auto; page-break-inside: auto; }
           .dc-preview-document .dc-party { page-break-inside: avoid; }
+          .dc-preview-document { font-size: 12px !important; }
+          .dc-preview-document .dc-title { font-size: 22px !important; }
+          .dc-preview-document .dc-company { font-size: 12px !important; }
+          .dc-preview-document .dc-field { font-size: 12px !important; }
+          .dc-preview-document .dc-field b { font-size: 10px !important; }
+          .dc-preview-document .dc-party { font-size: 12px !important; }
+          .dc-preview-document .dc-party h2 { font-size: 11px !important; }
+          .dc-preview-document .dc-items th,
+          .dc-preview-document .dc-items td { font-size: 12px !important; }
+          .dc-preview-document .dc-items th { font-size: 11px !important; }
+          .dc-preview-document .dc-items tbody td:nth-child(n) {
+            padding-top: 4px !important;
+            padding-bottom: 4px !important;
+            font-size: 12px !important;
+            line-height: 1.3 !important;
+          }
+          .dc-preview-document .dc-items tbody td:nth-child(2),
+          .dc-preview-document .dc-items tbody td:nth-child(3) {
+            font-size: 15px !important;
+            line-height: 1.25 !important;
+          }
+          .dc-preview-document .dc-items th:nth-child(1),
+          .dc-preview-document .dc-items td:nth-child(1) { width: 4% !important; }
+          .dc-preview-document .dc-items th:nth-child(2),
+          .dc-preview-document .dc-items td:nth-child(2) { width: 23% !important; }
+          .dc-preview-document .dc-items th:nth-child(3),
+          .dc-preview-document .dc-items td:nth-child(3) { width: 26% !important; }
+          .dc-preview-document .dc-items th:nth-child(4),
+          .dc-preview-document .dc-items td:nth-child(4) { width: 12% !important; }
+          .dc-preview-document .dc-items th:nth-child(5),
+          .dc-preview-document .dc-items td:nth-child(5) { width: 5% !important; }
+          .dc-preview-document .dc-items th:nth-child(6),
+          .dc-preview-document .dc-items td:nth-child(6) { width: 9% !important; }
+          .dc-preview-document .dc-items th:nth-child(7),
+          .dc-preview-document .dc-items td:nth-child(7) { width: 7% !important; }
+          .dc-preview-document .dc-items th:nth-child(8),
+          .dc-preview-document .dc-items td:nth-child(8) { width: 5% !important; }
+          .dc-preview-document .dc-items th:nth-child(9),
+          .dc-preview-document .dc-items td:nth-child(9) { width: 8% !important; }
+          .dc-preview-document .dc-items tbody td:nth-child(7),
+          .dc-preview-document .dc-items tbody td:nth-child(8),
+          .dc-preview-document .dc-items tbody td:nth-child(9) {
+            font-size: 10px !important;
+          }
+          .dc-preview-document .dc-totals th,
+          .dc-preview-document .dc-totals td { font-size: 12px !important; }
+          .dc-preview-document .dc-amount-words,
+          .dc-preview-document .dc-terms,
+          .dc-preview-document .dc-delivery-note,
+          .dc-preview-document .dc-signature { font-size: 12px !important; }
+          .dc-preview-document .dc-section-title { font-size: 11px !important; }
+          .dc-preview-document .dc-generated { font-size: 10px !important; }
         }
       `}</style>
 

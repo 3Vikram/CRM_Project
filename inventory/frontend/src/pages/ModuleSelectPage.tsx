@@ -12,7 +12,7 @@ const modules = [
     icon: ShoppingCart,
     iconBg: 'bg-emerald-100',
     iconColor: 'text-emerald-700',
-    to: '/sales/dashboard',
+    to: '/sales',
     accent: 'ring-emerald-200 hover:ring-emerald-300',
   },
   {
@@ -23,7 +23,7 @@ const modules = [
     icon: Package,
     iconBg: 'bg-amber-100',
     iconColor: 'text-amber-700',
-    to: '/inventory/login',
+    to: '/inventory',
     accent: 'ring-amber-200 hover:ring-amber-300',
   },
   {
@@ -63,6 +63,12 @@ export default function ModuleSelectPage() {
             <Link
               key={m.key}
               to={m.to}
+              onClick={(event) => {
+                if (m.key === 'sales') {
+                  event.preventDefault()
+                  window.location.href = '/sales'
+                }
+              }}
               className={`group bg-white rounded-2xl border border-[#EFECE5] shadow-sm p-8 ring-1 ring-transparent transition-all hover:shadow-md ${m.accent}`}
             >
               <div

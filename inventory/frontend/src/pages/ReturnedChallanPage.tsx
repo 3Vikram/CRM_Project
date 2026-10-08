@@ -20,6 +20,13 @@ type CustomerOption = {
   contactPersons?: string[]
 }
 
+type SalesCustomerRecord = {
+  _id: string
+  companyName?: string
+  customerName?: string
+  contacts?: Array<{ name?: string }>
+}
+
 type ReturnedChallanItem = {
   productId: string
   productName: string
@@ -75,6 +82,24 @@ type FormValues = {
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const SALES_API_URL = 'http://localhost:5001/api'
+
+const getSalesAuthHeaders = (): Record<string, string> => {
+  for (const key of ['synov_employee_auth', 'synov_admin_auth']) {
+    const value = window.localStorage.getItem(key) || window.sessionStorage.getItem(key)
+    if (!value) continue
+
+    try {
+      const auth = JSON.parse(value) as { token?: string }
+      if (auth.token) return { Authorization: `Bearer ${auth.token}` }
+    } catch {
+      // Ignore malformed auth data, as the Sales auth helper does.
+    }
+  }
+
+  return {}
+}
+
 const makeKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 const today = () => {
   const date = new Date()
@@ -117,6 +142,7 @@ const inputClass =
 export default function ReturnedChallanPage() {
   const [records, setRecords] = useState<ReturnedChallan[]>([])
   const [customers, setCustomers] = useState<CustomerOption[]>([])
+  const [customerLoadStatus, setCustomerLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [products, setProducts] = useState<ProductOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -125,6 +151,7 @@ export default function ReturnedChallanPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedRecord, setSelectedRecord] = useState<ReturnedChallan | null>(null)
   const [form, setForm] = useState<FormValues>(newForm)
+  const [contactPersonAutoFilled, setContactPersonAutoFilled] = useState(false)
   const [items, setItems] = useState<ItemForm[]>([newItem()])
   const [dateFilter, setDateFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -151,28 +178,56 @@ export default function ReturnedChallanPage() {
     let cancelled = false
     const loadInitialData = async () => {
       try {
-        const [recordsResponse, customersResponse, productsResponse] = await Promise.all([
+        const [recordsResponse, productsResponse] = await Promise.all([
           fetch(`${API_URL}/api/returned-challans`),
-          fetch(`${API_URL}/api/returned-challans/customers`),
           fetch(`${API_URL}/api/products`),
         ])
-        const [recordsData, customersData, productsData] = await Promise.all([
+        const [recordsData, productsData] = await Promise.all([
           recordsResponse.json().catch(() => ({})),
-          customersResponse.json().catch(() => ({})),
           productsResponse.json().catch(() => ({})),
         ])
         if (!recordsResponse.ok) throw new Error(recordsData.error || 'Unable to load returned challans')
-        if (!customersResponse.ok) throw new Error(customersData.error || 'Unable to load customer options')
         if (!productsResponse.ok) throw new Error(productsData.error || 'Unable to load products')
-        if (!Array.isArray(recordsData) || !Array.isArray(customersData) || !Array.isArray(productsData)) {
+        if (!Array.isArray(recordsData) || !Array.isArray(productsData)) {
           throw new Error('The server returned invalid Returned Challan data')
         }
         if (cancelled) return
         setRecords(recordsData)
-        setCustomers(customersData)
         setProducts(productsData)
+
+        const salesCustomers: CustomerOption[] = []
+        let currentPage = 1
+        let totalPages = 1
+        do {
+          const response = await fetch(`${SALES_API_URL}/customers?page=${currentPage}&limit=100`, {
+            headers: getSalesAuthHeaders(),
+          })
+          const result = await response.json().catch(() => ({}))
+          if (!response.ok || result.success !== true || !Array.isArray(result.data)) {
+            throw new Error(result.message || 'Unable to load customers from Sales')
+          }
+
+          salesCustomers.push(...result.data
+            .filter((customer: SalesCustomerRecord) => customer?._id)
+            .map((customer: SalesCustomerRecord) => ({
+              id: customer._id,
+              name: customer.companyName || customer.customerName || 'Untitled Customer',
+              contactPersons: (customer.contacts || [])
+                .map((contact) => contact.name?.trim())
+                .filter((name): name is string => Boolean(name)),
+            })))
+          totalPages = Number(result.pagination?.totalPages) || 1
+          currentPage += 1
+        } while (currentPage <= totalPages)
+
+        if (cancelled) return
+        setCustomers(salesCustomers)
+        setCustomerLoadStatus('loaded')
       } catch (error) {
-        if (!cancelled) notify(error instanceof Error ? error.message : 'Unable to load Returned Challan data', 'error')
+        if (!cancelled) {
+          setCustomerLoadStatus('error')
+          notify(error instanceof Error ? error.message : 'Unable to load Returned Challan data', 'error')
+        }
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -205,12 +260,14 @@ export default function ReturnedChallanPage() {
   const beginNew = () => {
     setEditingId(null)
     setForm(newForm())
+    setContactPersonAutoFilled(false)
     setItems([newItem()])
     setMode('form')
   }
 
   const resetForm = () => {
     setForm(newForm())
+    setContactPersonAutoFilled(false)
     setItems([newItem()])
   }
 
@@ -242,6 +299,7 @@ export default function ReturnedChallanPage() {
       if (!response.ok) throw new Error(data.error || 'Unable to load returned challan')
       const saved = data as ReturnedChallan
       setEditingId(saved.id)
+      setContactPersonAutoFilled(false)
       setForm({
         customerName: saved.customerName || '',
         contactPerson: saved.contactPerson || '',
@@ -480,12 +538,25 @@ export default function ReturnedChallanPage() {
         <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.16em] text-gray-600">Main Details</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <label className="text-sm font-medium text-gray-700">Customer Name <span className="text-red-500">*</span>
-            <select required value={form.customerName} onChange={(event) => setForm((current) => ({ ...current, customerName: event.target.value, contactPerson: '' }))} className={`${inputClass} mt-2`}>
-              <option value="">Select customer</option>{customers.map((customer) => <option key={customer.id} value={customer.name}>{customer.name}</option>)}
+            <select required value={customers.find((customer) => customer.name === form.customerName)?.id || ''} onChange={(event) => {
+              const selectedCustomer = customers.find((customer) => customer.id === event.target.value)
+              const contactPerson = selectedCustomer?.contactPersons?.[0] || ''
+              setContactPersonAutoFilled(Boolean(contactPerson))
+              setForm((current) => ({
+                ...current,
+                customerName: selectedCustomer?.name || '',
+                contactPerson,
+              }))
+            }} className={`${inputClass} mt-2`}>
+              <option value="">Select customer</option>
+              {customerLoadStatus === 'loading' && <option disabled>Loading customers…</option>}
+              {customerLoadStatus === 'error' && <option disabled>Unable to load customers</option>}
+              {customerLoadStatus === 'loaded' && customers.length === 0 && <option disabled>No customers available</option>}
+              {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
             </select>
           </label>
           <label className="text-sm font-medium text-gray-700">Contact Person
-            <select value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} className={`${inputClass} mt-2`}>
+            <select disabled={contactPersonAutoFilled} value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} className={`${inputClass} mt-2`}>
               <option value="">Select contact person</option>
               {[...new Set([...customerContacts, ...(form.contactPerson ? [form.contactPerson] : [])])].map((contact) => <option key={contact} value={contact}>{contact}</option>)}
             </select>
@@ -523,7 +594,7 @@ export default function ReturnedChallanPage() {
                   <span className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">Product {index + 1}</span>
                   {items.length > 1 && <button type="button" onClick={() => setItems((current) => current.filter((row) => row.key !== item.key))} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /> Remove</button>}
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <label className="text-sm font-medium text-gray-700">Product <span className="text-red-500">*</span>
                     <select required value={item.productId} onChange={(event) => updateItem(item.key, 'productId', event.target.value)} className={`${inputClass} mt-2`}>
                       <option value="">Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.productName}</option>)}
@@ -532,14 +603,8 @@ export default function ReturnedChallanPage() {
                   <label className="text-sm font-medium text-gray-700">Description
                     <input value={item.description} onChange={(event) => updateItem(item.key, 'description', event.target.value)} className={`${inputClass} mt-2`} />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">HSN/SAC
-                    <input value={item.hsnSac} onChange={(event) => updateItem(item.key, 'hsnSac', event.target.value)} className={`${inputClass} mt-2`} />
-                  </label>
                   <label className="text-sm font-medium text-gray-700">Quantity <span className="text-red-500">*</span>
                     <input required min="0.01" step="any" type="number" value={item.quantity} onChange={(event) => updateItem(item.key, 'quantity', event.target.value)} className={`${inputClass} mt-2`} />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700">UOM
-                    <input value={item.uom} onChange={(event) => updateItem(item.key, 'uom', event.target.value)} className={`${inputClass} mt-2`} />
                   </label>
                   <label className="text-sm font-medium text-gray-700">Serial No
                     <input value={item.serialNumber} onChange={(event) => updateItem(item.key, 'serialNumber', event.target.value)} className={`${inputClass} mt-2`} />
@@ -632,27 +697,32 @@ export default function ReturnedChallanPage() {
           .rc-document, .rc-document * { visibility: visible !important; }
           .rc-controls { display: none !important; }
           .rc-document { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
-          .rc-title { font-size: 21px !important; margin-bottom: 0.5mm !important; }
-          .rc-company { font-size: 14px !important; }
-          .rc-company-address, .rc-header > div:last-child { font-size: 10.5px !important; }
+          .rc-title { font-size: 24px !important; margin-bottom: 0.5mm !important; }
+          .rc-company { font-size: 15px !important; }
+          .rc-company-address, .rc-header > div:last-child { font-size: 12px !important; }
           .rc-header { min-height: 22mm !important; padding-bottom: 2mm !important; }
           .rc-details { margin-top: 2mm !important; }
-          .rc-field { min-height: 8mm !important; padding: 0.75mm 1mm !important; font-size: 11px !important; }
-          .rc-field-label { margin-bottom: 0.25mm !important; font-size: 10px !important; }
+          .rc-field { min-height: 8mm !important; padding: 0.75mm 1mm !important; font-size: 12px !important; }
+          .rc-field-label { margin-bottom: 0.25mm !important; font-size: 10.5px !important; }
           .rc-parties { margin-top: 2mm !important; }
-          .rc-party { min-height: 21mm !important; padding: 1mm !important; font-size: 10.5px !important; }
-          .rc-party h2 { margin-bottom: 0.5mm !important; padding-bottom: 0.25mm !important; font-size: 10px !important; }
+          .rc-party { min-height: 21mm !important; padding: 1mm !important; font-size: 11.5px !important; }
+          .rc-party h2 { margin-bottom: 0.5mm !important; padding-bottom: 0.25mm !important; font-size: 11px !important; }
           .rc-party p { margin-bottom: 0.25mm !important; }
           .rc-items { margin-top: 2mm !important; }
-          .rc-items th { padding: 0.75mm !important; font-size: 10px !important; }
-          .rc-items td { padding: 0.75mm !important; font-size: 10.5px !important; line-height: 1.25 !important; }
-          .rc-terms { margin-top: 1.5mm !important; padding: 1mm !important; font-size: 10.5px !important; line-height: 1.35 !important; }
-          .rc-terms-title { margin-bottom: 0.75mm !important; font-size: 11px !important; }
+          .rc-items th { padding: 1mm !important; font-size: 11px !important; }
+          .rc-items td { padding: 1mm !important; font-size: 12px !important; line-height: 1.3 !important; }
+          .rc-terms { margin-top: 1.5mm !important; padding: 1.25mm !important; font-size: 11.5px !important; line-height: 1.35 !important; }
+          .rc-terms-title { margin-bottom: 0.75mm !important; font-size: 12px !important; }
           .rc-terms-list { padding-left: 4mm !important; }
           .rc-terms-list li { margin-bottom: 1mm !important; padding-left: 0 !important; }
           .rc-signatures { gap: 4mm !important; margin-top: 2mm !important; }
-          .rc-signature { min-height: 18mm !important; padding: 1mm !important; font-size: 10.5px !important; }
-          .rc-generated { margin-top: 1.5mm !important; font-size: 8.5px !important; }
+          .rc-signature { min-height: 18mm !important; padding: 1mm !important; font-size: 11.5px !important; }
+          .rc-generated { margin-top: 1.5mm !important; font-size: 10px !important; }
+          .rc-items th:nth-child(1) { width: 7% !important; }
+          .rc-items th:nth-child(2) { width: 23% !important; }
+          .rc-items th:nth-child(3) { width: 34% !important; }
+          .rc-items th:nth-child(4) { width: 10% !important; }
+          .rc-items th:nth-child(5) { width: 26% !important; }
           .rc-items thead { display: table-header-group; }
           .rc-items tr, .rc-party, .rc-terms, .rc-signatures { break-inside: avoid; page-break-inside: avoid; }
         }
@@ -674,7 +744,6 @@ export default function ReturnedChallanPage() {
             ['RC By', selectedRecord.collectingName],
             ['Person Name', selectedRecord.collectingPerson === 'Person' ? selectedRecord.collectingName : '—'],
             ['Courier', selectedRecord.collectingPerson === 'Courier' ? selectedRecord.collectingName : '—'],
-            ['Terms of Delivery', selectedRecord.termsOfDelivery || '—'],
             ['Purpose', selectedRecord.purpose || '—'],
             ['Remarks', selectedRecord.remarks || '—'],
           ].map(([label, value]) => (
@@ -704,9 +773,9 @@ export default function ReturnedChallanPage() {
           </div>
         </section>
         <table className="rc-items">
-          <thead><tr>{['Sl. No.', 'Product', 'Description', 'HSN/SAC', 'Qty', 'Serial No.'].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+          <thead><tr>{['Sl. No.', 'Product', 'Description', 'Qty', 'Serial No.'].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
           <tbody>{selectedRecord.items.map((item, index) => <tr key={`${item.productId}-${index}`}>
-            <td>{index + 1}</td><td>{item.productName}</td><td>{item.description || '—'}</td><td>{item.hsnSac || '—'}</td>
+            <td>{index + 1}</td><td>{item.productName}</td><td>{item.description || '—'}</td>
             <td>{item.quantity}</td><td>{item.serialNumber || '—'}</td>
           </tr>)}</tbody>
         </table>
