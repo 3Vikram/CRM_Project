@@ -1,0 +1,24 @@
+{
+  "name": "crm_project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n \"INV-BE,INV-FE,SALES-BE\" \"npm --prefix inventory/backend run dev\" \"npm --prefix inventory/frontend run dev\" \"npm --prefix sales/backend run dev\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3Vikram/CRM_Project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/3Vikram/CRM_Project/issues"
+  },
+  "homepage": "https://github.com/3Vikram/CRM_Project#readme"
+}

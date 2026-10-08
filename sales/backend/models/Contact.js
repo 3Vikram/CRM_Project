@@ -1,0 +1,63 @@
+const mongoose = require('mongoose');
+
+const ContactSchema = new mongoose.Schema(
+  {
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Customer',
+      default: null,
+    },
+    customerName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    contactName: {
+      type: String,
+      trim: true,
+      required: [true, 'Contact name is required'],
+    },
+    designation: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    mail: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    contactNumber: {
+      type: String,
+      trim: true,
+      required: [true, 'Contact number is required'],
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      required: [true, 'Email is required'],
+      match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
+    },
+    employeeId: { type: String, trim: true, default: '' },
+    employeeEmail: { type: String, trim: true, lowercase: true, default: '' },
+    employeeName: { type: String, trim: true, default: '' },
+    batchName: { type: String, trim: true, default: '' },
+    batchNumber: { type: Number, min: 1, default: null },
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerBatch', default: null },
+    calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
+  },
+  { timestamps: true }
+);
+
+ContactSchema.index({ customerId: 1, email: 1, contactNumber: 1, contactName: 1 });
+ContactSchema.index({ customerName: 1, contactName: 1, email: 1, contactNumber: 1 });
+ContactSchema.index({ customerName: 1, contactName: 1, email: 1, createdAt: -1 });
+ContactSchema.index({ customerName: 1, contactName: 1, createdAt: -1 });
+ContactSchema.index({ email: 1, contactNumber: 1, customerId: 1 });
+ContactSchema.index({ contactNumber: 1, email: 1, customerName: 1 });
+ContactSchema.index({ batchName: 1, email: 1 });
+ContactSchema.index({ batchNumber: 1, email: 1 });
+ContactSchema.index({ employeeId: 1, batchNumber: 1 });
+
+module.exports = mongoose.model('Contact', ContactSchema);
