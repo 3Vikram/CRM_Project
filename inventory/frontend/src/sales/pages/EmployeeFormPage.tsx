@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { SearchableSelect } from '@/sales/components/SearchableSelect'
-import { fetchCompanyProfiles } from '@/sales/lib/companyProfileApi'
-import { createEmployee, fetchEmployeeById, fetchEmployees, updateEmployee, type EmployeePayload } from '@/sales/lib/employeeApi'
-
+import { SearchableSelect } from "@/sales/components/SearchableSelect";
+import { fetchCompanyProfiles } from "@/sales/lib/companyProfileApi";
+import { createEmployee, fetchEmployeeById, fetchEmployees, updateEmployee } from "@/sales/lib/employeeApi";
 const defaultCrudOptions = ['Create', 'View', 'Edit', 'Delete']
 const defaultModuleOptions = [
   'Dashboard',

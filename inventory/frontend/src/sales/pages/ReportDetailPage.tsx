@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, BarChart3 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
-import { fetchReport, fetchRevenueMarginReport, type RevenueMarginOptions, type RevenueMarginRow } from '@/sales/lib/reportApi'
+import { fetchReport, fetchRevenueMarginReport } from "@/sales/lib/reportApi";
 
 const reportTitles: Record<string, string> = {
   'revenue-margin': 'Revenue & Margin',
