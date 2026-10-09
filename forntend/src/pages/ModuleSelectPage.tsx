@@ -2,13 +2,14 @@
 
 import { Link } from 'react-router-dom'
 import { ShoppingCart, Package, Calculator, ArrowRight } from 'lucide-react'
+import synovLogo from '../assets.png'
 
 const modules = [
   {
     key: 'sales',
     label: 'Sales',
     description:
-      'Manage customers, leads, rentals, purchase orders, DC tracking and bills — all in one workspace.',
+      'Manage customers, leads, quotations, and sales activities.',
     icon: ShoppingCart,
     iconBg: 'bg-emerald-100',
     iconColor: 'text-emerald-700',
@@ -19,7 +20,7 @@ const modules = [
     key: 'inventory',
     label: 'Inventory',
     description:
-      'Track your fleet, stock levels, utilisation and movements across warehouses.',
+      'Track stock, assets, and warehouse movements.',
     icon: Package,
     iconBg: 'bg-amber-100',
     iconColor: 'text-amber-700',
@@ -30,7 +31,7 @@ const modules = [
     key: 'accounts',
     label: 'Accounts',
     description:
-      'Invoices, payments, outstanding balances and financial reporting.',
+      'Manage invoices, payments, and financial records.',
     icon: Calculator,
     iconBg: 'bg-rose-100',
     iconColor: 'text-rose-700',
@@ -44,14 +45,12 @@ export default function ModuleSelectPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-16">
       {/* Brand */}
       <div className="flex flex-col items-center mb-12">
-        <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mb-4">
-          <span className="text-white font-bold text-base">3V</span>
-        </div>
+        <img src={synovLogo} alt="Synov IT Services logo" className="w-30 h-30 object-contain mb-4" />
         <h1 className="crm-page-heading">
-          3Vikram Technologies
+           SYNOV IT SERVICES
         </h1>
         <p className="text-gray-600 max-w-xl text-center">
-          Choose a workspace to begin. Each module keeps its tools where you need them.
+          {/* Choose a workspace to begin. Each module keeps its tools where you need them. */}
         </p>
       </div>
 
