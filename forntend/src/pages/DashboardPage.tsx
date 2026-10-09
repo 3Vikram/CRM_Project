@@ -386,7 +386,9 @@ export default function DashboardPage() {
       return { month: targetDate, label: formatMonthLabel(targetDate, 'short'), monthKey, revenue, margin }
     })
 
-    const maxValue = Math.max(...trendData.flatMap((item) => [item.revenue, item.margin]), 1)
+    const trendValues = trendData.flatMap((item) => [item.revenue, item.margin])
+    const minValue = Math.min(...trendValues, 0)
+    const maxValue = Math.max(...trendValues, 1)
 
     return {
       activeCustomers,
@@ -407,6 +409,7 @@ export default function DashboardPage() {
       currentMargin,
       previousMargin,
       trendData,
+      minValue,
       maxValue,
     }
   }, [quotationCount, selectedMonth, selectedScope, selectedYearNumber])
@@ -433,13 +436,16 @@ export default function DashboardPage() {
   const chartHeight = 320
   const padding = 28
   const chartSteps = dataset.trendData.length - 1
+  const chartValueRange = dataset.maxValue - dataset.minValue || 1
+  const getTrendY = (value: number) => (
+    padding + ((dataset.maxValue - value) / chartValueRange) * (chartHeight - padding * 2)
+  )
 
   const buildLinePath = (key: 'revenue' | 'margin') => {
     return dataset.trendData
       .map((point, index) => {
         const currentX = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
-        const yMax = dataset.maxValue || 1
-        const currentY = chartHeight - padding - (point[key] / yMax) * (chartHeight - padding * 2)
+        const currentY = getTrendY(point[key])
         return `${index === 0 ? 'M' : 'L'} ${currentX} ${currentY}`
       })
       .join(' ')
@@ -586,8 +592,8 @@ export default function DashboardPage() {
 
                         {dataset.trendData.map((point, index) => {
                           const x = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
-                          const revenueY = chartHeight - padding - (point.revenue / dataset.maxValue) * (chartHeight - padding * 2)
-                          const marginY = chartHeight - padding - (point.margin / dataset.maxValue) * (chartHeight - padding * 2)
+                          const revenueY = getTrendY(point.revenue)
+                          const marginY = getTrendY(point.margin)
                           return (
                             <g key={`${point.monthKey}-dots`}>
                               <circle cx={x} cy={revenueY} r="3" fill="#0B4DDA" />
