@@ -2,7 +2,8 @@ import axios from 'axios'
 import { getAuthHeaders } from './apiAuth'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/mail-campaigns` : 'http://localhost:5001/api/mail-campaigns',
+
+baseURL: '/api/mail-campaigns',
 })
 
 api.interceptors.request.use((config) => {

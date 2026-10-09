@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || ''
 export const INVENTORY_SESSION_KEY = 'inventory-session-token'
 
 export async function signInToInventory(email: string, password: string): Promise<string> {

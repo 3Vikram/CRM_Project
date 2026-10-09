@@ -7,7 +7,8 @@ import { fetchCurrentEmployeeProfile, updateCurrentEmployeeProfile, type Employe
 const fieldClassName = 'mt-2 w-full rounded-lg border border-[#E7E3DA] bg-[#F8F7F3] px-3 py-2.5 text-sm text-[#1F1D1A] outline-none transition focus:border-[#B8B0A0] focus:ring-2 focus:ring-[#E7E3DA]'
 const readOnlyClassName = `${fieldClassName} cursor-not-allowed text-[#6B6657]`
 const toDateInput = (value?: string | null) => value ? String(value).slice(0, 10) : ''
-const apiRoot = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/api$/, '')
+
+const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
 
 export default function SalesProfilePage() {
   const [profile, setProfile] = useState<EmployeeRecord | null>(null)

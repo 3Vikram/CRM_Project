@@ -81,8 +81,8 @@ type FormValues = {
   status: 'Open' | 'Close'
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-const SALES_API_URL = 'http://localhost:5001/api'
+const API_URL = import.meta.env.VITE_API_URL || ''
+const SALES_API_URL = '/api'
 
 const getSalesAuthHeaders = (): Record<string, string> => {
   for (const key of ['synov_employee_auth', 'synov_admin_auth']) {

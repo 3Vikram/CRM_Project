@@ -57,7 +57,8 @@ const numberToWords = (value: number): string => {
 const resolveImageUrl = (filePath?: string) => {
   if (!filePath) return ''
   if (/^https?:\/\//i.test(filePath)) return filePath
-  const base = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/api$/, '')
+
+const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
   return `${base}${filePath}`
 }
 

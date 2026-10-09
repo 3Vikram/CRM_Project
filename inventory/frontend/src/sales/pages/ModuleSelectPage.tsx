@@ -23,7 +23,7 @@ const modules = [
     icon: Package,
     iconBg: 'bg-amber-100',
     iconColor: 'text-amber-700',
-    to: 'http://localhost:3002',
+    to: '/inventory',
     accent: 'ring-amber-200 hover:ring-amber-300',
   },
   {
@@ -34,7 +34,7 @@ const modules = [
     icon: Calculator,
     iconBg: 'bg-rose-100',
     iconColor: 'text-rose-700',
-    to: 'http://localhost:3001',
+    to: '/accounts',
     accent: 'ring-rose-200 hover:ring-rose-300',
   },
 ]

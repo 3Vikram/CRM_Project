@@ -51,7 +51,7 @@ export default function InwardingPage() {
       try {
         setLoading(true)
         setError(null)
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+        const API_URL = import.meta.env.VITE_API_URL || ''
         const response = await fetch(`${API_URL}/api/inventory/movements?type=INWARD&limit=200`)
         if (!response.ok) throw new Error('Failed to load inward movements')
         const data = await response.json()

@@ -4,7 +4,7 @@ import axios from 'axios';
 import synovLogo from '../assets.png';
 import { setStoredAuth } from '@/sales/lib/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = '/api';
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();

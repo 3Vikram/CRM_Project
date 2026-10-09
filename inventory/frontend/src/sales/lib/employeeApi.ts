@@ -1,14 +1,7 @@
 import axios from 'axios';
 import { getAuthHeaders } from './apiAuth';
 
-const API_BASE_URLS = Array.from(
-  new Set([
-    'http://localhost:5001/api',
-    'http://127.0.0.1:5001/api',
-    import.meta.env.VITE_API_URL,
-  ].filter(Boolean) as string[])
-);
-
+const API_BASE_URLS = ['/api'];
 async function requestWithFallback(method: 'get' | 'post' | 'put' | 'delete', url: string, config?: Record<string, unknown>) {
   let lastError: unknown;
 

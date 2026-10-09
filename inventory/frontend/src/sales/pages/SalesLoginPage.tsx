@@ -7,7 +7,7 @@ import synovLogo from '../assets.png'
 import { setStoredAuth } from '@/sales/lib/auth'
 
 const SALES_AUTH_KEY = 'sales_logged_in'
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
+const API_BASE_URL = '/api';
 const firstAccessiblePath = (permissions?: Record<string, unknown>) => {
   if (permissions?.dashboard === true) return '/sales/dashboard'
 
