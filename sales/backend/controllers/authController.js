@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const Employee = require('../models/Employee');
+const AdminUser = require('../models/AdminUser');
 
 const DEFAULT_SESSION_TTL = '7d';
 
@@ -121,29 +122,8 @@ exports.adminLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
 
-    const adminAccounts = [
-      {
-        email: normalizeEmail(process.env.ADMIN_EMAIL || ''),
-        passwordHash: process.env.ADMIN_PASSWORD_HASH || '',
-      },
-      {
-        email: normalizeEmail(process.env.SALES_ADMIN_EMAIL || ''),
-        passwordHash: process.env.SALES_ADMIN_PASSWORD_HASH || '',
-      },
-    ].filter((account) => account.email && account.passwordHash);
-    const adminAccount = adminAccounts.find((account) => account.email === email);
-
-    if (!adminAccount) {
-      if (!adminAccounts.length) {
-        console.error('Admin login unavailable: administrator credentials are not configured.');
-        return res.status(503).json({
-          success: false,
-          code: 'ADMIN_LOGIN_NOT_CONFIGURED',
-          message: 'Administrator login is not configured.',
-        });
-      }
-      return respondInvalidLogin(res);
-    }
+    const adminAccount = AdminUser.findByEmail(email);
+    if (!adminAccount) return respondInvalidLogin(res);
 
     const isPasswordValid = await bcrypt.compare(password, adminAccount.passwordHash);
     if (!isPasswordValid) {

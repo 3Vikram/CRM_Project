@@ -20,11 +20,25 @@ pnpm install
 cp .env.example .env
 ```
 
-3. Update `.env` with your MongoDB connection string:
+3. Update `.env` with your MongoDB connection string and a unique `INVENTORY_AUTH_SECRET` of at least 32 characters. The administrator email and password are stored in SQLite, not `.env`.
 ```
 MONGO_URI=mongodb://localhost:27017/3vikram-crm
 PORT=5000
+INVENTORY_AUTH_SECRET=<generate-a-random-secret-locally>
 ```
+
+4. From the project root, install dependencies and initialize the local Inventory database:
+```powershell
+npm install --prefix inventory\backend
+npm --prefix inventory\backend run db:init
+```
+
+Initialization creates missing tables without dropping existing Inventory data and creates or updates the bcrypt-hashed demo administrator:
+
+- Email: `admin@synov.in`
+- Password: `admin123`
+
+The demo password is for local development only. Use a stronger password before real deployment. The local `database\inventory.db` is ignored by Git; a clone creates its own database by running the initializer.
 
 ### Running
 

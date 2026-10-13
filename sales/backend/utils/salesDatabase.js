@@ -20,6 +20,16 @@ db.function('regexp', { deterministic: true }, (pattern, value) => (
   value !== null && new RegExp(String(pattern), 'i').test(String(value)) ? 1 : 0
 ));
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 const columnDefinitions = {
   activityId: "TEXT NOT NULL DEFAULT ''",
   leadId: "TEXT DEFAULT ''",

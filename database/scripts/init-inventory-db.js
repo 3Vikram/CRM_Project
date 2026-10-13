@@ -1,8 +1,16 @@
 
-const Database = require('better-sqlite3');
 const path = require('path');
+const { createRequire } = require('module');
+const requireInventory = createRequire(path.resolve(__dirname, '../../inventory/backend/package.json'));
+requireInventory('dotenv').config({ path: path.resolve(__dirname, '../../inventory/backend/.env') });
+const Database = requireInventory('better-sqlite3');
+const bcrypt = requireInventory('bcryptjs');
+const configuredPath = process.env.INVENTORY_DB_PATH?.trim();
+if (configuredPath && !path.isAbsolute(configuredPath)) {
+  throw new Error('INVENTORY_DB_PATH must be an absolute path.');
+}
 
-const dbPath = path.join(__dirname, '..', 'inventory.db');
+const dbPath = configuredPath || path.resolve(__dirname, '..', 'inventory.db');
 const db = new Database(dbPath);
 
 db.pragma('foreign_keys = ON');
@@ -84,15 +92,45 @@ db.exec(`
     data_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS admin_users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
-console.log('Inventory database schema created:', dbPath);
+const demoEmail = 'admin@synov.in';
+const demoPassword = 'admin123';
 
-console.log(
-  'Tables:',
-  db.prepare(
-    "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
-  ).all().map(row => row.name).join(', ')
-);
+const ensureDemoAdmin = async () => {
+  const existing = db.prepare('SELECT id, password_hash FROM admin_users WHERE email = ? COLLATE NOCASE').get(demoEmail);
+  if (existing && await bcrypt.compare(demoPassword, existing.password_hash)) return;
 
-db.close();
+  const passwordHash = await bcrypt.hash(demoPassword, 12);
+  db.prepare(`
+    INSERT INTO admin_users (id, email, password_hash)
+    VALUES (?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET
+      password_hash = excluded.password_hash,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(existing?.id || 'admin', demoEmail, passwordHash);
+};
+
+ensureDemoAdmin()
+  .then(() => {
+    console.log('Inventory database initialized:', dbPath);
+    console.log(
+      'Tables:',
+      db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+      ).all().map(row => row.name).join(', ')
+    );
+  })
+  .catch((error) => {
+    console.error('Inventory database initialization failed:', error.message);
+    process.exitCode = 1;
+  })
+  .finally(() => db.close());

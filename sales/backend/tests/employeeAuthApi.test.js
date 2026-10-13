@@ -9,10 +9,6 @@ const test = require('node:test');
 
 const testPassword = 'Employee-Test-Password-42!';
 const testAdminEmail = `admin-${randomUUID()}@example.test`;
-process.env.ADMIN_EMAIL = testAdminEmail;
-process.env.ADMIN_PASSWORD_HASH = bcrypt.hashSync(testPassword, 4);
-process.env.SALES_ADMIN_EMAIL = '';
-process.env.SALES_ADMIN_PASSWORD_HASH = '';
 process.env.PORT = '0';
 
 const { app, startServer } = require('../server');
@@ -20,6 +16,11 @@ const { authMiddleware, requirePermission } = require('../middleware/authMiddlew
 const { db, dbPath } = require('../utils/salesDatabase');
 
 test('SQLite-backed Sales auth and Employee APIs work with MongoDB disconnected', async (t) => {
+  const testAdminId = `admin-auth-test-${randomUUID()}`;
+  db.prepare('INSERT INTO admin_users (id, email, password_hash) VALUES (?, ?, ?)')
+    .run(testAdminId, testAdminEmail, bcrypt.hashSync(testPassword, 4));
+  t.after(() => db.prepare('DELETE FROM admin_users WHERE id = ?').run(testAdminId));
+
   const server = startServer();
   await new Promise((resolve, reject) => {
     if (server.listening) return resolve();
@@ -99,18 +100,11 @@ test('SQLite-backed Sales auth and Employee APIs work with MongoDB disconnected'
     });
     assert.equal(invalidAdminLogin.status, 401);
 
-    const configuredAdminEmail = process.env.ADMIN_EMAIL;
-    const configuredAdminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
-    process.env.ADMIN_EMAIL = '';
-    process.env.ADMIN_PASSWORD_HASH = '';
-    const unconfiguredAdminLogin = await request('/auth/admin-login', {
+    const unknownAdminLogin = await request('/auth/admin-login', {
       method: 'POST',
-      body: JSON.stringify({ email: testAdminEmail, password: testPassword }),
+      body: JSON.stringify({ email: 'missing-admin@example.test', password: testPassword }),
     });
-    assert.equal(unconfiguredAdminLogin.status, 503);
-    assert.equal((await unconfiguredAdminLogin.json()).code, 'ADMIN_LOGIN_NOT_CONFIGURED');
-    process.env.ADMIN_EMAIL = configuredAdminEmail;
-    process.env.ADMIN_PASSWORD_HASH = configuredAdminPasswordHash;
+    assert.equal(unknownAdminLogin.status, 401);
 
     const unlinkedAdminProfile = await request('/auth/me', { token: adminToken });
     assert.equal(unlinkedAdminProfile.status, 200);

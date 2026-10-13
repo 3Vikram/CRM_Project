@@ -1,12 +1,12 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { getInventoryDatabase } from '../database/inventoryDatabase.js';
 
 const router = express.Router();
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 const getAuthConfig = () => ({
-  email: process.env.INVENTORY_LOGIN_EMAIL?.trim().toLowerCase(),
-  password: process.env.INVENTORY_LOGIN_PASSWORD,
   secret: process.env.INVENTORY_AUTH_SECRET,
 });
 
@@ -42,10 +42,9 @@ const isValidToken = (token, secret) => {
   }
 };
 
-const configured = ({ email, password, secret }) =>
-  Boolean(email && password && secret && secret.length >= 32);
+const configured = ({ secret }) => Boolean(secret && secret.length >= 32);
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const config = getAuthConfig();
   if (!configured(config)) {
     return res.status(503).json({ error: 'Inventory sign-in is not configured' });
@@ -54,14 +53,25 @@ router.post('/login', (req, res) => {
   const email =
     typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  const validEmail = safeEqual(email, config.email);
-  const validPassword = safeEqual(password, config.password);
-
-  if (!validEmail || !validPassword) {
+  if (!email || !password) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  return res.json({ token: createToken(config.secret) });
+  try {
+    const admin = getInventoryDatabase().prepare(`
+      SELECT password_hash AS passwordHash
+      FROM admin_users
+      WHERE email = ? COLLATE NOCASE
+      LIMIT 1
+    `).get(email);
+    if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    return res.json({ token: createToken(config.secret) });
+  } catch (error) {
+    console.error('Inventory login database error:', error.message);
+    return res.status(500).json({ error: 'Unable to sign in. Please try again.' });
+  }
 });
 
 router.get('/session', (req, res) => {

@@ -140,3 +140,45 @@ test('Sales backup script creates a validated backup outside the live database p
   assert.equal(backup.prepare('SELECT company_name FROM leads WHERE id = ?').get('backup-test-id').company_name, 'Backup test record');
   backup.close();
 });
+
+test('Sales initializer safely seeds one bcrypt admin and preserves existing records', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sales-admin-init-'));
+  const configuredPath = path.join(directory, 'sales.sqlite');
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+  const prepareDb = runDatabaseProcess({ SALES_DB_PATH: configuredPath }, `
+    const { db } = require(${JSON.stringify(databaseModule)});
+    db.prepare("INSERT INTO customers (id, company_name) VALUES (?, ?)")
+      .run('preserved-customer', 'Existing customer');
+    db.close();
+  `);
+  assert.equal(prepareDb.status, 0, prepareDb.stderr);
+
+  const initializerPath = path.resolve(backendRoot, '..', '..', 'database', 'scripts', 'init-sales-db.js');
+  for (let run = 0; run < 2; run += 1) {
+    const initialized = spawnSync(process.execPath, [initializerPath], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        SALES_DB_PATH: configuredPath,
+      },
+    });
+    assert.equal(initialized.status, 0, initialized.stderr);
+  }
+
+  const Database = require('better-sqlite3');
+  const db = new Database(configuredPath, { readonly: true, fileMustExist: true });
+  try {
+    const admins = db.prepare('SELECT id, email, password_hash FROM admin_users').all();
+    assert.equal(admins.length, 1);
+    assert.equal(admins[0].email, 'admin@synov.in');
+    assert.notEqual(admins[0].password_hash, 'admin123');
+    const bcrypt = require('bcryptjs');
+    assert.equal(bcrypt.compareSync('admin123', admins[0].password_hash), true);
+    assert.equal(db.prepare('SELECT company_name FROM customers WHERE id = ?').get('preserved-customer').company_name, 'Existing customer');
+  } finally {
+    db.close();
+  }
+});
