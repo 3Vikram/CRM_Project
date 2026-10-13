@@ -1,6 +1,5 @@
 const path = require('path');
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -18,7 +17,6 @@ const opfRoutes = require('./routes/opfRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
 const { authMiddleware, requirePermission, requireAdmin } = require('./middleware/authMiddleware');
 
@@ -56,27 +54,32 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5001;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/crm_db';
+let campaignScheduler;
 
-mongoose
-  .connect(MONGO_URI)
-  .then(() => {
-    return Activity.collection.dropIndex('activityId_1').catch((error) => {
-      if (error?.codeName !== 'IndexNotFound' && error?.code !== 27) throw error;
-    }).then(() => Activity.syncIndexes()).then(() => {
-      console.log('MongoDB connected');
+const startCampaignScheduler = (serverPort) => {
+  if (campaignScheduler) return;
+  const serverUrl = `http://127.0.0.1:${serverPort}`;
+  const publicApiUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
+  const runScheduledCampaigns = () => {
+    processScheduledCampaigns(publicApiUrl).catch((error) => {
+      console.error('Scheduled campaign processing failed:', error.message);
     });
-  })
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      const serverUrl = `http://127.0.0.1:${PORT}`;
-      const publicApiUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
-      void processScheduledCampaigns(publicApiUrl);
-      setInterval(() => void processScheduledCampaigns(publicApiUrl), 60 * 1000);
-    });
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
-    process.exit(1);
+  };
+  runScheduledCampaigns();
+  campaignScheduler = setInterval(runScheduledCampaigns, 60 * 1000);
+};
+
+const startServer = () => {
+  const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${server.address().port}`);
+    if (String(process.env.CAMPAIGN_SCHEDULER_ENABLED).toLowerCase() !== 'false') {
+      startCampaignScheduler(server.address().port);
+    }
   });
+
+  return server;
+};
+
+if (require.main === module) startServer();
+
+module.exports = { app, startServer };

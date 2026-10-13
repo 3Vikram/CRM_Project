@@ -1,19 +1,55 @@
-const mongoose = require('mongoose');
+const { db } = require('../utils/salesDatabase');
 
-const CustomerBatchSchema = new mongoose.Schema(
-  {
-    employeeId: { type: String, trim: true, default: '' },
-    employeeEmail: { type: String, trim: true, lowercase: true, default: '' },
-    employeeName: { type: String, trim: true, default: '' },
-    batchNumber: { type: Number, min: 1, required: true },
-    customerCount: { type: Number, min: 0, default: 0 },
-    customers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Contact' }],
-    fileName: { type: String, trim: true, default: '' },
-    createdDate: { type: Date, default: Date.now },
-  },
-  { timestamps: true }
+const batchContacts = db.prepare(`
+  SELECT contact_id
+  FROM customer_batch_contacts
+  WHERE batch_id = ?
+  ORDER BY position, contact_id
+`);
+
+const rowToBatch = (row) => {
+  if (!row) return null;
+  return {
+    _id: String(row.id),
+    employeeId: row.employee_id || '',
+    employeeEmail: row.employee_email || '',
+    employeeName: row.employee_name || '',
+    batchName: row.batch_name || '',
+    batchNumber: Number(row.batch_number),
+    customerCount: Number(row.customer_count) || 0,
+    customers: batchContacts.all(row.id).map(({ contact_id: contactId }) => contactId),
+    fileName: row.file_name || '',
+    createdDate: row.created_date || row.created_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const findById = (id) => rowToBatch(
+  db.prepare('SELECT * FROM customer_batches WHERE id = ?').get(String(id)),
 );
 
-CustomerBatchSchema.index({ employeeId: 1, batchNumber: 1 });
+const findByEmployeeAndNumber = (employeeId, batchNumber) => rowToBatch(
+  db.prepare(`
+    SELECT * FROM customer_batches
+    WHERE employee_id = ? AND batch_number = ?
+    ORDER BY datetime(created_at) DESC, id DESC
+    LIMIT 1
+  `).get(String(employeeId), Number(batchNumber)),
+);
 
-module.exports = mongoose.model('CustomerBatch', CustomerBatchSchema);
+const findAll = () => db.prepare(`
+  SELECT * FROM customer_batches
+  ORDER BY employee_id COLLATE NOCASE, batch_number, datetime(created_at), id
+`).all().map(rowToBatch);
+
+module.exports = {
+  findById,
+  findByEmployeeAndNumber,
+  findAll,
+  findForEmployee: (employeeId) => db.prepare(`
+    SELECT * FROM customer_batches
+    WHERE employee_id = ?
+    ORDER BY batch_number
+  `).all(String(employeeId)).map(rowToBatch),
+};

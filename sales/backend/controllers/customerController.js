@@ -5,30 +5,7 @@
  */
 
 const Customer = require('../models/Customer');
-const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
-
-const getNextCustomerId = async () => {
-  const customers = await Customer.find({ customerId: /^CI-\d+$/ }).select({ customerId: 1 }).lean();
-  const highest = customers.reduce((max, customer) => {
-    const number = Number(String(customer.customerId).slice(3));
-    return Number.isSafeInteger(number) ? Math.max(max, number) : max;
-  }, 0);
-  return `CI-${highest + 1}`;
-};
-
-const ensureCustomerIds = async () => {
-  const customers = await Customer.find({}).select({ customerId: 1, createdAt: 1 }).sort({ createdAt: 1, _id: 1 }).lean();
-  let highest = customers.reduce((max, customer) => {
-    const number = /^CI-(\d+)$/.exec(String(customer.customerId || ''))?.[1];
-    return number && Number.isSafeInteger(Number(number)) ? Math.max(max, Number(number)) : max;
-  }, 0);
-
-  for (const customer of customers) {
-    if (/^CI-\d+$/.test(String(customer.customerId || ''))) continue;
-    highest += 1;
-    await Customer.updateOne({ _id: customer._id }, { $set: { customerId: `CI-${highest}` } });
-  }
-};
+const { DEFAULT_PAGE_SIZE, parsePagination } = require('../utils/queryUtils');
 
 const resolveCreatedDateRange = (value) => {
   if (!value || value === 'all') return null;
@@ -102,7 +79,7 @@ const parsePayload = (body = {}) => {
 
 exports.getCustomers = async (req, res) => {
   try {
-    await ensureCustomerIds();
+    Customer.ensureCustomerIds();
     const {
       page = 1,
       limit = DEFAULT_PAGE_SIZE,
@@ -115,62 +92,36 @@ exports.getCustomers = async (req, res) => {
       accountType = '',
     } = req.query;
 
-    const query = {};
-    const searchValue = regexFromSearch(search);
-    if (searchValue) {
-      query.$or = [
-        { customerName: searchValue },
-        { companyName: searchValue },
-        { email: searchValue },
-        { phone: searchValue },
-      ];
-    }
-
-    if (createdBy) query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
-    if (status) query.status = status;
-    if (accountType) query.accountType = accountType;
-
-    if (createdDate) {
-      const dateRange = resolveCreatedDateRange(createdDate);
-      if (dateRange) query.createdAt = dateRange;
-    }
-
-    const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
-    const projection = {
-      companyName: 1,
-      customerId: 1,
-      customerName: 1,
-      email: 1,
-      phone: 1,
-      status: 1,
-      accountType: 1,
-      createdBy: 1,
-      createdAt: 1,
-      billToAddress: 1,
-      state: 1,
-      notes: 1,
-      contacts: 1,
-    };
-    const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'companyName', 'customerName', 'status', 'createdBy', 'email']);
-
-    const [customers, total] = await Promise.all([
-      Customer.find(query)
-        .select(projection)
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Customer.countDocuments(query),
-    ]);
+    const { page: pageNum, limit: limitNum } = parsePagination({ page, limit });
+    const dateRange = resolveCreatedDateRange(createdDate);
+    const result = Customer.list({
+      page: pageNum,
+      limit: limitNum,
+      sortBy,
+      sortOrder,
+      search,
+      createdBy,
+      status,
+      accountType,
+      createdDateStart: dateRange?.$gte.toISOString() || '',
+      createdDateEnd: dateRange?.$lte.toISOString() || '',
+    });
+    const projection = [
+      'companyName', 'customerId', 'customerName', 'email', 'phone', 'status',
+      'accountType', 'createdBy', 'createdAt', 'billToAddress', 'state', 'notes', 'contacts',
+    ];
 
     res.status(200).json({
       success: true,
-      data: customers,
+      data: result.data.map((customer) => ({
+        _id: customer._id,
+        ...Object.fromEntries(projection.map((field) => [field, customer[field]])),
+      })),
       pagination: {
-        total,
+        total: result.pagination.total,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages: result.pagination.totalPages,
       },
     });
   } catch (error) {
@@ -180,7 +131,7 @@ exports.getCustomers = async (req, res) => {
 
 exports.getCustomerById = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id).select({ __v: 0 }).lean();
+    const customer = Customer.findById(req.params.id);
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
@@ -192,7 +143,6 @@ exports.getCustomerById = async (req, res) => {
 
 exports.createCustomer = async (req, res) => {
   try {
-    await ensureCustomerIds();
     const payload = parsePayload(req.body);
     if (req.files && req.files.length) {
       payload.documents = req.files.map((file) => ({
@@ -202,23 +152,15 @@ exports.createCustomer = async (req, res) => {
       }));
     }
 
-    let customer;
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      try {
-        customer = await Customer.create({ ...payload, customerId: await getNextCustomerId() });
-        break;
-      } catch (error) {
-        if (error.code !== 11000 || attempt === 4) throw error;
-      }
-    }
+    const customer = Customer.create(payload);
     res.status(201).json({ success: true, message: 'Customer created successfully', data: customer });
   } catch (error) {
-    if (error.name === 'ValidationError') {
+    if (Customer.isValidationError(error)) {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'A customer with this email already exists' });
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ success: false, message: 'A customer with this customer ID already exists' });
     }
     res.status(500).json({ success: false, message: error.message });
   }
@@ -236,7 +178,7 @@ exports.updateCustomer = async (req, res) => {
       }));
     }
 
-    const customer = await Customer.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    const customer = Customer.updateById(req.params.id, payload);
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
@@ -246,7 +188,7 @@ exports.updateCustomer = async (req, res) => {
       data: customer,
     });
   } catch (error) {
-    if (error.name === 'ValidationError') {
+    if (Customer.isValidationError(error)) {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
@@ -256,7 +198,7 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = Customer.deleteById(req.params.id);
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }

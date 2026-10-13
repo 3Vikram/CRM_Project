@@ -19,3 +19,6 @@ build.log
 full_tsc_output.txt
 backend/uploads/
 .vite/
+database/*.db
+database/*.db-*
+database/backups/

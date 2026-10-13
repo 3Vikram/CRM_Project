@@ -1,7 +1,6 @@
 const bcrypt = require('bcryptjs');
 const Employee = require('../models/Employee');
-const Counter = require('../models/Counter');
-const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { DEFAULT_PAGE_SIZE, parsePagination } = require('../utils/queryUtils');
 
 const permissionModules = [
   'customers', 'contacts', 'leads', 'activities', 'mailCampaign', 'suppliers',
@@ -95,22 +94,8 @@ const normaliseEmployeePayload = (body = {}) => {
   return next;
 };
 
-const generateEmployeeCode = async () => {
-  const counter = await Counter.findOneAndUpdate(
-    { name: 'employeeSequence' },
-    { $inc: { value: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
-
-  if (!counter || !Number.isSafeInteger(counter.value)) {
-    throw new Error('Failed to generate employee code.');
-  }
-
-  return `EMP-${String(counter.value).padStart(4, '0')}`;
-};
-
 const hashEmployeePassword = async (password) => {
-  if (!password) return '';
+  if (!password) throw new Error('Employee password is required.');
   return bcrypt.hash(password, 10);
 };
 
@@ -155,38 +140,26 @@ exports.getEmployees = async (req, res) => {
       department = '',
     } = req.query;
 
-    const query = {};
-    const searchValue = regexFromSearch(search);
-    if (searchValue) {
-      query.$or = [
-        { employeeName: searchValue },
-        { email: searchValue },
-        { employeeCode: searchValue },
-        { designation: searchValue },
-        { department: searchValue },
-      ];
-    }
-
-    if (role) query.role = new RegExp(`^${escapeRegex(role)}$`, 'i');
-    if (status) query.status = new RegExp(`^${escapeRegex(status)}$`, 'i');
-    if (department) query.department = new RegExp(`^${escapeRegex(department)}$`, 'i');
-
-    const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
-    const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'employeeName', 'employeeCode', 'role', 'department', 'status']);
-
-    const [employees, total] = await Promise.all([
-      Employee.find(query).sort(sortOptions).skip(skip).limit(limitNum).lean(),
-      Employee.countDocuments(query),
-    ]);
+    const { page: pageNum, limit: limitNum } = parsePagination({ page, limit });
+    const result = Employee.list({
+      page: pageNum,
+      limit: limitNum,
+      search,
+      role,
+      status,
+      department,
+      sortBy,
+      sortOrder,
+    });
 
     res.status(200).json({
       success: true,
-      data: employees.map(serializeEmployee),
+      data: result.data.map(serializeEmployee),
       pagination: {
-        total,
+        total: result.pagination.total,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages: result.pagination.totalPages,
       },
     });
   } catch (error) {
@@ -196,7 +169,7 @@ exports.getEmployees = async (req, res) => {
 
 exports.getEmployeeById = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id).lean();
+    const employee = Employee.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found.' });
     }
@@ -221,18 +194,14 @@ exports.createEmployee = async (req, res) => {
     payload.passwordSalt = '';
     delete payload.password;
 
-    if (!payload.employeeCode) {
-      payload.employeeCode = await generateEmployeeCode();
-    }
-
-    const employee = await Employee.create(payload);
+    const employee = Employee.create(payload);
     res.status(201).json({ success: true, message: 'Employee created successfully.', data: serializeEmployee(employee) });
   } catch (error) {
-    if (error.name === 'ValidationError') {
+    if (Employee.isValidationError(error)) {
       const messages = Object.values(error.errors).map((item) => item.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
-    if (error.code === 11000) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return res.status(409).json({ success: false, message: 'An employee with this email or code already exists.' });
     }
     res.status(500).json({ success: false, message: error.message || 'Unable to create employee.' });
@@ -252,18 +221,18 @@ exports.updateEmployee = async (req, res) => {
       delete payload.password;
     }
 
-    const employee = await Employee.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    const employee = Employee.updateById(req.params.id, payload);
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found.' });
     }
 
     res.status(200).json({ success: true, message: 'Employee updated successfully.', data: serializeEmployee(employee) });
   } catch (error) {
-    if (error.name === 'ValidationError') {
+    if (Employee.isValidationError(error)) {
       const messages = Object.values(error.errors).map((item) => item.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
-    if (error.code === 11000) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return res.status(409).json({ success: false, message: 'An employee with this email or code already exists.' });
     }
     res.status(500).json({ success: false, message: error.message || 'Unable to update employee.' });
@@ -272,7 +241,7 @@ exports.updateEmployee = async (req, res) => {
 
 exports.deleteEmployee = async (req, res) => {
   try {
-    const employee = await Employee.findByIdAndDelete(req.params.id);
+    const employee = Employee.deleteById(req.params.id);
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found.' });
     }

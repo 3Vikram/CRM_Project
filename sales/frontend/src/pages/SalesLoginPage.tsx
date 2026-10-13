@@ -58,7 +58,10 @@ export default function SalesLoginPage() {
       try {
         response = await axios.post(`${API_BASE_URL}/auth/admin-login`, credentials)
       } catch (adminError) {
-        if (!axios.isAxiosError(adminError) || adminError.response?.status !== 401) {
+        const canTryEmployeeLogin = axios.isAxiosError(adminError)
+          && (adminError.response?.status === 401
+            || adminError.response?.data?.code === 'ADMIN_LOGIN_NOT_CONFIGURED')
+        if (!canTryEmployeeLogin) {
           throw adminError
         }
         response = await axios.post(`${API_BASE_URL}/auth/employee-login`, credentials)

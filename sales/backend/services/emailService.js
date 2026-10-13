@@ -42,6 +42,7 @@ const sendCampaignEmails = async ({
   attachments = [],
   fromName = 'CRM Mail Campaign',
   tracking,
+  transport: providedTransport,
 }) => {
   const recipients = normalizeRecipients(to);
   const config = getSmtpConfig();
@@ -78,7 +79,7 @@ const sendCampaignEmails = async ({
     };
   }
 
-  const transporter = createTransporter();
+  const transporter = providedTransport || createTransporter();
 
   try {
     await transporter.verify();

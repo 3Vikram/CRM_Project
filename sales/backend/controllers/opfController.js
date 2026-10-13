@@ -1,7 +1,7 @@
 const OPF = require('../models/OPF');
 const CompanyProfile = require('../models/CompanyProfile');
 const { sendQuotationEmail } = require('../services/emailService');
-const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = require('../utils/queryUtils');
 
 const calculateFinancialYear = (date = new Date()) => {
   const year = date.getFullYear();
@@ -10,32 +10,10 @@ const calculateFinancialYear = (date = new Date()) => {
   return `${year - 1}-${year.toString().slice(-2)}`;
 };
 
-const createOPFNo = async () => {
-  try {
-    const companyProfile = await CompanyProfile.findOne({}).lean();
-    const format = (companyProfile?.opfFormat || 'OPF').trim();
-    const financialYear = calculateFinancialYear();
-    const prefixPattern = `${format}${financialYear}/`;
-
-    const latest = await OPF.findOne(
-      { opfNo: new RegExp(`^${prefixPattern.replace(/\//g, '\\/')}`) },
-      { opfNo: 1 }
-    )
-      .sort({ createdDate: -1 })
-      .lean();
-
-    let sequenceNumber = 1;
-    if (latest && latest.opfNo) {
-      const match = latest.opfNo.match(/(\d{3})$/);
-      if (match) sequenceNumber = parseInt(match[1], 10) + 1;
-    }
-
-    return `${prefixPattern}${String(sequenceNumber).padStart(3, '0')}`;
-  } catch (error) {
-    console.error('Error generating OPF number:', error.message);
-    const fallbackYear = calculateFinancialYear();
-    return `OPF${fallbackYear}/001`;
-  }
+const getOPFPrefix = () => {
+  const companyProfile = CompanyProfile.findFirst();
+  const format = (companyProfile?.opfFormat || 'OPF').trim();
+  return `${format}${calculateFinancialYear()}/`;
 };
 
 const parsePayload = (body = {}) => {
@@ -107,48 +85,36 @@ exports.getOPFs = async (req, res) => {
       sortOrder = 'desc',
     } = req.query;
 
-    const query = {};
-    const searchValue = regexFromSearch(search);
-    if (searchValue) {
-      query.$or = [
-        { opfNo: searchValue },
-        { quotationNumber: searchValue },
-        { quotationId: searchValue },
-        { customerName: searchValue },
-        { contactPerson: searchValue },
-      ];
-    }
-
-    if (createdBy) query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
-    if (customerName) query.customerName = new RegExp(`^${escapeRegex(customerName)}$`, 'i');
-    if (approvalStatus) query.approvalStatus = approvalStatus;
-    if (product) query.product = new RegExp(`^${escapeRegex(product)}$`, 'i');
-
-    if (createdDate && createdDate !== 'all') {
-      const date = new Date(createdDate);
-      if (!Number.isNaN(date.getTime())) {
-        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-        query.createdDate = { $gte: start, $lte: end };
-      }
-    }
-
-    if (renewalDate && renewalDate !== 'all') {
-      const date = new Date(renewalDate);
-      if (!Number.isNaN(date.getTime())) {
-        const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-        query.renewalDate = { $gte: start, $lte: end };
-      }
-    }
+    const dayRange = (value) => {
+      if (!value || value === 'all') return {};
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return {};
+      return {
+        start: new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString(),
+        end: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999).toISOString(),
+      };
+    };
+    const createdRange = dayRange(createdDate);
+    const renewalRange = dayRange(renewalDate);
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdDate', 'renewalDate', 'customerName', 'quotationNumber', 'approvalStatus']);
-
-    const [opfRecords, total] = await Promise.all([
-      OPF.find(query).sort(sortOptions).skip(skip).limit(limitNum).lean(),
-      OPF.countDocuments(query),
-    ]);
+    const [safeSortBy, safeSortOrder] = Object.entries(sortOptions)[0];
+    const { records: opfRecords, total } = OPF.list({
+      search: regexFromSearch(search)?.source || '',
+      createdBy,
+      customerName,
+      approvalStatus,
+      product,
+      createdDateStart: createdRange.start,
+      createdDateEnd: createdRange.end,
+      renewalDateStart: renewalRange.start,
+      renewalDateEnd: renewalRange.end,
+      sortBy: safeSortBy,
+      sortOrder: safeSortOrder === 1 ? 'asc' : 'desc',
+      limit: limitNum,
+      offset: skip,
+    });
 
     const enrichedRecords = opfRecords.map((opf) => enrichOPFFinancials(opf));
 
@@ -169,7 +135,7 @@ exports.getOPFs = async (req, res) => {
 
 exports.getOPFById = async (req, res) => {
   try {
-    const opf = await OPF.findById(req.params.id).lean();
+    const opf = OPF.getById(req.params.id);
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
     res.status(200).json({ success: true, data: enrichOPFFinancials(opf) });
   } catch (error) {
@@ -227,18 +193,15 @@ exports.createOPF = async (req, res) => {
     payload.wht = normalizeNumber(payload.wht);
     payload.conversionRate = normalizeNumber(payload.conversionRate);
 
-    if (!payload.opfNo) {
-      payload.opfNo = await createOPFNo();
-    }
-
-    const opf = await OPF.create(payload);
+    const generatedPrefix = payload.opfNo ? '' : getOPFPrefix();
+    const opf = OPF.create(payload, generatedPrefix);
     res.status(201).json({ success: true, message: 'OPF created successfully', data: opf });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
-    if (error.code === 11000) {
+    if (['SQLITE_CONSTRAINT_UNIQUE', 'SQLITE_CONSTRAINT_PRIMARYKEY'].includes(error.code)) {
       return res.status(400).json({ success: false, message: 'This OPF number already exists' });
     }
     res.status(500).json({ success: false, message: error.message });
@@ -248,7 +211,7 @@ exports.createOPF = async (req, res) => {
 exports.updateOPF = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
-    const existingOPF = await OPF.findById(req.params.id).lean();
+    const existingOPF = OPF.getById(req.params.id);
     if (!existingOPF) {
       return res.status(404).json({ success: false, message: 'OPF not found' });
     }
@@ -301,7 +264,8 @@ exports.updateOPF = async (req, res) => {
     payload.wht = normalizeNumber(payload.wht);
     payload.conversionRate = normalizeNumber(payload.conversionRate);
 
-    const opf = await OPF.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    const opf = OPF.updateById(req.params.id, payload);
+    if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
 
     res.status(200).json({ success: true, message: 'OPF updated successfully', data: opf });
   } catch (error) {
@@ -309,13 +273,16 @@ exports.updateOPF = async (req, res) => {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
+    if (['SQLITE_CONSTRAINT_UNIQUE', 'SQLITE_CONSTRAINT_PRIMARYKEY'].includes(error.code)) {
+      return res.status(400).json({ success: false, message: 'This OPF number already exists' });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 exports.deleteOPF = async (req, res) => {
   try {
-    const opf = await OPF.findByIdAndDelete(req.params.id);
+    const opf = OPF.deleteById(req.params.id);
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
     res.status(200).json({ success: true, message: 'OPF deleted successfully' });
   } catch (error) {
@@ -331,7 +298,7 @@ exports.sendOPFPdf = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid recipient email is required' });
     }
 
-    const opf = await OPF.findById(req.params.id).lean();
+    const opf = OPF.getById(req.params.id);
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
 
     const encodedPdf = typeof pdfData === 'string' && pdfData.includes(',') ? pdfData.split(',')[1] : pdfData;

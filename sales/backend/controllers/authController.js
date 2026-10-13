@@ -4,12 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const Employee = require('../models/Employee');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'synov-crm-secret-key-change-me';
 const DEFAULT_SESSION_TTL = '7d';
-const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || 'admin@synov.in').trim().toLowerCase();
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '$2b$10$ELsMJoMB1toHUyneHX9ys.ZfKo7f9dXucBIYCBpfJeiSxbUz0d5jm';
-const LEGACY_SALES_ADMIN_EMAIL = String(process.env.SALES_ADMIN_EMAIL || 'admin@synov.com').trim().toLowerCase();
-const LEGACY_SALES_ADMIN_PASSWORD_HASH = process.env.SALES_ADMIN_PASSWORD_HASH || '$2b$10$3qIvpGQFOzdswLP6STNyQe5jO4BPTlajQ1bYwmbLdkturuQIfcnAa';
+
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured.');
+  return process.env.JWT_SECRET;
+};
 
 const allPermissions = () => {
   const fullAccess = { view: true, create: true, edit: true, delete: true };
@@ -103,7 +103,7 @@ const buildSessionPayload = (employee, role) => ({
   permissions: role === 'admin' ? allPermissions() : getEmployeePermissions(employee),
 });
 
-const createToken = (employee, role) => jwt.sign(buildSessionPayload(employee, role), JWT_SECRET, {
+const createToken = (employee, role) => jwt.sign(buildSessionPayload(employee, role), getJwtSecret(), {
   expiresIn: DEFAULT_SESSION_TTL,
 });
 
@@ -121,17 +121,31 @@ exports.adminLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
 
-    const passwordHash = email === ADMIN_EMAIL
-      ? ADMIN_PASSWORD_HASH
-      : email === LEGACY_SALES_ADMIN_EMAIL
-        ? LEGACY_SALES_ADMIN_PASSWORD_HASH
-        : '';
+    const adminAccounts = [
+      {
+        email: normalizeEmail(process.env.ADMIN_EMAIL || ''),
+        passwordHash: process.env.ADMIN_PASSWORD_HASH || '',
+      },
+      {
+        email: normalizeEmail(process.env.SALES_ADMIN_EMAIL || ''),
+        passwordHash: process.env.SALES_ADMIN_PASSWORD_HASH || '',
+      },
+    ].filter((account) => account.email && account.passwordHash);
+    const adminAccount = adminAccounts.find((account) => account.email === email);
 
-    if (!passwordHash) {
+    if (!adminAccount) {
+      if (!adminAccounts.length) {
+        console.error('Admin login unavailable: administrator credentials are not configured.');
+        return res.status(503).json({
+          success: false,
+          code: 'ADMIN_LOGIN_NOT_CONFIGURED',
+          message: 'Administrator login is not configured.',
+        });
+      }
       return respondInvalidLogin(res);
     }
 
-    const isPasswordValid = await bcrypt.compare(password, passwordHash);
+    const isPasswordValid = await bcrypt.compare(password, adminAccount.passwordHash);
     if (!isPasswordValid) {
       return respondInvalidLogin(res);
     }
@@ -166,12 +180,8 @@ exports.adminLogin = async (req, res) => {
 exports.getCurrentProfile = async (req, res) => {
   try {
     const employee = req.user?.role === 'admin'
-      ? await Employee.findOne({ email: normalizeEmail(req.user.email || '') })
-        .select('employeeCode officialEmployeeId employeeName fullName email phone contactNo designation department role status joiningDate dateOfJoin dateOfBirth profilePhoto signature employeeType reportingTo orderApprovalTo branchCode address notes')
-        .lean()
-      : await Employee.findById(req.user?.id)
-        .select('employeeCode officialEmployeeId employeeName fullName email phone contactNo designation department role status joiningDate dateOfJoin dateOfBirth profilePhoto signature employeeType reportingTo orderApprovalTo branchCode address notes')
-        .lean();
+      ? Employee.findByEmail(normalizeEmail(req.user.email || ''))
+      : Employee.findById(req.user?.id);
 
     if (employee) {
       return res.status(200).json({
@@ -232,8 +242,8 @@ exports.updateCurrentProfile = async (req, res) => {
   let uploadedPhotoPath = req.file?.path;
   try {
     const employee = req.user?.role === 'admin'
-      ? await Employee.findOne({ email: normalizeEmail(req.user.email || '') })
-      : await Employee.findById(req.user?.id);
+      ? Employee.findByEmail(normalizeEmail(req.user.email || ''))
+      : Employee.findById(req.user?.id);
 
     if (!employee) {
       if (uploadedPhotoPath) await fs.promises.unlink(uploadedPhotoPath).catch(() => {});
@@ -250,21 +260,23 @@ exports.updateCurrentProfile = async (req, res) => {
     const contactNo = String(req.body?.contactNo || '').trim();
     const dateOfJoin = String(req.body?.dateOfJoin || '').trim();
     const dateOfBirth = String(req.body?.dateOfBirth || '').trim();
-    employee.contactNo = contactNo;
-    employee.phone = contactNo;
-    employee.dateOfJoin = dateOfJoin || null;
-    employee.joiningDate = dateOfJoin || null;
-    employee.dateOfBirth = dateOfBirth || null;
-    employee.signature = String(req.body?.signature || '').trim();
-
+    const changes = {
+      contactNo,
+      phone: contactNo,
+      dateOfJoin: dateOfJoin || null,
+      joiningDate: dateOfJoin || null,
+      dateOfBirth: dateOfBirth || null,
+      signature: String(req.body?.signature || '').trim(),
+    };
     const previousPhoto = employee.profilePhoto;
-    if (req.file) employee.profilePhoto = `/uploads/${req.file.filename}`;
+    if (req.file) changes.profilePhoto = `/uploads/${req.file.filename}`;
     if (password) {
-      employee.passwordHash = await bcrypt.hash(password, 10);
-      employee.passwordSalt = '';
+      changes.passwordHash = await bcrypt.hash(password, 10);
+      changes.passwordSalt = '';
     }
 
-    await employee.save();
+    const updated = Employee.updateById(employee._id, changes);
+    if (!updated) throw new Error('Employee record was removed during profile update.');
     uploadedPhotoPath = null;
 
     if (req.file && previousPhoto?.startsWith('/uploads/')) {
@@ -289,7 +301,7 @@ exports.employeeLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
 
-    const employee = await Employee.findOne({ email }).select('+passwordHash');
+    const employee = Employee.findByEmailWithPassword(email);
     if (!employee || employee.status !== 'Active' || !employee.passwordHash) {
       return respondInvalidLogin(res);
     }

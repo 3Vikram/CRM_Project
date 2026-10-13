@@ -38,26 +38,6 @@ const dateRange = (value) => {
   };
 };
 
-const buildOpfQuery = ({ createdBy = '', createdDate = '', customerName = '', product = '' } = {}) => {
-  const query = {};
-  if (createdBy && createdBy !== 'all') query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
-  if (customerName && customerName !== 'all') query.customerName = new RegExp(`^${escapeRegex(customerName)}$`, 'i');
-  if (product && product !== 'all') query.product = new RegExp(`^${escapeRegex(product)}$`, 'i');
-  const createdDateRange = dateRange(createdDate);
-  if (createdDateRange) query.createdDate = createdDateRange;
-  return query;
-};
-
-const buildLeadQuery = ({ createdBy = '', createdDate = '', customerName = '', product = '' } = {}) => {
-  const query = {};
-  if (createdBy && createdBy !== 'all') query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
-  if (customerName && customerName !== 'all') query.companyName = new RegExp(`^${escapeRegex(customerName)}$`, 'i');
-  if (product && product !== 'all') query['products.productName'] = new RegExp(`^${escapeRegex(product)}$`, 'i');
-  const createdDateRange = dateRange(createdDate);
-  if (createdDateRange) query.createdDate = createdDateRange;
-  return query;
-};
-
 const uniqueValues = (values) => Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
 const enrichOpfRecord = (record) => {
@@ -88,8 +68,8 @@ const aggregateBy = (records, key, label) => {
 
 const reportOptions = async (opfRecords) => {
   const [employees, customers] = await Promise.all([
-    Employee.find({}).select('employeeName fullName').sort({ employeeName: 1 }).lean(),
-    Customer.find({}).select('companyName customerName').sort({ companyName: 1 }).lean(),
+    Employee.findNames(),
+    Customer.findAll().sort((a, b) => a.companyName.localeCompare(b.companyName)),
   ]);
   return {
     createdBy: uniqueValues(employees.flatMap((employee) => [employee.employeeName, employee.fullName]).concat(opfRecords.map((record) => record.createdBy))),
@@ -115,8 +95,14 @@ exports.getReport = async (req, res) => {
       return res.status(200).json({ success: true, data: [], unavailable: true, message: 'Team-level data is not available because this CRM has no Team entity.' });
     }
 
-    const opfQuery = buildOpfQuery({ createdBy, createdDate, customerName, product });
-    const opfRecords = (await OPF.find(opfQuery).select('createdBy createdDate customerName product quantity unitPrice vendorPrice revenue margin').sort({ createdDate: -1 }).lean()).map(enrichOpfRecord);
+    const reportDate = dateRange(createdDate);
+    const opfRecords = OPF.findForReport({
+      createdBy: createdBy && createdBy !== 'all' ? createdBy : '',
+      createdDateStart: reportDate?.$gte.toISOString() || '',
+      createdDateEnd: reportDate?.$lt.toISOString() || '',
+      customerName: customerName && customerName !== 'all' ? customerName : '',
+      product: product && product !== 'all' ? product : '',
+    }).map(enrichOpfRecord);
     const options = await reportOptions(opfRecords);
     let rows;
 
@@ -124,7 +110,13 @@ exports.getReport = async (req, res) => {
     else if (reportKey === 'top-employees') rows = aggregateBy(opfRecords, 'createdBy', 'employee');
     else if (reportKey === 'top-products' || reportKey === 'product-analysis') rows = aggregateBy(opfRecords, 'product', 'product');
     else if (reportKey === 'funnel-analysis') {
-      const leads = await Lead.find(buildLeadQuery({ createdBy, createdDate, customerName, product })).select('leadStatus products createdDate').lean();
+      const leads = Lead.findForReport({
+        createdBy: createdBy && createdBy !== 'all' ? createdBy : '',
+        createdDateStart: reportDate?.$gte.toISOString() || '',
+        createdDateEnd: reportDate?.$lt.toISOString() || '',
+        customerName: customerName && customerName !== 'all' ? customerName : '',
+        product: product && product !== 'all' ? product : '',
+      });
       const stages = new Map();
       leads.forEach((lead) => {
         const stage = lead.leadStatus || 'Unknown';
@@ -137,13 +129,28 @@ exports.getReport = async (req, res) => {
       rows = Array.from(stages.values()).map((row, index, all) => ({ ...row, conversionPercent: index === 0 ? 100 : (row.count / (all[0]?.count || 1)) * 100 }));
     } else if (reportKey === 'usages' || reportKey === 'usage') {
       const usageDate = dateRange(createdDate);
-      const usageCreatedBy = createdBy && createdBy !== 'all' ? new RegExp(`^${escapeRegex(createdBy)}$`, 'i') : undefined;
+      const usageCreatedBy = createdBy && createdBy !== 'all' ? createdBy : '';
       const [employees, customers, contacts, leads, activities] = await Promise.all([
-        Employee.find({}).select('employeeName fullName').lean(),
-        Customer.find({ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }).select('createdBy').lean(),
-        Contact.find(usageDate ? { createdAt: usageDate } : {}).select('createdAt').lean(),
-        Lead.find({ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdDate: usageDate } : {}) }).select('createdBy').lean(),
-        Activity.find({ deletedAt: null, ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }).select('createdBy').lean(),
+        Employee.findNames(),
+        Customer.findAll({
+          createdBy: usageCreatedBy,
+          createdDateStart: usageDate?.$gte.toISOString() || '',
+          createdDateEnd: usageDate?.$lt.toISOString() || '',
+        }),
+        Contact.findForUsage({
+          createdDateStart: usageDate?.$gte.toISOString() || '',
+          createdDateEnd: usageDate?.$lt.toISOString() || '',
+        }),
+        Lead.findForUsage({
+          createdBy: usageCreatedBy,
+          createdDateStart: usageDate?.$gte.toISOString() || '',
+          createdDateEnd: usageDate?.$lt.toISOString() || '',
+        }),
+        Activity.findForUsage({
+          createdByPattern: usageCreatedBy ? `^${escapeRegex(usageCreatedBy)}$` : '',
+          createdDateStart: usageDate?.$gte.toISOString() || '',
+          createdDateEnd: usageDate?.$lt.toISOString() || '',
+        }),
       ]);
       const names = uniqueValues(employees.flatMap((employee) => [employee.employeeName, employee.fullName]).concat(opfRecords.map((record) => record.createdBy)));
       rows = names.map((employee) => ({ employee, customersCreated: customers.filter((item) => item.createdBy === employee).length, quotations: leads.filter((item) => item.createdBy === employee).length, sales: opfRecords.filter((item) => item.createdBy === employee).length, activities: activities.filter((item) => item.createdBy === employee).length }));
@@ -174,25 +181,20 @@ exports.getRevenueMarginReport = async (req, res) => {
       product = '',
     } = req.query;
 
-    const query = {};
-    if (createdBy && createdBy !== 'all') query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
-    if (customerName && customerName !== 'all') query.customerName = new RegExp(`^${escapeRegex(customerName)}$`, 'i');
-    if (product && product !== 'all') query.product = new RegExp(`^${escapeRegex(product)}$`, 'i');
     const createdDateRange = dateRange(createdDate);
-    if (createdDateRange) query.createdDate = createdDateRange;
-    if (search) query.createdBy = new RegExp(escapeRegex(search), 'i');
-
     const [records, optionRecords, employees, customers] = await Promise.all([
-      OPF.find(query)
-        .select('createdBy createdDate customerName product revenue margin quantity unitPrice vendorPrice')
-        .sort({ createdBy: 1, createdDate: -1 })
-        .lean(),
-      OPF.find({})
-        .select('createdBy createdDate customerName product')
-        .sort({ createdBy: 1 })
-        .lean(),
-      Employee.find({}).select('employeeName fullName').sort({ employeeName: 1 }).lean(),
-      Customer.find({}).select('companyName customerName').sort({ companyName: 1 }).lean(),
+      Promise.resolve(OPF.findForReport({
+        createdBy: createdBy && createdBy !== 'all' ? createdBy : '',
+        createdDateStart: createdDateRange?.$gte.toISOString() || '',
+        createdDateEnd: createdDateRange?.$lt.toISOString() || '',
+        customerName: customerName && customerName !== 'all' ? customerName : '',
+        product: product && product !== 'all' ? product : '',
+        sortBy: 'createdBy',
+        sortOrder: 'asc',
+      })),
+      Promise.resolve(OPF.findForReport({ sortBy: 'createdBy', sortOrder: 'asc' })),
+      Employee.findNames(),
+      Customer.findAll().sort((a, b) => a.companyName.localeCompare(b.companyName)),
     ]);
 
     const rows = records.map((record) => {

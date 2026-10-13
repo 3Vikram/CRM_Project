@@ -426,7 +426,7 @@ export default function OPFGenerateFormPage() {
                 value={quotationNumber}
                 onChange={handleQuotationChange}
                 options={leads
-                  .filter(lead => lead.quotationId)
+                  .filter((lead): lead is LeadRecord & { quotationId: string } => typeof lead.quotationId === 'string' && lead.quotationId.length > 0)
                   .map(lead => lead.quotationId)}
                 placeholder="Select Quotation"
                 error={errors.quotationNumber}

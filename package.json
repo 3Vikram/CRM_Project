@@ -20,5 +20,8 @@
   "bugs": {
     "url": "https://github.com/3Vikram/CRM_Project/issues"
   },
-  "homepage": "https://github.com/3Vikram/CRM_Project#readme"
+  "homepage": "https://github.com/3Vikram/CRM_Project#readme",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  }
 }

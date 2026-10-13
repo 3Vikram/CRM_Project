@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'synov-crm-secret-key-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const getPermissionValue = (permissions, moduleName, action) => {
   if (!permissions || !moduleName || !action) return false;
@@ -9,6 +9,9 @@ const getPermissionValue = (permissions, moduleName, action) => {
 };
 
 const authMiddleware = (req, res, next) => {
+  if (!process.env.JWT_SECRET) {
+    return res.status(503).json({ success: false, message: 'Authentication service is not configured.' });
+  }
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
@@ -17,7 +20,7 @@ const authMiddleware = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     return next();
   } catch (_error) {
@@ -79,7 +82,7 @@ const requireLeadRecordPermission = (action, resource = 'lead') => async (req, r
     } else if (resource === 'new-record') {
       isQuotation = Boolean(req.body?.quotationId || req.body?.leadStatus === 'Proposal Sent');
     } else if (resource === 'record') {
-      const lead = await Lead.findById(identifier).select('quotationId').lean();
+      const lead = Lead.findById(identifier);
       if (!lead) return res.status(404).json({ success: false, message: 'Record not found.' });
       isQuotation = Boolean(lead.quotationId);
     }

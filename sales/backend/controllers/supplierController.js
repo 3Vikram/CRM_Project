@@ -1,28 +1,5 @@
 const Supplier = require('../models/Supplier');
-const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
-
-const getNextSupplierId = async () => {
-  const suppliers = await Supplier.find({ supplierId: /^SL-\d+$/ }).select({ supplierId: 1 }).lean();
-  const highest = suppliers.reduce((max, supplier) => {
-    const number = Number(String(supplier.supplierId).slice(3));
-    return Number.isSafeInteger(number) ? Math.max(max, number) : max;
-  }, 0);
-  return `SL-${highest + 1}`;
-};
-
-const ensureSupplierIds = async () => {
-  const suppliers = await Supplier.find({}).select({ supplierId: 1, createdAt: 1 }).sort({ createdAt: 1, _id: 1 }).lean();
-  let highest = suppliers.reduce((max, supplier) => {
-    const number = /^SL-(\d+)$/.exec(String(supplier.supplierId || ''))?.[1];
-    return number && Number.isSafeInteger(Number(number)) ? Math.max(max, Number(number)) : max;
-  }, 0);
-
-  for (const supplier of suppliers) {
-    if (/^SL-\d+$/.test(String(supplier.supplierId || ''))) continue;
-    highest += 1;
-    await Supplier.updateOne({ _id: supplier._id }, { $set: { supplierId: `SL-${highest}` } });
-  }
-};
+const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = require('../utils/queryUtils');
 
 const normalizeSupplierPayload = (payload = {}) => {
   const source = payload || {};
@@ -53,41 +30,44 @@ const normalizeSupplierPayload = (payload = {}) => {
   };
 };
 
-const normalizeSupplierRecord = (supplier = {}) => {
-  const source = supplier?.toObject ? supplier.toObject() : supplier || {};
-  return {
-    _id: source._id ? `${source._id}` : '',
-    supplierId: source.supplierId || '',
-    ...source,
-    createdBy: source.createdBy || 'Admin',
-    supplierName: source.supplierName || '',
-    gstNumber: source.gstNumber || '',
-    category: source.category || '',
-    paymentTerms: source.paymentTerms || '',
-    addressLine1: source.addressLine1 || '',
-    country: source.country || '',
-    state: source.state || '',
-    city: source.city || '',
-    pinCode: source.pinCode || '',
-    bankName: source.bankName || '',
-    bankAddress: source.bankAddress || '',
-    accountHolder: source.accountHolder || '',
-    accountNumber: source.accountNumber || '',
-    ifscCode: source.ifscCode || '',
-    loginEmailId: source.loginEmailId || '',
-    loginPassword: source.loginPassword || '',
-    contactType: source.contactType || '',
-    contactName: source.contactName || '',
-    designation: source.designation || '',
-    emailId: source.emailId || '',
-    contactNumber: source.contactNumber || '',
-    product: source.product || '',
-  };
-};
+const normalizeSupplierRecord = (supplier = {}) => ({
+  _id: supplier._id ? String(supplier._id) : '',
+  supplierId: supplier.supplierId || '',
+  ...supplier,
+  createdBy: supplier.createdBy || 'Admin',
+  supplierName: supplier.supplierName || '',
+  gstNumber: supplier.gstNumber || '',
+  category: supplier.category || '',
+  paymentTerms: supplier.paymentTerms || '',
+  addressLine1: supplier.addressLine1 || '',
+  country: supplier.country || '',
+  state: supplier.state || '',
+  city: supplier.city || '',
+  pinCode: supplier.pinCode || '',
+  bankName: supplier.bankName || '',
+  bankAddress: supplier.bankAddress || '',
+  accountHolder: supplier.accountHolder || '',
+  accountNumber: supplier.accountNumber || '',
+  ifscCode: supplier.ifscCode || '',
+  loginEmailId: supplier.loginEmailId || '',
+  loginPassword: supplier.loginPassword || '',
+  contactType: supplier.contactType || '',
+  contactName: supplier.contactName || '',
+  designation: supplier.designation || '',
+  emailId: supplier.emailId || '',
+  contactNumber: supplier.contactNumber || '',
+  product: supplier.product || '',
+});
+
+const requiredFieldsPresent = ({ supplierName, category, paymentTerms, addressLine1, country, state }) => (
+  Boolean(supplierName && category && paymentTerms && addressLine1 && country && state)
+);
+
+const isUniqueConstraint = (error) => ['SQLITE_CONSTRAINT_UNIQUE', 'SQLITE_CONSTRAINT_PRIMARYKEY'].includes(error.code);
 
 exports.getSuppliers = async (req, res) => {
   try {
-    await ensureSupplierIds();
+    Supplier.ensureIds();
     const {
       page = 1,
       limit = DEFAULT_PAGE_SIZE,
@@ -97,46 +77,19 @@ exports.getSuppliers = async (req, res) => {
       product = '',
       createdBy = '',
     } = req.query;
-    const query = {};
-    const searchValue = regexFromSearch(search);
-
-    if (searchValue) {
-      query.$or = [
-        { supplierName: searchValue },
-        { contactName: searchValue },
-        { emailId: searchValue },
-        { contactNumber: searchValue },
-        { product: searchValue },
-      ];
-    }
-
-    if (product) {
-      query.product = new RegExp(`^${escapeRegex(product)}$`, 'i');
-    }
-
-    if (createdBy) {
-      query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
-    }
-
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
-    const projection = {
-      _id: 1,
-      supplierId: 1,
-      createdBy: 1,
-      supplierName: 1,
-      contactName: 1,
-      emailId: 1,
-      contactNumber: 1,
-      product: 1,
-      category: 1,
-      createdAt: 1,
-    };
-    const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'supplierName', 'contactName', 'product', 'createdBy']);
-
-    const [suppliers, total] = await Promise.all([
-      Supplier.find(query, projection).sort(sortOptions).skip(skip).limit(limitNum).lean(),
-      Supplier.countDocuments(query),
-    ]);
+    const safeSort = normalizeSort(sortBy, sortOrder, ['createdAt', 'supplierName', 'contactName', 'product', 'createdBy']);
+    const [sortField, direction] = Object.entries(safeSort)[0];
+    const searchValue = regexFromSearch(search)?.source || '';
+    const filters = { search: searchValue, product, createdBy };
+    const suppliers = Supplier.list({
+      ...filters,
+      sortBy: sortField,
+      sortOrder: direction === 1 ? 'asc' : 'desc',
+      limit: limitNum,
+      offset: skip,
+    });
+    const total = Supplier.count(filters);
 
     res.status(200).json({
       success: true,
@@ -155,10 +108,8 @@ exports.getSuppliers = async (req, res) => {
 
 exports.getSupplierById = async (req, res) => {
   try {
-    const supplier = await Supplier.findById(req.params.id).lean();
-    if (!supplier) {
-      return res.status(404).json({ success: false, message: 'Supplier not found' });
-    }
+    const supplier = Supplier.getById(req.params.id);
+    if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });
     res.status(200).json({ success: true, data: normalizeSupplierRecord(supplier) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -167,28 +118,20 @@ exports.getSupplierById = async (req, res) => {
 
 exports.createSupplier = async (req, res) => {
   try {
-    await ensureSupplierIds();
+    Supplier.ensureIds();
     const payload = normalizeSupplierPayload(req.body);
-    const { supplierName, category, paymentTerms, addressLine1, country, state } = payload;
-
-    if (!supplierName || !category || !paymentTerms || !addressLine1 || !country || !state) {
+    if (!requiredFieldsPresent(payload)) {
       return res.status(400).json({ success: false, message: 'Supplier Name, Category, Payment Terms, Address, Country, and State are required.' });
     }
-
-    let supplier;
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      try {
-        supplier = await Supplier.create({ ...payload, supplierId: await getNextSupplierId() });
-        break;
-      } catch (error) {
-        if (error.code !== 11000 || attempt === 4) throw error;
-      }
-    }
+    const supplier = Supplier.create(payload);
     res.status(201).json({ success: true, message: 'Supplier created successfully', data: normalizeSupplierRecord(supplier) });
   } catch (error) {
     if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((e) => e.message);
+      const messages = Object.values(error.errors).map(({ message }) => message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
+    }
+    if (isUniqueConstraint(error)) {
+      return res.status(409).json({ success: false, message: 'A Supplier with this ID already exists. Please retry.' });
     }
     res.status(500).json({ success: false, message: error.message });
   }
@@ -197,21 +140,19 @@ exports.createSupplier = async (req, res) => {
 exports.updateSupplier = async (req, res) => {
   try {
     const payload = normalizeSupplierPayload(req.body);
-    const { supplierName, category, paymentTerms, addressLine1, country, state } = payload;
-
-    if (!supplierName || !category || !paymentTerms || !addressLine1 || !country || !state) {
+    if (!requiredFieldsPresent(payload)) {
       return res.status(400).json({ success: false, message: 'Supplier Name, Category, Payment Terms, Address, Country, and State are required.' });
     }
-
-    const supplier = await Supplier.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
-    if (!supplier) {
-      return res.status(404).json({ success: false, message: 'Supplier not found' });
-    }
+    const supplier = Supplier.updateById(req.params.id, payload);
+    if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });
     res.status(200).json({ success: true, message: 'Supplier updated successfully', data: normalizeSupplierRecord(supplier) });
   } catch (error) {
     if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((e) => e.message);
+      const messages = Object.values(error.errors).map(({ message }) => message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
+    }
+    if (isUniqueConstraint(error)) {
+      return res.status(409).json({ success: false, message: 'A Supplier with this ID already exists. Please retry.' });
     }
     res.status(500).json({ success: false, message: error.message });
   }
@@ -219,10 +160,8 @@ exports.updateSupplier = async (req, res) => {
 
 exports.deleteSupplier = async (req, res) => {
   try {
-    const supplier = await Supplier.findByIdAndDelete(req.params.id);
-    if (!supplier) {
-      return res.status(404).json({ success: false, message: 'Supplier not found' });
-    }
+    const supplier = Supplier.deleteById(req.params.id);
+    if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });
     res.status(200).json({ success: true, message: 'Supplier deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

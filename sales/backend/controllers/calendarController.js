@@ -234,6 +234,7 @@ const collectLeadEvents = (lead) => {
       referenceId: lead._id?.toString?.() || lead.leadId || '',
       referenceModule: 'Leads',
       eventType: candidate.eventType,
+      sourceField: candidate.sourceField,
     }))
     .filter(Boolean);
 };
@@ -374,12 +375,12 @@ const collectSupplierEvents = (supplier) => {
 exports.getCalendarEvents = async (_req, res) => {
   try {
     const [leads, customers, contacts, campaigns, suppliers, activities] = await Promise.all([
-      Lead.find({}).lean(),
-      Customer.find({}).lean(),
-      Contact.find({}).lean(),
-      MailCampaign.find({ deletedAt: null }).lean(),
-      Supplier.find({}).lean(),
-      Activity.find({ deletedAt: null }).lean(),
+      Lead.findAll(),
+      Customer.findAll(),
+      Contact.findAll(),
+      MailCampaign.findForCalendar(),
+      Supplier.findAll(),
+      Activity.findActive(),
     ]);
 
     const mergedEvents = [
@@ -423,24 +424,19 @@ exports.getCalendarEvents = async (_req, res) => {
   }
 };
 
-const calendarSources = {
-  Leads: { model: Lead, softDelete: false, completion: { calendarStatus: 'Completed' } },
-  Customers: { model: Customer, softDelete: false, completion: { calendarStatus: 'Completed' } },
-  Contacts: { model: Contact, softDelete: false, completion: { calendarStatus: 'Completed' } },
-  'Mail Campaigns': { model: MailCampaign, softDelete: true, completion: { calendarStatus: 'Completed' } },
-  Suppliers: { model: Supplier, softDelete: false, completion: { calendarStatus: 'Completed' } },
-  Activities: { model: Activity, softDelete: true, completion: { status: 'Completed' } },
-};
-
 exports.completeCalendarEvent = async (req, res) => {
   try {
-    const source = calendarSources[req.params.module];
-    if (!source) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
-    const event = await source.model.findOneAndUpdate(
-      { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}) },
-      { $set: source.completion },
-      { new: true, runValidators: true },
-    );
+    const updates = {
+      Leads: () => Lead.updateById(req.params.id, { calendarStatus: 'Completed' }),
+      Customers: () => Customer.updateById(req.params.id, { calendarStatus: 'Completed' }),
+      Contacts: () => Contact.updateCalendarStatus(req.params.id, 'Completed'),
+      'Mail Campaigns': () => MailCampaign.updateCalendarStatus(req.params.id, 'Completed'),
+      Suppliers: () => Supplier.updateCalendarStatus(req.params.id, 'Completed'),
+      Activities: () => Activity.update(req.params.id, { status: 'Completed' }),
+    };
+    const update = updates[req.params.module];
+    if (!update) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
+    const event = update();
     if (!event) return res.status(404).json({ success: false, message: 'Calendar event source not found' });
     res.status(200).json({ success: true, message: 'Calendar event marked complete.' });
   } catch (error) {
@@ -451,10 +447,19 @@ exports.completeCalendarEvent = async (req, res) => {
 
 exports.deleteCalendarEvent = async (req, res) => {
   try {
-    const source = calendarSources[req.params.module];
-    if (!source) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
-    const query = { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}) };
     const sourceField = String(req.body?.sourceField || '');
+    const updates = {
+      Leads: () => Lead.updateById(req.params.id, { [sourceField]: '' }),
+      Customers: () => Customer.updateById(req.params.id, { [sourceField]: '' }),
+      Contacts: () => Contact.updateCalendarDate(req.params.id, sourceField, ''),
+      'Mail Campaigns': () => MailCampaign.updateCalendarDate(req.params.id, sourceField, ''),
+      Suppliers: () => Supplier.updateCalendarDate(req.params.id, sourceField, ''),
+      Activities: () => sourceField === 'activityDate'
+        ? Activity.softDelete(req.params.id) && { id: req.params.id }
+        : Activity.update(req.params.id, { [sourceField]: '' }),
+    };
+    const update = updates[req.params.module];
+    if (!update) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
     const allowedFields = {
       Leads: ['followUpDate', 'demoDate', 'meetingDate', 'callbackDate', 'nextActionDate'],
       Customers: ['meetingDate', 'renewalDate', 'contractExpiryDate', 'visitDate', 'nextActionDate'],
@@ -464,9 +469,7 @@ exports.deleteCalendarEvent = async (req, res) => {
       Activities: ['followUpDate', 'activityDate'],
     }[req.params.module] || [];
     if (!allowedFields.includes(sourceField)) return res.status(400).json({ success: false, message: 'Invalid calendar event source field' });
-    const event = source.softDelete && sourceField === 'activityDate'
-      ? await source.model.findOneAndUpdate(query, { $set: { deletedAt: new Date() } }, { new: true })
-      : await source.model.findOneAndUpdate(query, { $set: { [sourceField]: '' } }, { new: true, runValidators: true });
+    const event = update();
     if (!event) return res.status(404).json({ success: false, message: 'Calendar event source not found' });
     res.status(200).json({ success: true, message: 'Calendar event deleted.' });
   } catch (error) {

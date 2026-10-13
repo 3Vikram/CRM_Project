@@ -3,26 +3,20 @@ const fs = require('fs');
 const crypto = require('crypto');
 const sanitizeHtml = require('sanitize-html');
 const multer = require('multer');
-const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
 const MailCampaign = require('../models/MailCampaign');
 const EmailLog = require('../models/EmailLog');
-const Counter = require('../models/Counter');
 const Customer = require('../models/Customer');
 const Contact = require('../models/Contact');
 const CustomerBatch = require('../models/CustomerBatch');
 const CompanyProfile = require('../models/CompanyProfile');
 const Lead = require('../models/Lead');
+const Employee = require('../models/Employee');
 const Supplier = require('../models/Supplier');
 const { buildEmployeeGroups } = require('./contactController');
 const { sendCampaignEmails } = require('../services/emailService');
 const logger = require('../utils/logger');
-
-let Employee = null;
-try {
-  Employee = require('../models/Employee');
-} catch (_error) {
-  Employee = null;
-}
+const { JWT_SECRET } = require('../middleware/authMiddleware');
 
 const uploadDir = path.join(__dirname, '../uploads/mail-campaigns');
 if (!fs.existsSync(uploadDir)) {
@@ -148,22 +142,14 @@ const parseCampaignGroups = (value) => {
 
 const resolveContactRecipients = async (groups, batchName = '', batchNumber = null, employeeId = '', batchId = '') => {
   const requestedContactIds = [...new Set(groups.flatMap((group) => group.contactIds).filter(Boolean))];
-  const contactIds = requestedContactIds.filter((id) => mongoose.isValidObjectId(id));
-  if (requestedContactIds.length && contactIds.length !== requestedContactIds.length) {
-    const error = new Error('One or more Contact identifiers are invalid.');
-    error.name = 'CastError';
-    throw error;
-  }
-  const contactQuery = employeeId
-    ? contactIds.length
-      ? { _id: { $in: contactIds }, email: { $regex: validEmailRegex }, employeeId }
-      : { email: { $regex: validEmailRegex }, employeeId }
-    : { _id: { $in: [] } };
-  if (batchName) contactQuery.batchName = batchName;
-  if (Number.isInteger(Number(batchNumber)) && Number(batchNumber) > 0) contactQuery.batchNumber = Number(batchNumber);
-  if (batchId) contactQuery.batchId = batchId;
-  if (employeeId) contactQuery.employeeId = employeeId;
-  const contacts = await Contact.find(contactQuery).select('_id email').lean();
+  const contacts = Contact.findCampaignRecipients({
+    contactIds: requestedContactIds,
+    employeeId,
+    batchName,
+    batchNumber,
+    batchId,
+    emailPattern: validEmailRegex.source,
+  });
   const emailByContactId = new Map(contacts.map((contact) => [String(contact._id), String(contact.email).trim().toLowerCase()]));
 
   return groups.map((group) => {
@@ -199,33 +185,13 @@ const normalizeCampaign = (campaign) => ({
 
 const leadLocks = new Map();
 
-const createLeadId = async () => {
-  const existingLeadIds = await Lead.find({ leadId: /^LD-\d+$/ }, { leadId: 1 }).lean();
-  const highestExistingId = existingLeadIds.reduce((highest, lead) => {
-    const sequence = Number(String(lead.leadId).slice(3));
-    return Number.isSafeInteger(sequence) ? Math.max(highest, sequence) : highest;
-  }, 0);
-  await Counter.findOneAndUpdate(
-    { name: 'leadIdSequence' },
-    { $max: { value: highestExistingId } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  );
-  const counter = await Counter.findOneAndUpdate(
-    { name: 'leadIdSequence' },
-    { $inc: { value: 1 } },
-    { new: true },
-  );
-  if (!counter || !Number.isSafeInteger(counter.value)) throw new Error('Failed to generate Lead ID sequence.');
-  return `LD-${counter.value}`;
-};
-
 const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
   if (openCount < 2 && clickCount < 2) return null;
 
   const email = String(log.recipientEmail || '').trim().toLowerCase();
   const previous = leadLocks.get(email) || Promise.resolve();
   const current = previous.then(async () => {
-    const contact = await Contact.findOne({ email }).lean();
+    const contact = Contact.findByEmail(email);
     const now = new Date();
     const leadValues = {
       companyName: contact?.customerName || email,
@@ -248,38 +214,23 @@ const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
       remarks: `Created from Mail Campaign ${log.campaignId}`,
     };
 
-    let lead = await Lead.findOne({ email }).select('_id leadId').lean();
+    let lead = Lead.findByEmail(email);
     let created = false;
     if (lead) {
-      await Lead.updateOne({ _id: lead._id }, {
-        $set: {
-          ...leadValues,
-          'engagement.emailOpens': openCount,
-          'engagement.linkClicks': clickCount,
-        },
+      lead = Lead.updateEngagement(lead._id, {
+        leadValues,
+        openCount,
+        clickCount,
       });
     } else {
-      try {
-        lead = await Lead.create({ ...leadValues, leadId: await createLeadId() });
-        created = true;
-      } catch (error) {
-        if (error?.code !== 11000) throw error;
-        lead = await Lead.findOne({ email }).select('_id leadId').lean();
-        if (!lead) throw error;
-        await Lead.updateOne({ _id: lead._id }, {
-          $set: {
-            ...leadValues,
-            'engagement.emailOpens': openCount,
-            'engagement.linkClicks': clickCount,
-          },
-        });
-      }
+      lead = Lead.create({
+        ...leadValues,
+        engagement: { emailOpens: openCount, linkClicks: clickCount },
+      });
+      created = true;
     }
 
-    await EmailLog.updateOne(
-      { _id: log._id },
-      { $set: { leadCreated: true, leadId: lead.leadId || '' } },
-    );
+    EmailLog.markLeadCreated(log._id, lead.leadId || '');
     logger.info('mail-campaign.engagement-lead.updated', {
       campaignId: log.campaignId,
       recipientEmail: email,
@@ -297,38 +248,12 @@ const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
   return current;
 };
 
-const getNextCampaignId = async () => {
-  const campaigns = await MailCampaign.find(
-    { campaignId: /^CMP-\d+$/ },
-    { campaignId: 1 }
-  ).lean();
-  const highestNumber = campaigns.reduce((highest, campaign) => {
-    const number = Number(String(campaign.campaignId).slice(4));
-    return Number.isSafeInteger(number) ? Math.max(highest, number) : highest;
-  }, 0);
-
-  return `CMP-${highestNumber + 1}`;
-};
-
-const createCampaignWithUniqueId = async (payload) => {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const campaignId = await getNextCampaignId();
-      return await MailCampaign.create({ ...payload, campaignId });
-    } catch (error) {
-      if (error?.code !== 11000 || attempt === 4) throw error;
-    }
-  }
-
-  throw new Error('Failed to generate a unique campaign ID');
-};
-
 const isValidEmail = (value) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 const validEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 const respondToDatabaseError = (res, error, fallback) => {
-  if (error?.code === 11000) {
+  if (['SQLITE_CONSTRAINT_UNIQUE', 'SQLITE_CONSTRAINT_PRIMARYKEY'].includes(error?.code)) {
     return res.status(409).json({ success: false, message: 'A campaign with this ID already exists. Please retry.' });
   }
   if (error?.name === 'ValidationError') {
@@ -343,7 +268,19 @@ const respondToDatabaseError = (res, error, fallback) => {
 
 const getEmailList = async (Model, fieldName, filter = {}) => {
   if (!Model) return [];
-  const docs = await Model.find({ ...filter, [fieldName]: { $regex: validEmailRegex } }).select(fieldName).lean();
+  if (Model === Lead) {
+    return Lead.findValidEmailRecipients(validEmailRegex.source)
+      .map((doc) => String(doc.email || '').trim().toLowerCase())
+      .filter(Boolean)
+      .filter((email, index, arr) => arr.indexOf(email) === index);
+  }
+  const docs = Model === Contact
+    ? Contact.findValidEmailRecipients(validEmailRegex.source, filter.employeeId || '')
+    : Model === Supplier
+      ? Supplier.findValidEmailRecipients(validEmailRegex.source)
+      : Model === Customer
+        ? Customer.findAll()
+        : Employee.findAll();
   return docs
     .map((doc) => String(doc[fieldName] || '').trim().toLowerCase())
     .filter(Boolean)
@@ -353,7 +290,7 @@ const getEmailList = async (Model, fieldName, filter = {}) => {
 const getCampaignOwner = async (req, requestedEmployeeId) => {
   if (req.user?.role !== 'admin') {
     const employeeId = String(req.user?.id || '').trim();
-    const employee = Employee ? await Employee.findById(employeeId).select('employeeName fullName').lean() : null;
+    const employee = Employee.findById(employeeId);
     if (!employee) throw new Error('Authenticated employee record was not found.');
     return { employeeId, employeeName: employee.employeeName || employee.fullName || employeeId };
   }
@@ -361,7 +298,7 @@ const getCampaignOwner = async (req, requestedEmployeeId) => {
   const employeeId = String(requestedEmployeeId || '').trim();
   if (!employeeId) return { employeeId: '', employeeName: '' };
   if (employeeId === String(req.user.id)) return { employeeId, employeeName: String(req.user.name || req.user.email || 'Administrator') };
-  const employee = Employee && employeeId ? await Employee.findById(employeeId).select('employeeName fullName').lean() : null;
+  const employee = employeeId ? Employee.findById(employeeId) : null;
   if (!employee) {
     const error = new Error('Select an existing employee or Admin for the campaign batch.');
     error.name = 'ValidationError';
@@ -382,18 +319,17 @@ const resolveCampaignSelection = async (req, requestedBatchId, requestedEmployee
   let batch = null;
 
   if (requestedBatchId) {
-    if (!mongoose.isValidObjectId(requestedBatchId)) throw invalidBatchSelection();
-    batch = await CustomerBatch.findById(requestedBatchId).lean();
+    batch = CustomerBatch.findById(requestedBatchId);
   } else if (requestedEmployeeId && Number(requestedBatchNumber) > 0) {
     const ownerId = isAdmin ? String(requestedEmployeeId) : authenticatedEmployeeId;
-    batch = await CustomerBatch.findOne({ employeeId: ownerId, batchNumber: Number(requestedBatchNumber) }).lean();
+    batch = CustomerBatch.findByEmployeeAndNumber(ownerId, Number(requestedBatchNumber));
   }
 
   if (batch && !isAdmin && String(batch.employeeId) !== authenticatedEmployeeId) throw invalidBatchSelection();
   if (requestedBatchId && !batch) throw invalidBatchSelection();
 
   if (!isAdmin) {
-    const employee = Employee ? await Employee.findById(authenticatedEmployeeId).select('employeeName fullName').lean() : null;
+    const employee = Employee.findById(authenticatedEmployeeId);
     if (!employee) throw new Error('Authenticated employee record was not found.');
     return {
       employeeId: authenticatedEmployeeId,
@@ -408,7 +344,7 @@ const resolveCampaignSelection = async (req, requestedBatchId, requestedEmployee
     const batchOwnerId = String(batch.employeeId);
     const owner = batchOwnerId === String(req.user.id)
       ? null
-      : Employee ? await Employee.findById(batchOwnerId).select('employeeName fullName').lean() : null;
+      : Employee.findById(batchOwnerId);
     return {
       employeeId: batchOwnerId,
       employeeName: owner?.employeeName || owner?.fullName || batch.employeeName || req.user.name || req.user.email,
@@ -428,11 +364,11 @@ const resolveCampaignSelection = async (req, requestedBatchId, requestedEmployee
 exports.getRecipientCounts = async (req, res) => {
   try {
     const [customers, contacts, leads, suppliers, employees] = await Promise.all([
-      Customer.countDocuments({ email: { $regex: validEmailRegex } }),
-      Contact.countDocuments({ ...(req.user?.role === 'admin' ? {} : { employeeId: String(req.user?.id || '') }), email: { $regex: validEmailRegex } }),
-      Lead.countDocuments({ email: { $regex: validEmailRegex } }),
-      Supplier.countDocuments({ emailId: { $regex: validEmailRegex } }),
-      Employee ? Employee.countDocuments({ email: { $regex: validEmailRegex } }) : 0,
+      Customer.countValidEmails(validEmailRegex.source),
+      Contact.countValidEmailsForEmployee(validEmailRegex.source, req.user?.role === 'admin' ? '' : String(req.user?.id || '')),
+      Lead.countValidEmails(validEmailRegex.source),
+      Supplier.countValidEmailRecipients(validEmailRegex.source),
+      Employee.countValidEmails(validEmailRegex.source),
     ]);
 
     res.status(200).json({
@@ -501,69 +437,27 @@ exports.getCampaigns = async (req, res) => {
       recipientGroup = '',
       createdBy = '',
     } = req.query;
-    const query = { deletedAt: null };
-
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      query.$or = [
-        { campaignName: regex },
-        { campaignId: regex },
-        { subject: regex },
-        { recipientGroup: regex },
-      ];
-    }
-
-    if (status) query.status = status;
-    if (recipientGroup) query.recipientGroup = new RegExp(`^${recipientGroup}$`, 'i');
-    if (createdBy) query.createdBy = new RegExp(`^${createdBy}$`, 'i');
-
     const pageNum = Math.max(parseInt(page, 10), 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10), 1), 100);
-    const skip = (pageNum - 1) * limitNum;
-    const sortDirection = sortOrder === 'asc' ? 1 : -1;
-    const projection = {
-      campaignId: 1,
-      campaignName: 1,
-      subject: 1,
-      campaignType: 1,
-      priority: 1,
-      recipientGroup: 1,
-      recipientEmails: 1,
-      recipientCount: 1,
-      status: 1,
-      createdBy: 1,
-      createdDate: 1,
-      scheduledDate: 1,
-      scheduledTime: 1,
-      opens: 1,
-      uniqueOpens: 1,
-      clicks: 1,
-      createdAt: 1,
-      updatedAt: 1,
-    };
-
-    const [campaigns, total] = await Promise.all([
-      MailCampaign.find(query, projection).sort({ [sortBy]: sortDirection }).skip(skip).limit(limitNum).lean(),
-      MailCampaign.countDocuments(query),
-    ]);
-
+    const { campaigns, total } = MailCampaign.list({
+      page: pageNum,
+      limit: limitNum,
+      sortBy,
+      sortOrder,
+      search: search ? String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '',
+      status,
+      recipientGroup,
+      createdBy,
+    });
     const campaignIds = campaigns.map((campaign) => campaign.campaignId);
-    const engagementCounts = await EmailLog.aggregate([
-      { $match: { campaignId: { $in: campaignIds } } },
-      { $group: {
-        _id: '$campaignId',
-        totalOpens: { $sum: { $ifNull: ['$openCount', 0] } },
-        totalClicks: { $sum: { $ifNull: ['$clickCount', 0] } },
-      } },
-    ]);
-    const engagementByCampaign = new Map(engagementCounts.map((item) => [item._id, item]));
+    const engagementByCampaign = new Map(EmailLog.statsForCampaigns(campaignIds).map((item) => [item.campaignId, item]));
 
     res.status(200).json({
       success: true,
       data: campaigns.map((campaign) => normalizeCampaign({
         ...campaign,
         opens: engagementByCampaign.get(campaign.campaignId)?.totalOpens || 0,
-        uniqueOpens: engagementByCampaign.get(campaign.campaignId)?.totalOpens || 0,
+        uniqueOpens: engagementByCampaign.get(campaign.campaignId)?.uniqueOpens || 0,
         clicks: engagementByCampaign.get(campaign.campaignId)?.totalClicks || 0,
       })),
       pagination: {
@@ -580,18 +474,10 @@ exports.getCampaigns = async (req, res) => {
 
 exports.getCampaignById = async (req, res) => {
   try {
-    const campaign = await MailCampaign.findOne({ _id: req.params.id, deletedAt: null }).lean();
+    const campaign = MailCampaign.getById(req.params.id);
+    if (campaign?.deletedAt) return res.status(404).json({ success: false, message: 'Campaign not found' });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
-    const [engagement] = await EmailLog.aggregate([
-      { $match: { campaignId: campaign.campaignId } },
-      { $group: {
-        _id: null,
-        opens: { $sum: { $ifNull: ['$openCount', 0] } },
-        clicks: { $sum: { $ifNull: ['$clickCount', 0] } },
-        recipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, '$recipientEmail', null] } },
-      } },
-      { $project: { _id: 0, opens: 1, clicks: 1, uniqueOpens: { $size: { $setDifference: ['$recipients', [null]] } } } },
-    ]);
+    const engagement = EmailLog.statsForCampaign(campaign.campaignId);
     res.status(200).json({
       success: true,
       data: normalizeCampaign({
@@ -634,9 +520,7 @@ const buildPublicTrackingBaseUrl = (req) => {
 
 const getTrackingBaseUrl = (req) => buildPublicTrackingBaseUrl(req);
 
-const getCompanyProfileWithLogo = () => CompanyProfile.findOne({
-  'companyLogo.filePath': { $exists: true, $nin: ['', null] },
-}).sort({ createdAt: -1 }).select('companyLogo website').lean();
+const getCompanyProfileWithLogo = () => CompanyProfile.findWithLogo();
 
 const getPublicAssetUrl = (baseUrl, filePath) => {
   const value = String(filePath || '').trim();
@@ -716,35 +600,19 @@ const addEmailTracking = (html, campaignId, trackingId, baseUrl) => {
 };
 
 const syncCampaignOpenCount = async (campaignId) => {
-  const [openSummary] = await EmailLog.aggregate([
-    { $match: { campaignId } },
-    { $group: {
-      _id: null,
-      opens: { $sum: { $ifNull: ['$openCount', 0] } },
-      clicks: { $sum: { $ifNull: ['$clickCount', 0] } },
-      openedRecipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, '$recipientEmail', null] } },
-    } },
-    { $project: {
-      _id: 0,
-      opens: 1,
-      clicks: 1,
-      uniqueOpens: { $size: { $setDifference: ['$openedRecipients', [null]] } },
-    } },
-  ]);
-  const updateResult = await MailCampaign.updateOne(
-    { campaignId },
-    { $set: {
-      opens: openSummary?.opens || 0,
-      uniqueOpens: openSummary?.uniqueOpens || 0,
-      clicks: openSummary?.clicks || 0,
-    } },
-  );
+  const openSummary = EmailLog.statsForCampaign(campaignId);
+  const campaign = MailCampaign.getByCampaignId(campaignId);
+  const updated = campaign ? MailCampaign.update(campaign._id, {
+    opens: openSummary?.opens || 0,
+    uniqueOpens: openSummary?.uniqueOpens || 0,
+    clicks: openSummary?.clicks || 0,
+  }) : null;
   logger.info('mail-campaign.opens.updated', {
     campaignId,
     opensTotal: openSummary?.opens || 0,
     uniqueOpens: openSummary?.uniqueOpens || 0,
-    matchedCount: updateResult.matchedCount,
-    modifiedCount: updateResult.modifiedCount,
+    matchedCount: campaign ? 1 : 0,
+    modifiedCount: updated ? 1 : 0,
   });
   return {
     opensTotal: openSummary?.opens || 0,
@@ -759,9 +627,7 @@ exports.trackOpen = async (req, res) => {
   logger.info('mail-campaign.open.requested', { trackingId });
 
   try {
-    const log = await EmailLog.findOne({
-      $or: [{ trackingId }, { trackingToken: trackingId }],
-    }).select('_id campaignId campaignName recipientEmail trackingId trackingToken openCount clickCount openedAt firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt leadCreated leadId').lean();
+    const log = EmailLog.getByTrackingId(trackingId);
 
     if (!log) {
       logger.info('mail-campaign.tracking-id.not-found', { trackingId });
@@ -771,16 +637,7 @@ exports.trackOpen = async (req, res) => {
     }
 
     const now = new Date();
-    const updatedLog = await EmailLog.findOneAndUpdate(
-      { _id: log._id },
-      [{ $set: {
-        openCount: { $add: [{ $ifNull: ['$openCount', 0] }, 1] },
-        openedAt: { $ifNull: ['$openedAt', now] },
-        firstOpenedAt: { $ifNull: ['$firstOpenedAt', now] },
-        lastOpenedAt: now,
-      } }],
-      { new: true },
-    ).lean();
+    const updatedLog = EmailLog.recordOpen(log._id, now.toISOString());
 
     await syncCampaignOpenCount(log.campaignId);
     const leadResult = await ensureEngagementLead({
@@ -813,12 +670,10 @@ exports.getTrackingDiagnostic = async (req, res) => {
   }
 
   const trackingId = String(req.params.trackingId || '').trim();
-  const log = await EmailLog.findOne({ $or: [{ trackingId }, { trackingToken: trackingId }] })
-    .select('campaignId campaignName recipientEmail status trackingId trackingToken openCount openedAt clickedAt sentAt')
-    .lean();
+  const log = EmailLog.findForTrackingDiagnostic(trackingId);
   if (!log) return res.status(404).json({ success: false, found: false, trackingId });
 
-  const campaign = await MailCampaign.findOne({ campaignId: log.campaignId }).select('campaignId campaignName opens uniqueOpens clicks').lean();
+  const campaign = MailCampaign.getByCampaignId(log.campaignId);
   return res.status(200).json({
     success: true,
     found: true,
@@ -828,6 +683,7 @@ exports.getTrackingDiagnostic = async (req, res) => {
     emailLog: {
       status: log.status,
       openCount: log.openCount || 0,
+      clickCount: log.clickCount || 0,
       openedAt: log.openedAt,
       clickedAt: log.clickedAt,
       sentAt: log.sentAt,
@@ -862,20 +718,10 @@ exports.trackClick = async (req, res) => {
   if (!['http:', 'https:'].includes(destinationUrl.protocol)) return res.status(400).json({ success: false, message: 'Tracked destination is invalid.' });
   const redirectUrl = destination;
   try {
-    const log = await EmailLog.findOne({ $or: [{ trackingId }, { trackingToken: trackingId }] })
-      .select('_id campaignId campaignName recipientEmail openCount clickCount firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt').lean();
+    const log = EmailLog.getByTrackingId(trackingId);
     if (log) {
       const now = new Date();
-      const updatedLog = await EmailLog.findOneAndUpdate(
-        { _id: log._id },
-        [{ $set: {
-          clickCount: { $add: [{ $ifNull: ['$clickCount', 0] }, 1] },
-          clickedAt: { $cond: [{ $eq: [{ $ifNull: ['$clickCount', 0] }, 0] }, now, '$clickedAt'] },
-          firstClickedAt: { $cond: [{ $eq: [{ $ifNull: ['$clickCount', 0] }, 0] }, now, '$firstClickedAt'] },
-          lastClickedAt: now,
-        } }],
-        { new: true },
-      ).lean();
+      const updatedLog = EmailLog.recordClick(log._id, now.toISOString());
       await syncCampaignOpenCount(updatedLog.campaignId);
       const leadResult = await ensureEngagementLead({
         log: updatedLog,
@@ -899,9 +745,10 @@ exports.trackClick = async (req, res) => {
 
 exports.getCampaignReport = async (req, res) => {
   try {
-    const campaign = await MailCampaign.findOne({ _id: req.params.id, deletedAt: null }).select('campaignId campaignName subject').lean();
+    const campaign = MailCampaign.getById(req.params.id);
+    if (campaign?.deletedAt) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
-    const logs = await EmailLog.find({ campaignId: campaign.campaignId }).sort({ sentAt: 1 }).lean();
+    const logs = EmailLog.listByCampaign(campaign.campaignId, 'asc');
     res.status(200).json({
       success: true,
       data: logs.map((log, index) => ({
@@ -923,7 +770,8 @@ exports.getCampaignReport = async (req, res) => {
 
 exports.getCampaignPreview = async (req, res) => {
   try {
-    const campaign = await MailCampaign.findOne({ _id: req.params.id, deletedAt: null }).lean();
+    const campaign = MailCampaign.getById(req.params.id);
+    if (campaign?.deletedAt) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     const companyProfile = await getCompanyProfileWithLogo();
     const trackingBaseUrl = getTrackingBaseUrl(req);
@@ -946,12 +794,12 @@ exports.getCampaignPreview = async (req, res) => {
     const htmlBody = logoBeforeText
       ? `${logoHtml}${bodyWithCampaignImage}`
       : `${bodyWithCampaignImage}${logoHtml}`;
-    const logs = await EmailLog.find({ campaignId: campaign.campaignId }).sort({ sentAt: -1 }).select('recipientEmail senderEmail').lean();
+    const latestLog = EmailLog.latestByCampaign(campaign.campaignId);
     res.status(200).json({
       success: true,
       data: {
-        from: logs[0]?.senderEmail || process.env.EMAIL_USER || process.env.SMTP_USER || '',
-        to: logs[0]?.recipientEmail || campaign.recipientEmails?.[0] || '',
+        from: latestLog?.senderEmail || process.env.EMAIL_USER || process.env.SMTP_USER || '',
+        to: latestLog?.recipientEmail || campaign.recipientEmails?.[0] || '',
         subject: campaign.subject,
         html: buildCampaignEmailHtml({ htmlBody, footer: rewriteEmailAssetUrls(normalizeFooterWebsiteLinks(removeCompanyLogoImages(campaign.footer, logoUrl), companyWebsiteUrl), trackingBaseUrl), logoHtml: '', showFooterSeparator: logoBeforeText }),
       },
@@ -1047,7 +895,7 @@ exports.createCampaign = async (req, res) => {
       recipientCount: payload.recipientEmails?.length,
     });
 
-    const campaign = await createCampaignWithUniqueId(payload);
+    const campaign = MailCampaign.create(payload);
     const campaignId = campaign.campaignId;
 
     logger.info('mail-campaign.created', {
@@ -1058,7 +906,7 @@ exports.createCampaign = async (req, res) => {
       status: payload.status,
     });
 
-    res.status(201).json({ success: true, message: 'Campaign created successfully', data: normalizeCampaign(campaign.toObject()) });
+    res.status(201).json({ success: true, message: 'Campaign created successfully', data: normalizeCampaign(campaign) });
   } catch (error) {
     logger.error('mail-campaign.createCampaign.failed', {
       message: error?.message,
@@ -1070,7 +918,8 @@ exports.createCampaign = async (req, res) => {
 
 exports.updateCampaign = async (req, res) => {
   try {
-    const existing = await MailCampaign.findOne({ _id: req.params.id, deletedAt: null });
+    const existing = MailCampaign.getById(req.params.id);
+    if (existing?.deletedAt) return res.status(404).json({ success: false, message: 'Campaign not found' });
     if (!existing) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
     const incomingGroups = parseCampaignGroups(req.body.campaignGroups);
@@ -1140,8 +989,9 @@ exports.updateCampaign = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Scheduled date and time are required.' });
     }
 
-    const campaign = await MailCampaign.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
-    res.status(200).json({ success: true, message: 'Campaign updated successfully', data: normalizeCampaign(campaign.toObject()) });
+    const campaign = MailCampaign.update(req.params.id, payload);
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
+    res.status(200).json({ success: true, message: 'Campaign updated successfully', data: normalizeCampaign(campaign) });
   } catch (error) {
     console.error('[mail-campaign] updateCampaign failed:', error);
     respondToDatabaseError(res, error, 'Unable to update campaign due to an unexpected database error.');
@@ -1151,20 +1001,14 @@ exports.updateCampaign = async (req, res) => {
 exports.deleteCampaign = async (req, res) => {
   try {
     const identifier = String(req.params.id || '').trim();
-    const campaignQuery = mongoose.isValidObjectId(identifier)
-      ? { $or: [{ _id: identifier }, { campaignId: identifier }] }
-      : { campaignId: identifier };
-    const campaign = await MailCampaign.findOne(campaignQuery);
+    const campaign = MailCampaign.getAnyByIdentifier(identifier);
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
     const campaignFiles = [campaign.image, ...(campaign.attachments || [])]
       .filter((filePath) => typeof filePath === 'string' && filePath.startsWith('/uploads/mail-campaigns/'))
       .map((filePath) => path.join(__dirname, '..', filePath.replace(/^\/+/, '')));
 
-    await Promise.all([
-      MailCampaign.deleteOne({ _id: campaign._id }),
-      EmailLog.deleteMany({ campaignId: campaign.campaignId }),
-    ]);
+    MailCampaign.delete(identifier);
     await Promise.all(campaignFiles.map(async (filePath) => {
       try {
         await fs.promises.unlink(filePath);
@@ -1183,9 +1027,9 @@ exports.deleteCampaign = async (req, res) => {
 exports.sendCampaign = async (req, res) => {
   try {
     const { id } = req.params;
-    const campaign = await MailCampaign.findOne({ _id: id, deletedAt: null });
+    const campaign = MailCampaign.getById(id);
 
-    if (!campaign) {
+    if (!campaign || campaign.deletedAt) {
       return res.status(404).json({ success: false, message: 'Campaign not found' });
     }
 
@@ -1208,7 +1052,7 @@ exports.sendCampaign = async (req, res) => {
       targetGroup.recipientEmails = refreshedGroup.recipientEmails;
       targetGroup.status = 'Sending';
       targetGroup.sentDate = '';
-      await campaign.save();
+      MailCampaign.save(campaign);
     } else {
       const refreshedGroups = await resolveContactRecipients(campaign.campaignGroups || [{ contactIds: [] }], campaign.batchName || '', campaign.batchNumber, campaign.employeeId || '', String(campaign.batchId || ''));
       recipients = refreshedGroups.flatMap((group) => group.recipientEmails);
@@ -1216,7 +1060,7 @@ exports.sendCampaign = async (req, res) => {
       campaign.recipientEmails = [...new Set(recipients)];
       campaign.status = 'Sending';
       campaign.recipientCount = recipients.length;
-      await campaign.save();
+      MailCampaign.save(campaign);
     }
 
     const normalizedRecipients = [...new Set(recipients.map((item) => String(item).trim()).filter(Boolean))];
@@ -1298,7 +1142,7 @@ exports.sendCampaign = async (req, res) => {
       };
     });
 
-    await EmailLog.insertMany(emailLogs);
+    EmailLog.createMany(emailLogs);
 
     const report = await sendCampaignEmails({
       subject,
@@ -1346,23 +1190,19 @@ exports.sendCampaign = async (req, res) => {
         path: path.join(__dirname, '..', attachmentPath.replace(/^[\/]+/, '')),
       }))),
       fromName: process.env.MAIL_FROM_NAME || 'CRM Mail Campaign',
+      transport: req.app.locals.mailCampaignTransport,
     });
 
     const sentCount = report.results.filter((item) => item.status === 'Sent').length;
     const failedCount = report.results.filter((item) => item.status === 'Failed').length;
 
-    await Promise.all(report.results.map((item) => EmailLog.updateOne(
-      { $or: [{ trackingId: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()) }, { trackingToken: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()) }] },
-      {
-        $set: {
-          status: item.status,
-          sentAt: new Date(),
-          errorMessage: item.errorMessage || '',
-          trackingId: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
-          trackingToken: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
-        },
-      }
-    )));
+    report.results.forEach((item) => {
+      const trackingId = trackingIds.get(String(item.recipientEmail).trim().toLowerCase());
+      EmailLog.updateDelivery(trackingId, {
+        status: item.status,
+        errorMessage: item.errorMessage || '',
+      });
+    });
 
     if (groupId && targetGroup) {
       targetGroup.recipientEmails = normalizedRecipients;
@@ -1384,7 +1224,7 @@ exports.sendCampaign = async (req, res) => {
     campaign.recipientCount = normalizedRecipients.length;
     campaign.opens = Number(campaign.opens || 0);
     campaign.clicks = Number(campaign.clicks || 0);
-    await campaign.save();
+    MailCampaign.save(campaign);
 
     logger.info('mail-campaign.send', {
       campaignId: campaign.campaignId,
@@ -1430,9 +1270,6 @@ exports.sendCampaign = async (req, res) => {
     });
   } catch (error) {
     console.error('[mail-campaign] sendCampaign failed:', error);
-    if (error?.name === 'CastError') {
-      return res.status(400).json({ success: false, message: 'Campaign identifier is invalid.' });
-    }
     logger.error('mail-campaign.send.failed', { message: error?.message, stack: error?.stack });
     res.status(500).json({ success: false, message: 'Unable to complete email delivery due to an unexpected server error.' });
   }
@@ -1446,37 +1283,35 @@ exports.processScheduledCampaigns = async (baseUrl) => {
 
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const candidates = await MailCampaign.find({
-      status: 'Scheduled',
-      scheduledDate: { $ne: '', $lte: today },
-    }).select('_id scheduledDate scheduledTime').lean();
+    const candidates = MailCampaign.findScheduledCandidates(today);
 
     for (const candidate of candidates) {
       const scheduledAt = new Date(`${candidate.scheduledDate}T${candidate.scheduledTime || '00:00'}:00`);
       if (Number.isNaN(scheduledAt.getTime()) || scheduledAt > new Date()) continue;
 
-      const claimed = await MailCampaign.findOneAndUpdate(
-        { _id: candidate._id, status: 'Scheduled' },
-        { $set: { status: 'Sending' } },
-        { new: true },
-      ).select('_id');
+      const claimed = MailCampaign.claimScheduled(candidate._id);
       if (!claimed) continue;
 
       try {
+        if (!JWT_SECRET) throw new Error('JWT_SECRET must be configured to process scheduled campaigns.');
         const response = await fetch(`${baseUrl}/api/mail-campaigns/${candidate._id}/send`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '2m' })}`,
+          },
           body: JSON.stringify({}),
         });
-        if (!response.ok && response.status >= 500) {
-          const current = await MailCampaign.findById(candidate._id).select('status').lean();
-          if (current?.status === 'Sending') {
-            await MailCampaign.updateOne({ _id: candidate._id, status: 'Sending' }, { $set: { status: 'Scheduled' } });
-          }
+        if (!response.ok) {
+          logger.error('mail-campaign.scheduler.send.rejected', {
+            campaignId: candidate._id,
+            status: response.status,
+          });
+          MailCampaign.setStatusIfCurrent(candidate._id, 'Sending', 'Scheduled');
         }
       } catch (error) {
         logger.error('mail-campaign.scheduler.send.failed', { campaignId: candidate._id.toString(), message: error?.message, stack: error?.stack });
-        await MailCampaign.updateOne({ _id: candidate._id, status: 'Sending' }, { $set: { status: 'Scheduled' } });
+        MailCampaign.setStatusIfCurrent(candidate._id, 'Sending', 'Scheduled');
       }
     }
   } catch (error) {
