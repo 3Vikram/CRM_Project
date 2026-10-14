@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+const dns = require('dns');
+dns.setServers(['8.8.8.8']);
 
 const customerRoutes = require('./routes/customerRoutes');
 const contactRoutes = require('./routes/contactRoutes');
@@ -56,7 +58,7 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5001;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/crm_db';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://0.0.0.0:27017/crm_db';
 
 mongoose
   .connect(MONGO_URI)
@@ -70,7 +72,7 @@ mongoose
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      const serverUrl = `http://127.0.0.1:${PORT}`;
+      const serverUrl = `http://0.0.0.0:${PORT}`;
       const publicApiUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
       void processScheduledCampaigns(publicApiUrl);
       setInterval(() => void processScheduledCampaigns(publicApiUrl), 60 * 1000);

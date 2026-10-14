@@ -1,3 +1,5 @@
+import dns from 'dns';
+dns.setServers(['8.8.8.8']);
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -27,7 +29,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/3vikram-crm';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://0.0.0.0:27017/3vikram-crm';
 
 mongoose
   .connect(MONGO_URI, {
@@ -69,5 +71,5 @@ app.get('/api/health', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`✓ Server running on http://localhost:${PORT}`);
+  console.log(`✓ Server running on http://0.0.0.0:${PORT}`);
 });

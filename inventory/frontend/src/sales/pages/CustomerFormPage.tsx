@@ -12,6 +12,13 @@ import {
   type CustomerApiRecord,
   type CustomerPayload,
 } from '@/sales/lib/customerApi'
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return generateId()
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 interface ContactItem {
   id: string
@@ -115,7 +122,7 @@ const emptyForm: CustomerFormState = {
   notes: '',
   contacts: [
     {
-      id: crypto.randomUUID(),
+      id: generateId(),
       contactType: 'Accounts',
       name: '',
       email: '',
@@ -305,7 +312,7 @@ export default function CustomerFormPage() {
       contacts: [
         ...prev.contacts,
         {
-          id: crypto.randomUUID(),
+          id: generateId(),
           contactType: 'Accounts',
           name: '',
           email: '',
@@ -328,7 +335,7 @@ export default function CustomerFormPage() {
     if (!files.length) return
 
     const documents = files.map((file) => ({
-      id: crypto.randomUUID(),
+      id: generateId(),
       fileName: file.name,
       fileType: file.type || file.name.split('.').pop() || 'unknown',
       size: file.size,
@@ -344,7 +351,7 @@ export default function CustomerFormPage() {
       ...emptyForm,
       contacts: [
         {
-          id: crypto.randomUUID(),
+          id: generateId(),
           contactType: 'Accounts',
           name: '',
           email: '',
