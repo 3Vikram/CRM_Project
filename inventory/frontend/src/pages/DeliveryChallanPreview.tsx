@@ -182,15 +182,16 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
     setIsDownloading(true)
     try {
       const { default: html2pdf } = await import('html2pdf.js')
+      const pdfOptions = {
+        margin: 10,
+        filename,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+        pagebreak: { mode: ['css', 'legacy'] },
+      }
       await html2pdf()
-        .set({
-          margin: 10,
-          filename,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'] },
-        })
+        .set(pdfOptions)
         .from(documentRef.current)
         .save()
     } finally {

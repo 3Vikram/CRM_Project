@@ -221,6 +221,7 @@
   .crm-input {
     @apply w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 placeholder:text-slate-400 focus:border-[#CEC9BD] focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]/50;
   }
+
 }
 html, body, #root, #root *, body *, *::before, *::after {
   font-family: "Times New Roman", Times, serif !important;
@@ -237,4 +238,34 @@ html, body, #root, #root *, body *, *::before, *::after {
 .crm-page-heading * {
   font-size: inherit !important;
   font-weight: inherit !important;
+}
+
+.customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.customer-form textarea.crm-input,
+.customer-form select.crm-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  background-color: #ffffff !important;
+  color: #0f172a;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.customer-form textarea.crm-input {
+  padding: 10px 12px;
+  min-height: 88px;
+}
+
+.customer-form .crm-input::placeholder {
+  color: #94a3b8;
+}
+
+.customer-form .crm-input:hover,
+.customer-form .crm-input:focus {
+  border-color: #111827 !important;
+  box-shadow: none !important;
+  outline: none !important;
 }

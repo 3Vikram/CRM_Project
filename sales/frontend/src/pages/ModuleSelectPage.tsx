@@ -40,6 +40,8 @@ const modules = [
 ]
 
 export default function ModuleSelectPage() {
+  const inventoryUrl = `${window.location.protocol}//${window.location.hostname}:3000`
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-16">
       {/* Brand */}
@@ -85,7 +87,7 @@ export default function ModuleSelectPage() {
               {content}
             </Link>
           ) : (
-            <a key={m.key} href={m.to} className={className}>
+            <a key={m.key} href={m.key === 'inventory' ? inventoryUrl : m.to} className={className}>
               {content}
             </a>
           )

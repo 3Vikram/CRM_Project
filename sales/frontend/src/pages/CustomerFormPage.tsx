@@ -697,7 +697,7 @@ export default function CustomerFormPage() {
   }
 
   return (
-    <div className="w-full rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
+    <div className="customer-form w-full rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <button
@@ -755,7 +755,7 @@ export default function CustomerFormPage() {
                   )
                 }
                 placeholder="Company Name"
-                className="crm-input form-control"
+                className="crm-input"
               />
             </Field>
 
@@ -1248,7 +1248,7 @@ export default function CustomerFormPage() {
                 onChange={
                   handleDocumentUpload
                 }
-                className="hidden"
+                className="hidden crm-input"
               />
 
               <span className="text-sm text-slate-500">

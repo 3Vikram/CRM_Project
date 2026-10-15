@@ -14,7 +14,7 @@ import {
 } from '@/sales/lib/customerApi'
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return generateId()
+    return crypto.randomUUID()
   }
 
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -456,7 +456,7 @@ export default function CustomerFormPage() {
   }
 
   return (
-    <div className="w-full rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
+    <div className="customer-form w-full rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <button onClick={() => navigate('/sales/customers')} className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#111827]">
@@ -467,7 +467,7 @@ export default function CustomerFormPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="crm-customer-form space-y-4">
         {submitError ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div>
         ) : null}
@@ -635,7 +635,7 @@ export default function CustomerFormPage() {
                 <Upload className="h-4 w-4" />
                 Upload Document
               </button>
-              <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={handleDocumentUpload} className="hidden" />
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={handleDocumentUpload} className="hidden crm-input" />
               <span className="text-sm text-slate-500">PDF, DOC, DOCX, JPG, JPEG, PNG</span>
             </div>
             {form.documents.length > 0 ? (

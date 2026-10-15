@@ -46,10 +46,10 @@ const theme = createTheme({
           fontWeight: 600,
           boxShadow: 'none',
           minHeight: 42,
-        },
-        containedPrimary: {
-          backgroundColor: '#06283D',
-          '&:hover': { backgroundColor: '#0B3A53' },
+          '&.MuiButton-containedPrimary': {
+            backgroundColor: '#06283D',
+            '&:hover': { backgroundColor: '#0B3A53' },
+          },
         },
         outlined: {
           borderColor: '#D7DEE8',

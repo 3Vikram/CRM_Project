@@ -78,9 +78,9 @@ export default function InwardingPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, backgroundColor: '#F4F6F8', minHeight: '100%' }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' } }}>
         <Box>
-          <Typography variant="h4" fontWeight={700} color="#06283D">
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#06283D' }}>
             Inwarding
           </Typography>
           <Typography variant="body1" color="text.secondary">
@@ -90,20 +90,20 @@ export default function InwardingPage() {
       </Stack>
 
       <Paper elevation={0} sx={{ border: '1px solid #EBEAE6', borderRadius: 3, p: 3, backgroundColor: '#FFFFFF', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.04)' }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
           <TextField
             label="Search"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             size="small"
             fullWidth
-            InputProps={{
+            slotProps={{ input: {
               startAdornment: (
                 <InputAdornment position="start">
                   <Search sx={{ color: '#60707F' }} />
                 </InputAdornment>
               ),
-            }}
+            } }}
           />
           <TextField
             label="Date"
@@ -112,7 +112,7 @@ export default function InwardingPage() {
             onChange={(e) => setDateFilter(e.target.value)}
             size="small"
             sx={{ minWidth: 200 }}
-            InputLabelProps={{ shrink: true }}
+            slotProps={{ inputLabel: { shrink: true } }}
           />
           <Button
             variant="contained"
@@ -135,8 +135,7 @@ export default function InwardingPage() {
               pageSizeOptions={[10, 25, 50]}
               initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
               disableRowSelectionOnClick
-              slots={{ toolbar: CustomToolbar }}
-              slotProps={{ toolbar: { onRefresh: () => setRefreshKey((value) => value + 1) } }}
+              slots={{ toolbar: () => <CustomToolbar onRefresh={() => setRefreshKey((value) => value + 1)} /> }}
               sx={{
                 borderRadius: 3,
                 borderColor: '#E7E3DD',

@@ -112,7 +112,9 @@ type SalesOPFDetails = SalesOPFRecord & {
   customerPONo?: string
   customerPODate?: string
   product?: string
+  productName?: string
   description?: string
+  productDescription?: string
   quantity?: number | string
   unitPrice?: number | string
   tax?: string

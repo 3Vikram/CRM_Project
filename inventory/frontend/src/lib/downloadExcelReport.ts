@@ -77,10 +77,11 @@ export async function downloadExcelReport({
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return
 
-    const longestCell = row.values.slice(1).reduce((longest, value) => {
-      const text = value == null ? '' : String(value)
-      return Math.max(longest, text.length)
-    }, 0)
+    let longestCell = 0
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      const text = cell.value == null ? '' : String(cell.value)
+      longestCell = Math.max(longestCell, text.length)
+    })
 
     row.height = Math.min(Math.max(22, 18 + Math.ceil(longestCell / 28) * 12), 90)
     row.eachCell((cell, columnNumber) => {
@@ -122,6 +123,8 @@ export async function downloadExcelReport({
   })
 
   worksheet.columns.forEach((column, columnIndex) => {
+    if (!column) return
+
     const customWidth = columnWidths[columnIndex]
     if (customWidth) {
       column.width = customWidth
@@ -129,7 +132,7 @@ export async function downloadExcelReport({
     }
 
     let width = headers[columnIndex]?.length ?? 12
-    column.eachCell({ includeEmpty: true }, (cell) => {
+    column.eachCell?.({ includeEmpty: true }, (cell) => {
       const value = cell.value == null ? '' : String(cell.value)
       const lines = value.split(/\r?\n/)
       width = Math.max(width, ...lines.map((line) => line.length))

@@ -150,3 +150,51 @@ nav a,
 aside a {
   font-size: 1rem !important;
 }
+
+.customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.customer-form textarea.crm-input,
+.customer-form select.crm-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  background-color: #ffffff !important;
+  color: #0f172a;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.customer-form textarea.crm-input {
+  padding: 10px 12px;
+  min-height: 88px;
+}
+
+.customer-form .crm-input::placeholder {
+  color: #94a3b8;
+}
+
+.customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):hover,
+.customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+.customer-form textarea.crm-input:hover,
+.customer-form textarea.crm-input:focus,
+.customer-form select.crm-input:hover,
+.customer-form select.crm-input:focus {
+  border-color: #111827 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.crm-page-heading {
+  font-size: 2.25rem !important;
+  line-height: 2.5rem !important;
+  font-weight: 700 !important;
+  color: #111827;
+  margin: 0;
+}
+
+.crm-page-heading * {
+  font-size: inherit !important;
+  font-weight: inherit !important;
+}

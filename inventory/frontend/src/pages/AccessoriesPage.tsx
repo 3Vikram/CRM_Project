@@ -460,7 +460,7 @@ export default function AccessoriesPage() {
   return (
     <Box sx={{ p: 3, background: 'linear-gradient(180deg, #f8fafc 0%, #eef4f9 100%)', minHeight: '100vh' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4" fontWeight={700} sx={{ color: '#0f172a', letterSpacing: '-0.04em' }}>
+        <Typography variant="h4" sx={{ color: '#0f172a', fontWeight: 700, letterSpacing: '-0.04em' }}>
           Accessories
         </Typography>
 
@@ -588,7 +588,7 @@ export default function AccessoriesPage() {
       )}
 
       <Box sx={{ mb: 2 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ color: '#0f172a', mb: 1.5 }}>
+        <Typography variant="h6" sx={{ color: '#0f172a', fontWeight: 700, mb: 1.5 }}>
           {selectedType} Status
         </Typography>
 
@@ -647,7 +647,7 @@ export default function AccessoriesPage() {
 
       <Paper sx={{ p: 2.5, borderRadius: 3, border: '1px solid #e2e8f0', background: '#ffffff', boxShadow: '0 12px 28px rgba(15, 23, 42, 0.04)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h6" fontWeight={700} sx={{ color: '#0f172a' }}>
+          <Typography variant="h6" sx={{ color: '#0f172a', fontWeight: 700 }}>
             {recordsHeading}
           </Typography>
           <Chip label={displayedAccessories.length} sx={{ background: '#e2e8f0', color: '#0f172a', fontWeight: 700 }} />
@@ -826,7 +826,7 @@ export default function AccessoriesPage() {
                 required
                 label="Price"
                 type="number"
-                inputProps={{ min: 0, step: '0.01' }}
+                slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
                 value={outwardForm.price}
                 onChange={(event) => setOutwardForm((current) => ({ ...current, price: event.target.value }))}
               />
@@ -866,7 +866,7 @@ export default function AccessoriesPage() {
             </Typography>
 
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="Brand"
@@ -874,7 +874,7 @@ export default function AccessoriesPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, brand: event.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="Model"
@@ -882,17 +882,17 @@ export default function AccessoriesPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="Quantity *"
                   type="number"
                   value={form.quantity}
-                  inputProps={{ min: 1 }}
+                  slotProps={{ htmlInput: { min: 1 } }}
                   onChange={(event) => setForm((prev) => ({ ...prev, quantity: event.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="Purchase Price"
@@ -901,7 +901,7 @@ export default function AccessoriesPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, purchasePrice: event.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
                   label="Vendor Name"
@@ -909,7 +909,7 @@ export default function AccessoriesPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, vendorName: event.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
                   <Typography variant="caption" sx={{ fontWeight: 600, color: '#334155', lineHeight: 1.2 }}>
                     Purchase Date
@@ -952,7 +952,7 @@ export default function AccessoriesPage() {
                   </Box>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
                   <Typography variant="caption" sx={{ fontWeight: 600, color: '#334155', lineHeight: 1.2 }}>
                     Warranty Date
@@ -995,7 +995,7 @@ export default function AccessoriesPage() {
                   </Box>
                 </Box>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth>
                   <InputLabel>Status</InputLabel>
                   <Select

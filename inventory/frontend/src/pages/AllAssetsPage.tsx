@@ -26,7 +26,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { DataGrid, GridFooterContainer, GridPagination, type GridColDef, type GridRowSelectionModel } from '@mui/x-data-grid'
+import { DataGrid, GridFooterContainer, GridPagination, type GridColDef, type GridRenderCellParams, type GridRowSelectionModel } from '@mui/x-data-grid'
 import { Add, Delete, Download, Edit, KeyboardReturn, Visibility, WarningAmber } from '@mui/icons-material'
 import { formatCurrency } from '@/lib/utils'
 import { ActionMenu } from '@/components/ActionMenu'
@@ -544,7 +544,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
   const columns: GridColDef[] = [
     ...(!isInStockPage
       ? [
-          { field: 'index', headerName: '#', width: 70, sortable: false, renderCell: (params) => params.row.index },
+          { field: 'index', headerName: '#', width: 70, sortable: false, renderCell: (params: GridRenderCellParams) => params.row.index },
         ]
       : []),
     { field: 'assetId', headerName: 'Asset ID', flex: 0.9, minWidth: 140, sortable: true },
@@ -1123,7 +1123,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
                 label="Supplier Name"
                 options={vendorOptions}
                 value={returnedSupplierFilter || null}
-                onChange={setReturnedSupplierFilter}
+                onChange={(value) => setReturnedSupplierFilter(value ?? '')}
                 noOptionsText="No suppliers found"
                 fullWidth={false}
                 sx={{ minWidth: 220 }}
@@ -2117,7 +2117,7 @@ function ReturnDialog({
                 label="Supplier"
                 required
                 placeholder="Select Supplier"
-                InputLabelProps={{ shrink: true }}
+                slotProps={{ ...params.slotProps, inputLabel: { ...params.slotProps?.inputLabel, shrink: true } }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2,

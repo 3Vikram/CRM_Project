@@ -194,27 +194,6 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
 
   const totalRentOutAssets = filteredRows.length
 
-  const totalsRow = useMemo(
-    () => ({
-      id: 'totals',
-      customerName: 'Totals',
-      documentNumber: '',
-      productSerialNumber: '',
-      productName: '',
-      productDescription: '',
-      productModel: '',
-      ratePerMonth: totals.totalRentOutPrice,
-      rentStartDate: '',
-      rentEndDate: '',
-      totalMonths: totals.totalMonths,
-      monthwiseTotalPrice: totals.totalMonthwisePrice,
-      invoiceNumber: '',
-      remarks: '',
-      status: '',
-    }),
-    [totals]
-  )
-
   const handleOpenDialog = (asset: Asset) => {
     setSelectedAsset({ ...asset, price: transactionRates[asset.id] ?? asset.price })
     setDialogOpen(true)
@@ -431,14 +410,17 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
           pageSizeOptions={[5, 8, 12]}
           disableRowSelectionOnClick
           getRowHeight={() => 'auto'}
-          pinnedRows={{ bottom: [totalsRow] }}
-          getRowClassName={(params) => (params.id === 'totals' ? 'rentout-totals-row' : '')}
           slots={{
             footer: () => (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', px: 2, py: 1, borderTop: '1px solid #E3E8EF', backgroundColor: '#FFFFFF' }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#06283D' }}>
-                  Total Assets: {totalRentOutAssets}
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', width: '100%', px: 2, py: 1, borderTop: '1px solid #E3E8EF', backgroundColor: '#FFFFFF' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#06283D' }}>
+                    Total Assets: {totalRentOutAssets}
+                  </Typography>
+                  <Typography variant="body2">Rent Total: {formatCurrency(totals.totalRentOutPrice)}</Typography>
+                  <Typography variant="body2">Total Months: {totals.totalMonths}</Typography>
+                  <Typography variant="body2">Monthwise Total: {formatCurrency(totals.totalMonthwisePrice)}</Typography>
+                </Box>
                 <GridFooterContainer sx={{ borderTop: 0 }}>
                   <GridPagination />
                 </GridFooterContainer>
@@ -446,10 +428,6 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
             ),
           }}
           sx={{
-            '& .rentout-totals-row .MuiDataGrid-cell': {
-              fontWeight: 700,
-              backgroundColor: '#F7F9FC',
-            },
             border: 0,
             '& .MuiDataGrid-columnHeaders': {
               backgroundColor: '#0B1F33 !important',

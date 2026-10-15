@@ -4,6 +4,7 @@ export interface Asset {
   id: string
   name: string
   productName?: string
+  productId?: string | null
   assetId: string
   serialNumber: string
   productSerialNumber?: string
@@ -23,6 +24,8 @@ export interface Asset {
   warrantyDate?: string | null
   description: string
   productDescription?: string
+  hsnSac?: string
+  gst?: string
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -33,6 +36,7 @@ export interface Asset {
   documentNumber?: string
   rentStartDate?: string
   rentEndDate?: string
+  remarks?: string
   inwardType?: string
   inwardDate?: string | null
   document?: {

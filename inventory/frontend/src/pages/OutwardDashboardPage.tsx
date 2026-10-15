@@ -170,7 +170,7 @@ export default function OutwardDashboardPage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: '#F4F6F8', minHeight: '100vh' }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ mb: 3 }}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3, justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' } }}>
         <Box><Typography variant="h4" sx={{ fontWeight: 700, color: '#06283D' }}>OUTWARD DASHBOARD</Typography><Typography color="text.secondary">Select available In Stock assets to move outward.</Typography></Box>
         <Stack direction="row" spacing={1.5}>
           <Button variant="contained" onClick={openDetails}>Move Outward</Button>
@@ -182,9 +182,9 @@ export default function OutwardDashboardPage() {
           <TextField size="small" label="Search" value={search} onChange={(event) => setSearch(event.target.value)} fullWidth />
           <TextField select size="small" label="Product Model" value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} sx={{ minWidth: 190 }}><MenuItem value="all">All</MenuItem>{modelOptions.map((option) => <MenuItem key={option} value={option}>{option}</MenuItem>)}</TextField>
           <TextField select size="small" label="Inward Type" value={inwardFilter} onChange={(event) => setInwardFilter(event.target.value)} sx={{ minWidth: 170 }}><MenuItem value="all">All</MenuItem>{inwardOptions.map((option) => <MenuItem key={option} value={option}>{option}</MenuItem>)}</TextField>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 150 }}>
+          <Stack direction="row" spacing={1} sx={{ minWidth: 150, alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">Show entries</Typography>
-            <Select size="small" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} inputProps={{ 'aria-label': 'Show entries' }}>
+            <Select size="small" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} slotProps={{ input: { 'aria-label': 'Show entries' } }}>
               {[10, 25, 50].map((size) => <MenuItem key={size} value={size}>{size}</MenuItem>)}
             </Select>
           </Stack>
@@ -194,9 +194,49 @@ export default function OutwardDashboardPage() {
           <DataGrid rows={gridRows} columns={columns} loading={loading} checkboxSelection rowSelectionModel={selection} onRowSelectionModelChange={setSelection} pageSizeOptions={[10, 25, 50]} paginationModel={{ page: 0, pageSize }} onPaginationModelChange={(model) => { setPageSize(model.pageSize) }} disableRowSelectionOnClick />
         </Box>
       </Paper>
-      {selectedAssets.length > 0 && <Paper sx={{ position: 'fixed', bottom: 20, left: { xs: 16, md: 280 }, right: 16, zIndex: 10, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, border: '1px solid #B9C9D6' }}><Typography fontWeight={700}>{selectedAssets.length} Assets Selected</Typography><Button variant="contained" onClick={() => { openDetails(); setDetailsOpen(true) }}>Move Outward</Button></Paper>}
+      {selectedAssets.length > 0 && <Paper sx={{ position: 'fixed', bottom: 20, left: { xs: 16, md: 280 }, right: 16, zIndex: 10, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, border: '1px solid #B9C9D6' }}><Typography sx={{ fontWeight: 700 }}>{selectedAssets.length} Assets Selected</Typography><Button variant="contained" onClick={() => { openDetails(); setDetailsOpen(true) }}>Move Outward</Button></Paper>}
       <Dialog open={detailsOpen && !movementType} onClose={closeDialogs} maxWidth="xs" fullWidth><DialogTitle>MOVE SELECTED ASSETS</DialogTitle><DialogContent><Typography sx={{ mb: 2 }}>Selected Assets: {selectedAssets.length}</Typography><Stack direction="row" spacing={2}><Button fullWidth variant="contained" onClick={() => chooseMovement('Rent')}>RENT</Button><Button fullWidth variant="contained" onClick={() => chooseMovement('Sell')}>SELL</Button></Stack></DialogContent><DialogActions><Button onClick={closeDialogs}>Cancel</Button></DialogActions></Dialog>
-      <Dialog open={detailsOpen && Boolean(movementType)} onClose={closeDialogs} maxWidth="md" fullWidth><DialogTitle>{movementType === 'Rent' ? 'RENT OUT DETAILS' : 'SELL OUT DETAILS'}</DialogTitle><DialogContent><Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ pt: 1 }}><Stack spacing={2} sx={{ flex: 1 }}>{requiresAssetSelection && <Autocomplete multiple options={assets} value={selectedAssets} onChange={(_, nextAssets) => setSelection({ type: 'include', ids: new Set(nextAssets.map((asset) => asset.id)) })} getOptionLabel={(asset) => asset.productSerialNumber || asset.serialNumber || asset.assetId} isOptionEqualToValue={(option, value) => option.id === value.id} renderInput={(params) => <TextField {...params} label="Select Product Serial Numbers / Assets" placeholder="Select available assets" />} />}<TextField label="Customer Name" required value={customerName} onChange={(event) => setCustomerName(event.target.value)} /><TextField label="Document Number" required value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} /><TextField label="Product Description" value={selectedDescriptions || '-'} InputProps={{ readOnly: true }} /><TextField label="Product Model" value={selectedModels || '-'} InputProps={{ readOnly: true }} />{movementType === 'Rent' && <><TextField label="Rent Start Date" required type="date" value={rentStartDate} onChange={(event) => setRentStartDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} /><TextField label="Rent End Date" type="date" value={rentEndDate} onChange={(event) => setRentEndDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></>}{movementType === 'Sell' && <TextField label="Invoice Number" required value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} />}<TextField label="Remarks" multiline minRows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} />{error && <Alert severity="error">{error}</Alert>}</Stack><Paper variant="outlined" sx={{ p: 2, minWidth: { md: 240 }, maxHeight: 280, overflow: 'auto' }}><Typography fontWeight={700} sx={{ mb: 1 }}>Selected Assets: {selectedAssets.length}</Typography>{selectedAssets.map((asset) => <Typography key={asset.id} variant="body2">{asset.productSerialNumber || asset.serialNumber}</Typography>)}</Paper></Stack></DialogContent><DialogActions><Button onClick={closeDialogs}>Cancel</Button><Button variant="contained" disabled={saving || !selectedAssets.length} onClick={submitMovement}>{saving ? 'Saving...' : 'Submit'}</Button></DialogActions></Dialog>
+      <Dialog open={detailsOpen && Boolean(movementType)} onClose={closeDialogs} maxWidth="md" fullWidth>
+        <DialogTitle>{movementType === 'Rent' ? 'RENT OUT DETAILS' : 'SELL OUT DETAILS'}</DialogTitle>
+        <DialogContent>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ pt: 1 }}>
+            <Stack spacing={2} sx={{ flex: 1 }}>
+              {requiresAssetSelection && (
+                <Autocomplete
+                  multiple
+                  options={assets}
+                  value={selectedAssets}
+                  onChange={(_, nextAssets) => setSelection({ type: 'include', ids: new Set(nextAssets.map((asset) => asset.id)) })}
+                  getOptionLabel={(asset) => asset.productSerialNumber || asset.serialNumber || asset.assetId}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  renderInput={(params) => <TextField {...params} label="Select Product Serial Numbers / Assets" placeholder="Select available assets" />}
+                />
+              )}
+              <TextField label="Customer Name" required value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+              <TextField label="Document Number" required value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
+              <TextField label="Product Description" value={selectedDescriptions || '-'} slotProps={{ input: { readOnly: true } }} />
+              <TextField label="Product Model" value={selectedModels || '-'} slotProps={{ input: { readOnly: true } }} />
+              {movementType === 'Rent' && (
+                <>
+                  <TextField label="Rent Start Date" required type="date" value={rentStartDate} onChange={(event) => setRentStartDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+                  <TextField label="Rent End Date" type="date" value={rentEndDate} onChange={(event) => setRentEndDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+                </>
+              )}
+              {movementType === 'Sell' && <TextField label="Invoice Number" required value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} />}
+              <TextField label="Remarks" multiline minRows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} />
+              {error && <Alert severity="error">{error}</Alert>}
+            </Stack>
+            <Paper variant="outlined" sx={{ p: 2, minWidth: { md: 240 }, maxHeight: 280, overflow: 'auto' }}>
+              <Typography sx={{ mb: 1, fontWeight: 700 }}>Selected Assets: {selectedAssets.length}</Typography>
+              {selectedAssets.map((asset) => <Typography key={asset.id} variant="body2">{asset.productSerialNumber || asset.serialNumber}</Typography>)}
+            </Paper>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDialogs}>Cancel</Button>
+          <Button variant="contained" disabled={saving || !selectedAssets.length} onClick={submitMovement}>{saving ? 'Saving...' : 'Submit'}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

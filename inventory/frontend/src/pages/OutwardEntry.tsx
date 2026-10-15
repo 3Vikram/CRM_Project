@@ -242,7 +242,7 @@ export default function OutwardEntry() {
                     value={customerName}
                     onChange={(event) => setCustomerName(event.target.value)}
                     fullWidth
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     placeholder=""
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14, color: '#000' } }}
                   />
@@ -255,7 +255,7 @@ export default function OutwardEntry() {
                     value={productName}
                     onChange={(event) => setProductName(event.target.value)}
                     fullWidth
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     placeholder=""
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14, color: '#000' } }}
                   />
@@ -268,7 +268,7 @@ export default function OutwardEntry() {
                     value={asset.productSerialNumber || asset.serialNumber}
                     fullWidth
                     disabled
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -295,7 +295,7 @@ export default function OutwardEntry() {
                     value={productModel}
                     onChange={(event) => setProductModel(event.target.value)}
                     fullWidth
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -309,7 +309,7 @@ export default function OutwardEntry() {
                       value={rentStartDate}
                       onChange={(event) => setRentStartDate(event.target.value)}
                       fullWidth
-                      InputLabelProps={{ shrink: true }}
+                      slotProps={{ inputLabel: { shrink: true } }}
                       sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                     />
                   </Box>
@@ -324,7 +324,7 @@ export default function OutwardEntry() {
                     fullWidth
                     multiline
                     minRows={3}
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, textarea: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -339,7 +339,7 @@ export default function OutwardEntry() {
                     value={documentNumber}
                     onChange={(event) => setDocumentNumber(event.target.value)}
                     fullWidth
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -353,7 +353,7 @@ export default function OutwardEntry() {
                     fullWidth
                     multiline
                     minRows={3}
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, textarea: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -365,7 +365,7 @@ export default function OutwardEntry() {
                     value={total > 0 ? formatCurrency(total) : '-'}
                     fullWidth
                     disabled
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -378,7 +378,7 @@ export default function OutwardEntry() {
                     type="number"
                     onChange={(e) => setRate(Number(e.target.value))}
                     fullWidth
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -390,9 +390,8 @@ export default function OutwardEntry() {
                     type="number"
                     value={quantity}
                     onChange={(event) => setQuantity(event.target.value)}
-                    inputProps={{ min: 1, max: availableQuantity }}
                     fullWidth
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: 1, max: availableQuantity } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>
@@ -406,7 +405,7 @@ export default function OutwardEntry() {
                       value={rentEndDate}
                       onChange={(event) => setRentEndDate(event.target.value)}
                       fullWidth
-                      InputLabelProps={{ shrink: true }}
+                      slotProps={{ inputLabel: { shrink: true } }}
                       sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                     />
                   </Box>
@@ -420,7 +419,7 @@ export default function OutwardEntry() {
                       value={invoiceNumber}
                       onChange={(event) => setInvoiceNumber(event.target.value)}
                       fullWidth
-                      InputLabelProps={{ shrink: true }}
+                      slotProps={{ inputLabel: { shrink: true } }}
                       sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                     />
                   </Box>
@@ -433,7 +432,7 @@ export default function OutwardEntry() {
                     value={String(availableQuantity)}
                     fullWidth
                     disabled
-                    InputLabelProps={{ shrink: true }}
+                    slotProps={{ inputLabel: { shrink: true } }}
                     sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14 } }}
                   />
                 </Box>

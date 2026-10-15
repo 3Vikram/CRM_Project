@@ -35,7 +35,7 @@ export function ActionMenu({ asset, onReturn, onEdit, onDelete, onOutward }: Act
   const isReturnAllowed = normalizedInwardType === 'rent in' || normalizedInwardType === 'rent_in' || normalizedInwardType === 'rent-in'
 
   return (
-    <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="flex-start">
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', justifyContent: 'flex-start' }}>
       <Tooltip title="Outward">
         <IconButton
           size="small"

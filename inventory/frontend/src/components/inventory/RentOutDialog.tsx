@@ -89,7 +89,7 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ pb: 1 }}>
-        <Typography component="div" variant="h5" fontWeight={700} color="#06283D">
+        <Typography component="div" variant="h5" sx={{ fontWeight: 700, color: '#06283D' }}>
           Rent Out Details
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -170,7 +170,7 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
         </Grid>
 
         <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: '#F7F9FC', border: '1px solid #E3E8EF' }}>
-          <Typography variant="subtitle2" fontWeight={700} color="#06283D" sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700, color: '#06283D' }}>
             Update Summary
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

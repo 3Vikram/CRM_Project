@@ -281,7 +281,7 @@ export default function ProductsPage() {
       </Box>
 
       <Paper elevation={0} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', border: '1px solid #E8EEF5', borderRadius: 3, backgroundColor: '#FFFFFF', boxShadow: '0 12px 28px rgba(15, 36, 56, 0.04)', p: { xs: 2, md: 2.5 } }}>
-        <Grid container spacing={2} alignItems="center" sx={{ width: '100%', maxWidth: '100%' }}>
+        <Grid container spacing={2} sx={{ width: '100%', maxWidth: '100%', alignItems: 'center' }}>
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               fullWidth
