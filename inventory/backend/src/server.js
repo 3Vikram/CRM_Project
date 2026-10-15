@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import path from 'path';
 import dotenv from 'dotenv';
 import inventoryRoutes from './routes/inventory.js';
-import inventoryAuthRoutes from './routes/inventoryAuth.js';
+import inventoryAuthRoutes, { requireInventoryAuth } from './routes/inventoryAuth.js';
 import inventoryEmployeeRoutes from './routes/inventoryEmployees.js';
 import assetRoutes from './routes/asset.js';
 import productRoutes from './routes/products.js';
@@ -57,8 +57,15 @@ if (emailServiceReady) {
 
 // Routes
 app.use('/api/inventory/auth', inventoryAuthRoutes);
+app.use('/api/inventory', requireInventoryAuth);
 app.use('/api/inventory/employees', inventoryEmployeeRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/assets', requireInventoryAuth);
+app.use('/api/products', requireInventoryAuth);
+app.use('/api/delivery-challans', requireInventoryAuth);
+app.use('/api/returned-challans', requireInventoryAuth);
+app.use('/api/daily-email', requireInventoryAuth);
+app.use('/api/accessories', requireInventoryAuth);
 app.use('/api/assets', assetRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/delivery-challans', deliveryChallanRoutes);
