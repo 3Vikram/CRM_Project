@@ -48,7 +48,7 @@ export default function ModuleSelectPage() {
           <span className="text-white font-bold text-base">3V</span>
         </div>
         <h1 className="crm-page-heading">
-          3Vikram Technologies
+          SYNOV IT SERVICES
         </h1>
         <p className="text-gray-600 max-w-xl text-center">
           Choose a workspace to begin. Each module keeps its tools where you need them.

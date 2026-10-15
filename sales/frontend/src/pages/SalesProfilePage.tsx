@@ -90,7 +90,7 @@ export default function SalesProfilePage() {
   return (
     <div className="mx-auto w-full max-w-6xl py-5 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[#1F1D1A] sm:text-3xl">My Profile</h1>
+        <h1 className="crm-page-heading">My Profile</h1>
       </div>
 
       {isLoading ? <div className="rounded-xl border border-[#E7E3DA] bg-white p-6 text-sm text-[#6B6657]">Loading profile...</div> : null}

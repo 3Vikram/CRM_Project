@@ -7,6 +7,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import inventoryRoutes from './routes/inventory.js';
 import inventoryAuthRoutes from './routes/inventoryAuth.js';
+import inventoryEmployeeRoutes from './routes/inventoryEmployees.js';
 import assetRoutes from './routes/asset.js';
 import productRoutes from './routes/products.js';
 import deliveryChallanRoutes from './routes/deliveryChallans.js';
@@ -56,6 +57,7 @@ if (emailServiceReady) {
 
 // Routes
 app.use('/api/inventory/auth', inventoryAuthRoutes);
+app.use('/api/inventory/employees', inventoryEmployeeRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/products', productRoutes);

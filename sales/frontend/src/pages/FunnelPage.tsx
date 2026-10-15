@@ -238,7 +238,7 @@ export default function FunnelPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-[28px] font-bold text-[#111827]">Funnel Dashboard</h1>
+        <h1 className="crm-page-heading">Funnel Dashboard</h1>
         <button
           type="button"
           onClick={() => navigate('/sales/funnels/new')}

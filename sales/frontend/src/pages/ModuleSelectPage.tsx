@@ -23,7 +23,7 @@ const modules = [
     icon: Package,
     iconBg: 'bg-amber-100',
     iconColor: 'text-amber-700',
-    to: 'http://localhost:3002',
+    to: 'http://192.168.0.22:3002',
     accent: 'ring-amber-200 hover:ring-amber-300',
   },
   {
@@ -34,7 +34,7 @@ const modules = [
     icon: Calculator,
     iconBg: 'bg-rose-100',
     iconColor: 'text-rose-700',
-    to: 'http://localhost:3001',
+    to: 'http://192.168.0.22:3001',
     accent: 'ring-rose-200 hover:ring-rose-300',
   },
 ]
@@ -45,10 +45,10 @@ export default function ModuleSelectPage() {
       {/* Brand */}
       <div className="flex flex-col items-center mb-12">
         <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mb-4">
-          <span className="text-white font-bold text-base">3V</span>
+          <span className="text-white font-bold text-base">S</span>
         </div>
         <h1 className="crm-page-heading">
-          3Vikram Technologies
+          SYNOV IT SERVICES
         </h1>
         <p className="text-gray-600 max-w-xl text-center">
           Choose a workspace to begin. Each module keeps its tools where you need them.
@@ -59,12 +59,9 @@ export default function ModuleSelectPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
         {modules.map((m) => {
           const Icon = m.icon
-          return (
-            <Link
-              key={m.key}
-              to={m.to}
-              className={`group bg-white rounded-2xl border border-[#EFECE5] shadow-sm p-8 ring-1 ring-transparent transition-all hover:shadow-md ${m.accent}`}
-            >
+          const className = `group bg-white rounded-2xl border border-[#EFECE5] shadow-sm p-8 ring-1 ring-transparent transition-all hover:shadow-md ${m.accent}`
+          const content = (
+            <>
               <div
                 className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${m.iconBg}`}
               >
@@ -80,7 +77,17 @@ export default function ModuleSelectPage() {
                 Open module
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </div>
+            </>
+          )
+
+          return m.key === 'sales' ? (
+            <Link key={m.key} to={m.to} className={className}>
+              {content}
             </Link>
+          ) : (
+            <a key={m.key} href={m.to} className={className}>
+              {content}
+            </a>
           )
         })}
       </div>

@@ -202,7 +202,7 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
     <div className="dc-preview-root">
       <style>{`
         .dc-preview-root { color: #17212b; }
-        .dc-preview-document { width: 100%; max-width: 190mm; margin: 0 auto; background: #fff; color: #17212b; font-family: Arial, Helvetica, sans-serif; font-size: 10px; }
+        .dc-preview-document { width: 100%; max-width: 190mm; margin: 0 auto; background: #fff; color: #17212b; font-family: "Times New Roman", Times, serif; font-size: 10px; }
         .dc-preview-document *, .dc-preview-document *::before, .dc-preview-document *::after { box-sizing: border-box; }
         .dc-preview-document .dc-header { position: relative; min-height: 78px; padding: 8px 76px 12px; text-align: center; border-bottom: 1px solid #333; }
         .dc-preview-document .dc-header img { position: absolute; top: 5px; right: 3px; width: 64px; height: 64px; object-fit: contain; }

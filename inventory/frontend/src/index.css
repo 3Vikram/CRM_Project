@@ -4,9 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --font-sans: "Times New Roman", Times, serif;
+  --font-serif: "Times New Roman", Times, serif;
+}
+
 :root {
   color-scheme: light;
-  font-family: Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Times New Roman", Times, serif;
   line-height: 1.5;
   font-weight: 400;
   color: #06283D;
@@ -54,7 +59,7 @@ body {
   min-height: 100vh;
   background: #F4F6F8;
   color: #06283D;
-  font-family: Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Times New Roman", Times, serif;
 }
 
 #root {
@@ -66,6 +71,10 @@ textarea,
 select,
 button {
   font: inherit;
+}
+
+html, body, #root, #root *, body *, *::before, *::after {
+  font-family: "Times New Roman", Times, serif !important;
 }
 
 .text-xs {

@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus, Download, Eye, Pencil, Trash2, UserCog } from 'lucide-react'
 import { Modal } from '@/sales/components/modal'
 import { Toast } from '@/sales/components/toast'
 import { deleteEmployee, fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { INVENTORY_SESSION_KEY, signInToInventory, verifyInventorySession } from '@/lib/inventoryAuth'
 
 const tableCellClass = 'px-3 py-3 border-r border-[#E5E7EB] align-top whitespace-nowrap'
 
@@ -20,6 +21,246 @@ const formatDate = (value?: string | null) => {
 const formatList = (values?: string[] | null) => {
   if (!values || values.length === 0) return '—'
   return values.join(', ')
+}
+
+interface InventoryEmployeeRecord {
+  _id: string
+  employeeName: string
+  email: string
+  isActive: boolean
+  createdAt?: string
+}
+
+function InventoryEmployeesPanel() {
+  const [token, setToken] = useState('')
+  const [isCheckingSession, setIsCheckingSession] = useState(true)
+  const [employees, setEmployees] = useState<InventoryEmployeeRecord[]>([])
+  const [employeeName, setEmployeeName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [selectedEmployee, setSelectedEmployee] = useState<InventoryEmployeeRecord | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+
+  const loadEmployees = async (sessionToken: string) => {
+    setIsLoading(true)
+    setError('')
+    try {
+      const response = await fetch('/api/inventory/employees', {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      })
+      const result = await response.json()
+      if (response.status === 403) {
+        setToken('')
+        throw new Error('This Inventory account cannot manage employees. Sign in with the Inventory administrator credentials.')
+      }
+      if (response.status === 401) {
+        localStorage.removeItem(INVENTORY_SESSION_KEY)
+        setToken('')
+      }
+      if (!response.ok) throw new Error(result.error || 'Unable to load Inventory employees.')
+      setEmployees(result.data || [])
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load Inventory employees.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem(INVENTORY_SESSION_KEY)
+    if (!storedToken) {
+      setIsCheckingSession(false)
+      return
+    }
+
+    let cancelled = false
+    void verifyInventorySession(storedToken)
+      .then((isValid) => {
+        if (cancelled) return
+        if (!isValid) {
+          localStorage.removeItem(INVENTORY_SESSION_KEY)
+          return
+        }
+        setToken(storedToken)
+        void loadEmployees(storedToken)
+      })
+      .catch(() => {
+        if (!cancelled) localStorage.removeItem(INVENTORY_SESSION_KEY)
+      })
+      .finally(() => {
+        if (!cancelled) setIsCheckingSession(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleInventoryLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    try {
+      const sessionToken = await signInToInventory(loginEmail, loginPassword)
+      localStorage.setItem(INVENTORY_SESSION_KEY, sessionToken)
+      setToken(sessionToken)
+      setLoginPassword('')
+      await loadEmployees(sessionToken)
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Unable to sign in to Inventory.')
+    }
+  }
+
+  const resetForm = () => {
+    setEditingId(null)
+    setEmployeeName('')
+    setEmail('')
+    setPassword('')
+  }
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!token) return
+    setIsSaving(true)
+    setError('')
+    setMessage('')
+    try {
+      const response = await fetch(
+        editingId ? `/api/inventory/employees/${editingId}` : '/api/inventory/employees',
+        {
+          method: editingId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ employeeName, email, ...(password ? { password } : {}) }),
+        }
+      )
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to save Inventory employee.')
+      resetForm()
+      setMessage(editingId ? 'Inventory employee updated.' : 'Inventory employee created.')
+      await loadEmployees(token)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save Inventory employee.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDeactivate = async (employee: InventoryEmployeeRecord) => {
+    if (!token || !window.confirm(`Deactivate ${employee.employeeName}?`)) return
+    setError('')
+    setMessage('')
+    try {
+      const response = await fetch(`/api/inventory/employees/${employee._id}/deactivate`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to deactivate Inventory employee.')
+      setEmployees((current) => current.map((item) => item._id === employee._id ? result.data : item))
+      setMessage('Inventory employee deactivated.')
+    } catch (deactivateError) {
+      setError(deactivateError instanceof Error ? deactivateError.message : 'Unable to deactivate Inventory employee.')
+    }
+  }
+
+  const handleSignOut = () => {
+    localStorage.removeItem(INVENTORY_SESSION_KEY)
+    setToken('')
+    setEmployees([])
+    resetForm()
+  }
+
+  if (isCheckingSession) return <p className="text-sm text-slate-600">Checking Inventory administrator session...</p>
+
+  if (!token) {
+    return (
+      <section className="max-w-xl rounded border border-[#E5E7EB] bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Inventory employee management</h2>
+        <p className="mt-1 text-sm text-slate-600">Sign in with the existing Inventory administrator credentials to manage Inventory employees.</p>
+        {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+        <form onSubmit={handleInventoryLogin} className="mt-4 grid gap-3 sm:grid-cols-2">
+          <input aria-label="Inventory administrator email" autoComplete="username" className="rounded border border-[#D1D5DB] px-3 py-2 text-sm" onChange={(event) => setLoginEmail(event.target.value)} placeholder="Administrator email" required type="email" value={loginEmail} />
+          <input aria-label="Inventory administrator password" autoComplete="current-password" className="rounded border border-[#D1D5DB] px-3 py-2 text-sm" onChange={(event) => setLoginPassword(event.target.value)} placeholder="Password" required type="password" value={loginPassword} />
+          <button className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B] sm:col-span-2" type="submit">Sign in to Inventory</button>
+        </form>
+      </section>
+    )
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Inventory employees</h2>
+          {/* <p className="text-sm text-slate-600">Inventory credentials are separate from Sales employee accounts.</p> */}
+        </div>
+        <button className="rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50" onClick={handleSignOut} type="button">Sign out of Inventory admin</button>
+      </div>
+
+      {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {message ? <p role="status" className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{message}</p> : null}
+
+      <form onSubmit={handleSave} className="grid gap-3 rounded border border-[#E5E7EB] bg-white p-4 shadow-sm md:grid-cols-4">
+        <h3 className="font-semibold text-slate-800 md:col-span-4">{editingId ? 'Edit Inventory employee' : 'Add Inventory employee'}</h3>
+        <input aria-label="Employee name" className="rounded border border-[#D1D5DB] px-3 py-2 text-sm" onChange={(event) => setEmployeeName(event.target.value)} placeholder="Employee name" required value={employeeName} />
+        <input aria-label="Employee email" className="rounded border border-[#D1D5DB] px-3 py-2 text-sm" onChange={(event) => setEmail(event.target.value)} placeholder="Email" required type="email" value={email} />
+        <input aria-label={editingId ? 'New password (optional)' : 'Password'} autoComplete="new-password" className="rounded border border-[#D1D5DB] px-3 py-2 text-sm" minLength={8} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? 'New password (optional)' : 'Password (8+ characters)'} required={!editingId} type="password" value={password} />
+        <div className="flex gap-2">
+          <button className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-50" disabled={isSaving} type="submit">{isSaving ? 'Saving...' : editingId ? 'Save changes' : 'Add employee'}</button>
+          {editingId ? <button className="rounded border border-[#D1D5DB] px-3 py-2 text-sm text-slate-700" onClick={resetForm} type="button">Cancel</button> : null}
+        </div>
+      </form>
+
+      <div className="overflow-x-auto rounded border border-[#E5E7EB] bg-white shadow-sm">
+        <table className="w-full min-w-[850px] border-collapse text-left text-sm">
+          <thead className="text-slate-700">
+            <tr className="border-b border-[#E5E7EB] bg-[#F8FAFC]">
+              <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Employee</th>
+              <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Email</th>
+              <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Status</th>
+              <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map((employee) => (
+              <tr className="border-b border-[#EEF2F7] hover:bg-slate-50" key={employee._id}>
+                <td className={tableCellClass}>{employee.employeeName}</td>
+                <td className={tableCellClass}>{employee.email}</td>
+                <td className={tableCellClass}>{employee.isActive ? 'Active' : 'Inactive'}</td>
+                <td className={`${tableCellClass} pr-2`}>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setSelectedEmployee(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="View" aria-label={`View ${employee.employeeName}`}>
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => { setEditingId(employee._id); setEmployeeName(employee.employeeName); setEmail(employee.email); setPassword(''); setMessage('') }} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Edit" aria-label={`Edit ${employee.employeeName}`}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    {employee.isActive ? (
+                      <button type="button" onClick={() => void handleDeactivate(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Deactivate" aria-label={`Deactivate ${employee.employeeName}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!isLoading && employees.length === 0 ? <tr className="border-b border-[#EEF2F7]"><td className="px-6 py-16 text-center text-slate-500" colSpan={4}>No Inventory employees found.</td></tr> : null}
+            {isLoading ? <tr className="border-b border-[#EEF2F7]"><td className="px-6 py-16 text-center text-slate-500" colSpan={4}>Loading Inventory employees...</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal isOpen={Boolean(selectedEmployee)} onClose={() => setSelectedEmployee(null)} title={selectedEmployee?.employeeName || 'Inventory employee'}>
+        {selectedEmployee ? <div className="space-y-2 text-sm text-slate-700"><p><strong>Email:</strong> {selectedEmployee.email}</p><p><strong>Status:</strong> {selectedEmployee.isActive ? 'Active' : 'Inactive'}</p><p><strong>Created:</strong> {selectedEmployee.createdAt ? formatDate(selectedEmployee.createdAt) : '—'}</p></div> : null}
+      </Modal>
+    </section>
+  )
 }
 
 export default function EmployeesPage() {
@@ -36,6 +277,7 @@ export default function EmployeesPage() {
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
+  const [activeModule, setActiveModule] = useState<'sales' | 'inventory' | 'accounts'>('sales')
 
   const notify = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage(message)
@@ -62,6 +304,7 @@ export default function EmployeesPage() {
   }
 
   useEffect(() => {
+    if (activeModule !== 'sales') return
     if (searchTimeoutRef.current) {
       window.clearTimeout(searchTimeoutRef.current)
     }
@@ -73,7 +316,7 @@ export default function EmployeesPage() {
     return () => {
       if (searchTimeoutRef.current) window.clearTimeout(searchTimeoutRef.current)
     }
-  }, [page, pageSize, searchQuery])
+  }, [activeModule, page, pageSize, searchQuery])
 
   useEffect(() => {
     setPage(1)
@@ -135,15 +378,32 @@ export default function EmployeesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] pb-3">
         <h1 className="crm-page-heading">Employee List</h1>
-        <div className="flex items-center gap-3">
-          <PermissionGate moduleName="employees" action="create">
-            <button type="button" onClick={handleAddNew} className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B]">
-              ADD NEW +
-            </button>
-          </PermissionGate>
+        <div className="flex flex-wrap items-center gap-3">
+          <div aria-label="Employee module" className="inline-flex rounded border border-[#D1D5DB] bg-white p-1" role="group">
+            {(['sales', 'inventory', 'accounts'] as const).map((module) => (
+              <button
+                aria-pressed={activeModule === module}
+                className={`rounded px-3 py-1.5 text-sm font-medium capitalize ${activeModule === module ? 'bg-[#0F172A] text-white' : 'text-slate-700 hover:bg-slate-100'}`}
+                key={module}
+                onClick={() => setActiveModule(module)}
+                type="button"
+              >
+                {module === 'sales' ? 'Sales' : module === 'inventory' ? 'Inventory' : 'Accounts'}
+              </button>
+            ))}
+          </div>
+          {activeModule === 'sales' ? (
+            <PermissionGate moduleName="employees" action="create">
+              <button type="button" onClick={handleAddNew} className="rounded bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1E293B]">
+                ADD NEW +
+              </button>
+            </PermissionGate>
+          ) : null}
         </div>
       </div>
 
+      {activeModule === 'sales' ? (
+        <>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">Copy</button>
@@ -298,7 +558,17 @@ export default function EmployeesPage() {
           </div>
         ) : null}
       </Modal>
-
+        </>
+      ) : activeModule === 'inventory' ? (
+        <InventoryEmployeesPanel />
+      ) : (
+        <section className="max-w-2xl rounded border border-[#E5E7EB] bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Accounts employee management is not connected</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            This checkout has no Accounts source or employee-management API. An Accounts auth backend exists on the separate <code>origin/accounts</code> branch, but it does not expose admin employee CRUD. No Accounts integration or authentication was changed.
+          </p>
+        </section>
+      )}
       <Toast isOpen={showToast} message={toastMessage} type={toastType} onClose={() => setShowToast(false)} />
     </div>
   )

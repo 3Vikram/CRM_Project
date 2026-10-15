@@ -25,7 +25,7 @@ const theme = createTheme({
     divider: '#DDE4EA',
   },
   typography: {
-    fontFamily: 'Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    fontFamily: '"Times New Roman", Times, serif',
     h4: { fontSize: '2.25rem', fontWeight: 700, letterSpacing: '-0.02em' },
     h5: { fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-0.02em' },
     h6: { fontSize: '1.3rem', fontWeight: 700, letterSpacing: '-0.01em' },

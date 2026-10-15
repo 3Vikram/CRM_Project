@@ -656,7 +656,7 @@ export default function ReturnedChallanPage() {
         </div>
       </div>
       <style>{`
-        .rc-document { width: 100%; max-width: 190mm; margin: auto; padding: 7mm; background: #fff; color: #17212b; font-family: Arial, Helvetica, sans-serif; font-size: 9.5px; line-height: 1.35; }
+        .rc-document { width: 100%; max-width: 190mm; margin: auto; padding: 7mm; background: #fff; color: #17212b; font-family: "Times New Roman", Times, serif; font-size: 9.5px; line-height: 1.35; }
         .rc-document * { box-sizing: border-box; }
         .rc-header { position: relative; min-height: 24mm; padding: 0 24mm 3mm; border-bottom: 1px solid #333; text-align: center; }
         .rc-title { margin: 0 0 1mm; font-size: 18px; font-weight: 700; }

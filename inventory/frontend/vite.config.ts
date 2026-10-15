@@ -24,6 +24,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // '/api/products': {
+      //   target: 'http://0.0.0.0:5000',
+      //   chnageOrigin: true,
+      //   secure: false,
+      // }
       '/api': {
         target: 'http://0.0.0.0:5001',
         changeOrigin: true,

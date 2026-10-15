@@ -2,6 +2,7 @@
 
 import { Link } from 'react-router-dom'
 import { ShoppingCart, Package, Calculator, ArrowRight } from 'lucide-react'
+import synovLogo from '../sales/assets.png'
 
 const modules = [
   {
@@ -44,15 +45,13 @@ export default function ModuleSelectPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-16">
       {/* Brand */}
       <div className="flex flex-col items-center mb-12">
-        <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mb-4">
-          <span className="text-white font-bold text-base">3V</span>
-        </div>
+        <img src={synovLogo} alt="Synov IT Services logo" className="h-40 w-40 object-contain mb-4" />
         <h1 className="text-5xl font-serif font-bold text-gray-900 mb-3">
-          3Vikram Technologies
+          SYNOV IT SERVICES
         </h1>
-        <p className="text-gray-600 max-w-xl text-center">
+        {/* <p className="text-gray-600 max-w-xl text-center">
           Choose a workspace to begin. Each module keeps its tools where you need them.
-        </p>
+        </p> */}
       </div>
 
       {/* Modules */}

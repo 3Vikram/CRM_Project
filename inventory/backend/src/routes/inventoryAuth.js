@@ -1,5 +1,7 @@
 import express from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { InventoryEmployee } from '../models/InventoryEmployee.js';
+import { verifyInventoryPassword } from '../utils/inventoryEmployeePassword.js';
 
 const router = express.Router();
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -19,33 +21,55 @@ const safeEqual = (left, right) => {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 };
 
-const createToken = (secret) => {
+const createToken = (secret, claims = {}) => {
   const payload = Buffer.from(
-    JSON.stringify({ exp: Date.now() + SESSION_DURATION_MS })
+    JSON.stringify({ exp: Date.now() + SESSION_DURATION_MS, ...claims })
   ).toString('base64url');
   return `${payload}.${createSignature(payload, secret)}`;
 };
 
-const isValidToken = (token, secret) => {
+const getTokenClaims = (token, secret) => {
   if (typeof token !== 'string') return false;
   const [payload, signature, extra] = token.split('.');
-  if (!payload || !signature || extra) return false;
+  if (!payload || !signature || extra) return null;
 
   const expectedSignature = createSignature(payload, secret);
-  if (!safeEqual(signature, expectedSignature)) return false;
+  if (!safeEqual(signature, expectedSignature)) return null;
 
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    return Number.isFinite(data.exp) && data.exp > Date.now();
+    return Number.isFinite(data.exp) && data.exp > Date.now() ? data : null;
   } catch {
-    return false;
+    return null;
   }
 };
+
+const isValidToken = (token, secret) => Boolean(getTokenClaims(token, secret));
 
 const configured = ({ email, password, secret }) =>
   Boolean(email && password && secret && secret.length >= 32);
 
-router.post('/login', (req, res) => {
+export function requireInventoryAdmin(req, res, next) {
+  const config = getAuthConfig();
+  if (!configured(config)) {
+    return res.status(503).json({ error: 'Inventory sign-in is not configured' });
+  }
+
+  const authorization = req.get('authorization') || '';
+  const token = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : '';
+  const claims = getTokenClaims(token, config.secret);
+
+  if (!claims) return res.status(401).json({ error: 'Inventory sign-in required.' });
+  if (claims.role && claims.role !== 'admin') {
+    return res.status(403).json({ error: 'Inventory administrator access required.' });
+  }
+
+  return next();
+}
+
+router.post('/login', async (req, res) => {
   const config = getAuthConfig();
   if (!configured(config)) {
     return res.status(503).json({ error: 'Inventory sign-in is not configured' });
@@ -57,11 +81,26 @@ router.post('/login', (req, res) => {
   const validEmail = safeEqual(email, config.email);
   const validPassword = safeEqual(password, config.password);
 
-  if (!validEmail || !validPassword) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+  if (validEmail && validPassword) {
+    return res.json({ token: createToken(config.secret, { role: 'admin' }) });
   }
 
-  return res.json({ token: createToken(config.secret) });
+  try {
+    const employee = await InventoryEmployee.findOne({ email }).select('+passwordHash');
+    const validEmployee = employee?.isActive
+      ? await verifyInventoryPassword(password, employee.passwordHash)
+      : false;
+
+    if (!employee || !validEmployee) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    return res.json({
+      token: createToken(config.secret, { role: 'employee', employeeId: employee.id }),
+    });
+  } catch {
+    return res.status(500).json({ error: 'Unable to sign in. Please try again.' });
+  }
 });
 
 router.get('/session', (req, res) => {
@@ -75,11 +114,12 @@ router.get('/session', (req, res) => {
     ? authorization.slice('Bearer '.length)
     : '';
 
-  if (!isValidToken(token, config.secret)) {
+  const claims = getTokenClaims(token, config.secret);
+  if (!claims) {
     return res.status(401).json({ authenticated: false });
   }
 
-  return res.json({ authenticated: true });
+  return res.json({ authenticated: true, role: claims.role || 'admin' });
 });
 
 export default router;

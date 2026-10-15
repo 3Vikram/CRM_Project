@@ -1,7 +1,25 @@
 import { getCachedResponse } from './apiCache';
 import { getAuthHeaders } from './apiAuth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/+$/, '');
+
+async function readApiError(response: Response): Promise<string> {
+  const text = await response.clone().text();
+  if (!text) {
+    return response.statusText || 'Request failed';
+  }
+
+  if (text.trim().startsWith('<')) {
+    return `The API responded with HTML instead of JSON. Check that the backend is running at ${API_BASE_URL} and that the request URL is correct.`;
+  }
+
+  try {
+    const payload = JSON.parse(text) as { message?: string; error?: string };
+    return payload.message || payload.error || response.statusText || 'Request failed';
+  } catch {
+    return text.slice(0, 200).trim() || response.statusText || 'Request failed';
+  }
+}
 
 export interface CompanyProfileRecord {
   _id: string;
@@ -105,8 +123,7 @@ export async function fetchCompanyProfiles(params: { search?: string; page?: num
   return getCachedResponse<CompanyProfileListResponse>(cacheKey, async () => {
     const response = await fetch(`${API_BASE_URL}/company-profiles?${searchParams.toString()}`, { headers: getAuthHeaders() });
     if (!response.ok) {
-      const errorPayload = await response.json().catch(() => ({}));
-      throw new Error(errorPayload.message || 'Failed to load company profiles');
+      throw new Error(await readApiError(response));
     }
     return response.json() as Promise<CompanyProfileListResponse>;
   }, 30_000);
@@ -115,8 +132,7 @@ export async function fetchCompanyProfiles(params: { search?: string; page?: num
 export async function fetchCompanyProfileById(id: string) {
   const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`, { headers: getAuthHeaders() });
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload.message || 'Failed to load company profile');
+    throw new Error(await readApiError(response));
   }
   return response.json();
 }
@@ -140,8 +156,7 @@ export async function createCompanyProfile(payload: CompanyProfilePayload, files
     body: formData,
   });
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload.message || 'Failed to create company profile');
+    throw new Error(await readApiError(response));
   }
   return response.json();
 }
@@ -165,8 +180,7 @@ export async function updateCompanyProfile(id: string, payload: Partial<CompanyP
     body: formData,
   });
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload.message || 'Failed to update company profile');
+    throw new Error(await readApiError(response));
   }
   return response.json();
 }
@@ -174,8 +188,7 @@ export async function updateCompanyProfile(id: string, payload: Partial<CompanyP
 export async function deleteCompanyProfile(id: string) {
   const response = await fetch(`${API_BASE_URL}/company-profiles/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload.message || 'Failed to delete company profile');
+    throw new Error(await readApiError(response));
   }
   return response.json();
 }
