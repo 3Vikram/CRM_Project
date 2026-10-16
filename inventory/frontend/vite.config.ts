@@ -12,34 +12,35 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 3001,
+    strictPort: true,
     proxy: {
       '/api/inventory': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/assets': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/products': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/daily-email': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/delivery-challans': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/returned-challans': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/accessories': {
-        target: 'http://192.168.0.52:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api/suppliers/inventory-options': {
@@ -51,7 +52,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://192.168.0.52:5001',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
       },
     },
