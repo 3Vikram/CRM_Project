@@ -178,6 +178,34 @@ exports.getCustomers = async (req, res) => {
   }
 };
 
+exports.getInventoryCustomerOptions = async (_req, res) => {
+  try {
+    const customers = await Customer.find({
+      $or: [
+        { customerName: { $type: 'string', $regex: /\S/ } },
+        { companyName: { $type: 'string', $regex: /\S/ } },
+      ],
+    })
+      .select({ _id: 1, customerName: 1, companyName: 1 })
+      .sort({ customerName: 1, companyName: 1, _id: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: customers.map(({ _id, customerName, companyName }) => ({
+        id: String(_id),
+        customerName: customerName || companyName,
+      })),
+    });
+  } catch (error) {
+    console.error('Unable to load Inventory customer options:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load customer names.',
+    });
+  }
+};
+
 exports.getCustomerById = async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id).select({ __v: 0 }).lean();

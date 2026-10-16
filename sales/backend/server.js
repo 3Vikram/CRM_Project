@@ -22,7 +22,9 @@ const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
-const { authMiddleware, requirePermission, requireAdmin } = require('./middleware/authMiddleware');
+const { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAdmin } = require('./middleware/authMiddleware');
+const { getInventorySupplierOptions } = require('./controllers/supplierController');
+const { getInventoryCustomerOptions } = require('./controllers/customerController');
 
 const app = express();
 
@@ -31,8 +33,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+app.get('/api/customers/inventory-options', inventoryAuthMiddleware, getInventoryCustomerOptions);
 app.use('/api/customers', authMiddleware, requirePermission('customers'), customerRoutes);
 app.use('/api/contacts', authMiddleware, requirePermission('contacts'), contactRoutes);
+app.get('/api/suppliers/inventory-options', inventoryAuthMiddleware, getInventorySupplierOptions);
+console.info('Registered GET /api/suppliers/inventory-options with Inventory authentication.');
 app.use('/api/suppliers', authMiddleware, requirePermission('suppliers'), supplierRoutes);
 app.use('/api/mail-campaigns', mailCampaignRoutes);
 app.use('/api/leads', authMiddleware, leadRoutes);

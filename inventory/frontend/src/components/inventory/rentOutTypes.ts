@@ -1,6 +1,7 @@
 import type { Asset } from '@/hooks/useAssets'
 
 export interface RentOutFormValues {
+  customerId: string
   customerName: string
   documentNumber: string
   productName: string

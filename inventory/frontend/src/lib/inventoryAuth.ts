@@ -8,6 +8,8 @@ const INVENTORY_API_PREFIXES = [
   '/api/returned-challans',
   '/api/daily-email',
   '/api/accessories',
+  '/api/suppliers/inventory-options',
+  '/api/customers/inventory-options',
 ]
 let inventoryApiAuthorizationInstalled = false
 

@@ -232,6 +232,7 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
   }
 
   const handleSubmit = async (values: {
+    customerId: string
     customerName: string
     documentNumber: string
     productName: string
@@ -262,6 +263,7 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
           status: 'available',
           invoiceNumber: values.invoiceNumber,
           customerName: values.customerName,
+          customerId: values.customerId,
           documentNumber: values.documentNumber,
           rentStartDate: values.rentStartDate,
           rentEndDate: values.rentEndDate,
@@ -286,6 +288,7 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
         quantity: Number(values.quantity) || 1,
         remarks: values.remarks,
         customerName: values.customerName,
+        customerId: values.customerId,
         documentNumber: values.documentNumber,
         rentStartDate: values.rentStartDate,
         rentEndDate: values.rentEndDate,

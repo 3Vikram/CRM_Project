@@ -42,6 +42,14 @@ export default defineConfig({
         target: 'http://192.168.0.52:5000',
         changeOrigin: true,
       },
+      '/api/suppliers/inventory-options': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: true,
+      },
+      '/api/customers/inventory-options': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://192.168.0.52:5001',
         changeOrigin: true,
