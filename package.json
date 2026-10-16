@@ -7,9 +7,9 @@
     "concurrently": "^10.0.5"
   },
   "scripts": {
-  "dev": "concurrently -k -n \"INV-BE,INV-FE,SALES-BE\" \"npm --prefix inventory/backend run dev\" \"npm --prefix inventory/frontend run dev\" \"npm --prefix sales/backend run dev\""
-}
-"repository": {
+    "dev": "concurrently -k -n \"INV-BE,INV-FE,SALES-BE\" \"npm --prefix inventory/backend run dev\" \"npm --prefix inventory/frontend run dev\" \"npm --prefix sales/backend run dev\""
+  },
+  "repository": {
     "type": "git",
     "url": "git+https://github.com/3Vikram/CRM_Project.git"
   },
