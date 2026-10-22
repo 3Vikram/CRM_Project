@@ -153,10 +153,11 @@ export async function deleteOPF(id: string) {
   return response.data;
 }
 
-export async function sendOPFPdf(id: string, pdfData: string, recipientEmail: string) {
+export async function sendOPFPdf(id: string, pdfData: string, recipientEmail: string, ccEmail = '') {
   const response = await axios.post(`${API_BASE_URL}/opf/${id}/send-pdf`, {
     pdfData,
     recipientEmail,
+    ccEmail,
   }, {
     headers: getAuthHeaders(),
   });

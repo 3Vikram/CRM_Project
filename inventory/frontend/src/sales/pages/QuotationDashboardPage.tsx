@@ -142,7 +142,7 @@ export default function QuotationDashboardPage() {
 
   const handleOpenQuotationPdf = (id: string) => {
     const pdfRoute = new URL(`/sales/quotations/view/${encodeURIComponent(id)}?openPdf=1`, window.location.origin)
-    window.open(pdfRoute.toString(), '_blank', 'noopener,noreferrer')
+    window.open(pdfRoute.toString(), '_blank')
   }
 
   const downloadReport = () => {

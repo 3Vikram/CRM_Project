@@ -7,7 +7,7 @@ import { Toast } from '@/sales/components/toast'
 import { fetchCompanyProfiles, type CompanyProfileRecord } from '@/sales/lib/companyProfileApi'
 import { fetchCustomerById, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
-import { fetchOPFById, type OPFRecord } from '@/sales/lib/opfApi'
+import { fetchOPFById, sendOPFPdf, type OPFRecord } from '@/sales/lib/opfApi'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 const formatDate = (value?: string | null) => {
@@ -83,6 +83,9 @@ const waitForLayout = async () => {
   await new Promise((resolve) => setTimeout(resolve, 300))
 }
 
+const parseEmails = (value: string) => value.split(/[,;\s]+/).map((item) => item.trim()).filter(Boolean)
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const isCanvasBlank = (canvas: HTMLCanvasElement) => {
   if (!canvas.width || !canvas.height) return true
   const sample = document.createElement('canvas')
@@ -113,6 +116,10 @@ export default function OPFViewPage() {
   const [quotation, setQuotation] = useState<LeadRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
+  const [isSendOpen, setIsSendOpen] = useState(false)
+  const [toEmail, setToEmail] = useState('')
+  const [ccEmail, setCcEmail] = useState('')
+  const [isSending, setIsSending] = useState(false)
 
   useEffect(() => {
     const message = (location.state as { message?: string } | null)?.message
@@ -280,6 +287,32 @@ export default function OPFViewPage() {
     </div>
   )
 
+  const handleSendPdf = async () => {
+    const toList = parseEmails(toEmail)
+    const ccList = parseEmails(ccEmail)
+    if (!toList.length) { setToast('Enter at least one email in "To".'); return }
+    if ([...toList, ...ccList].some((email) => !emailPattern.test(email))) { setToast('One or more email addresses are not valid.'); return }
+    if (!id || !printRef.current) { setToast('PDF content is not ready yet. Please try again.'); return }
+    setIsSending(true)
+    try {
+      const element = printRef.current
+      await waitForImages(element)
+      await waitForLayout()
+      const pdfDataUrl = await new Promise<string>((resolve, reject) => {
+        const worker: any = html2pdf().set(pdfOptions).from(element)
+        worker.toPdf().get('pdf').then((pdf: any) => resolve(pdf.output('datauristring') as string)).catch(reject)
+      })
+      const response = await sendOPFPdf(id, pdfDataUrl, toList.join(', '), ccList.join(', '))
+      if (!response?.success) throw new Error(response?.message || 'Failed to send PDF')
+      setToast(`PDF sent successfully to ${toList.join(', ')}${ccList.length ? ` (CC: ${ccList.join(', ')})` : ''}`)
+      setIsSendOpen(false); setToEmail(''); setCcEmail('')
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Failed to send PDF')
+    } finally {
+      setIsSending(false)
+    }
+  }
+
   const styles = (
     <style>{`
         .opf-doc-shell { width:100%; max-width:794px; margin:0 auto; padding:14px; box-sizing:border-box; background:#fff; }
@@ -363,9 +396,28 @@ export default function OPFViewPage() {
         <div className="opf-web-details">{detailRows.map(([label, value]) => <div key={label}>{label}: {value || ''}</div>)}</div>
         <div className="opf-web-actions">
           <button type="button" className="opf-web-edit" onClick={() => navigate(`/sales/opf/edit/${id}`)}><Pencil size={12} /> EDIT</button>
-          <button type="button" className="opf-web-send" onClick={() => window.open(`/sales/opf/${id}`, '_blank')}>View &amp; Send PDF</button>
+          <button type="button" className="opf-web-send" onClick={() => setIsSendOpen(true)}>Send PDF</button>
         </div>
       </div>
+      <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 0 }}>{documentNode}</div>
+      {isSendOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Send PDF">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Send PDF</h2>
+              <button type="button" onClick={() => setIsSendOpen(false)} disabled={isSending} aria-label="Close" className="rounded p-1 text-gray-500 hover:bg-gray-100">✕</button>
+            </div>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">To <span className="text-red-600">*</span></label>
+            <input type="text" value={toEmail} onChange={(event) => setToEmail(event.target.value)} placeholder="name@example.com, another@example.com" className="mb-4 w-full rounded-lg border border-[#e2e8f0] px-3 py-2.5 text-sm outline-none focus:border-[#111827]" />
+            <label className="mb-1 block text-sm font-semibold text-gray-700">CC</label>
+            <input type="text" value={ccEmail} onChange={(event) => setCcEmail(event.target.value)} placeholder="name@example.com, another@example.com" className="mb-6 w-full rounded-lg border border-[#e2e8f0] px-3 py-2.5 text-sm outline-none focus:border-[#111827]" />
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setIsSendOpen(false)} disabled={isSending} className="rounded-lg border border-[#111827] bg-white px-5 py-2.5 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8] disabled:opacity-60">Cancel</button>
+              <button type="button" onClick={() => void handleSendPdf()} disabled={isSending} className="rounded-lg bg-[#111827] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-60">{isSending ? 'Sending...' : 'Send'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && <Toast message={toast} type={toast.includes('success') ? 'success' : 'error'} onClose={() => setToast(null)} />}
     </div>
   )

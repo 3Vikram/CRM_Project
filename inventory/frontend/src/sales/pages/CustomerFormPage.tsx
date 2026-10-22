@@ -93,6 +93,7 @@ const selectStyles = {
   placeholder: (base: Record<string, unknown>) => ({ ...base, color: '#94a3b8' }),
   singleValue: (base: Record<string, unknown>) => ({ ...base, color: '#0f172a' }),
   menu: (base: Record<string, unknown>) => ({ ...base, zIndex: 50, borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid #EFECE5' }),
+  menuPortal: (base: Record<string, unknown>) => ({ ...base, zIndex: 9999 }),
   option: (base: Record<string, unknown>, state: { isFocused: boolean; isSelected: boolean }) => ({
     ...base,
     backgroundColor: state.isSelected ? '#111827' : state.isFocused ? '#F2EFE8' : '#ffffff',
@@ -156,7 +157,7 @@ export default function CustomerFormPage() {
       }))
       .sort((left, right) => left.name.localeCompare(right.name))
 
-    const allStates = State.getAllStates()
+    const allStates = State.getStatesOfCountry('IN')
       .map((state) => ({
         label: state.name,
         value: state.name,
@@ -485,9 +486,11 @@ export default function CustomerFormPage() {
               <Select
                 value={form.state ? { label: form.state, value: form.state } : null}
                 onChange={(option) => handleFieldChange('state', option?.value ?? '')}
-                options={form.billingCountry ? states.map((state) => ({ label: state.name, value: state.name, code: state.code, isoCode: state.isoCode, countryCode: state.countryCode })) : companyStateOptions}
+                options={companyStateOptions}
                 isSearchable
                 isClearable
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
                 placeholder="Search state"
                 className="text-sm"
                 classNamePrefix="crm-select"
@@ -517,6 +520,8 @@ export default function CustomerFormPage() {
                 options={countries.map((country) => ({ label: country.name, value: country.name, code: country.code, isoCode: country.isoCode }))}
                 isSearchable
                 isClearable
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
                 placeholder="Search country"
                 className="text-sm"
                 classNamePrefix="crm-select"
@@ -530,6 +535,8 @@ export default function CustomerFormPage() {
                 options={states.map((state) => ({ label: state.name, value: state.name, code: state.code, isoCode: state.isoCode }))}
                 isSearchable
                 isClearable
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
                 placeholder="Search state"
                 isDisabled={!form.billingCountry}
                 className="text-sm"
@@ -545,6 +552,8 @@ export default function CustomerFormPage() {
                 options={cities.map((city) => ({ label: city.name, value: city.name, code: city.code, isoCode: city.isoCode }))}
                 isSearchable
                 isClearable
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
                 placeholder="Search city"
                 isDisabled={!form.billingState}
                 className="text-sm"

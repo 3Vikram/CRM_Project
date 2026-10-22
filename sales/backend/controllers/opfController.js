@@ -325,10 +325,10 @@ exports.deleteOPF = async (req, res) => {
 
 exports.sendOPFPdf = async (req, res) => {
   try {
-    const { pdfData, recipientEmail } = req.body;
+    const { pdfData, recipientEmail, ccEmail } = req.body;
     if (!pdfData) return res.status(400).json({ success: false, message: 'PDF data is required' });
-    if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim())) {
-      return res.status(400).json({ success: false, message: 'Valid recipient email is required' });
+    if (!recipientEmail || !String(recipientEmail).trim()) {
+      return res.status(400).json({ success: false, message: 'At least one recipient email is required' });
     }
 
     const opf = await OPF.findById(req.params.id).lean();
@@ -340,6 +340,7 @@ exports.sendOPFPdf = async (req, res) => {
     const pdfFileName = `opf-${opfReference}.pdf`;
     const emailResult = await sendQuotationEmail({
       recipient: recipientEmail.trim(),
+      cc: ccEmail,
       subject: `Order Processing Format ${opfReference}`,
       quotationNumber: opfReference,
       pdfBuffer,
@@ -353,7 +354,7 @@ exports.sendOPFPdf = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: emailResult.message,
-      data: { opfId: req.params.id, recipient: recipientEmail, fileName: pdfFileName, messageId: emailResult.messageId },
+      data: { opfId: req.params.id, recipient: recipientEmail, cc: ccEmail || '', fileName: pdfFileName, messageId: emailResult.messageId },
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to send OPF PDF', error: error.message });

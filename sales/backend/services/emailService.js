@@ -211,11 +211,16 @@ const sendCampaignEmails = async ({
 
 const sendQuotationEmail = async ({
   recipient,
+  cc = '',
   subject,
   quotationNumber,
   pdfBuffer,
   pdfFileName,
 }) => {
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const parseEmails = (value) => String(value || '').split(/[,;\s]+/).map((item) => item.trim()).filter(Boolean);
+  const toList = parseEmails(recipient);
+  const ccList = parseEmails(cc);
   const config = getSmtpConfig();
   const smtpUser = config.auth.user;
 
@@ -236,8 +241,8 @@ const sendQuotationEmail = async ({
     };
   }
 
-  if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.trim())) {
-    const message = 'Invalid recipient email address.';
+  if (!toList.length || toList.some((email) => !emailPattern.test(email)) || ccList.some((email) => !emailPattern.test(email))) {
+    const message = 'Invalid recipient or CC email address.';
     logger.error('quotation.email.recipient.invalid', { recipient, message });
     return {
       success: false,
@@ -281,7 +286,8 @@ const sendQuotationEmail = async ({
   try {
     const mailOptions = {
       from: `CRM Quotation <${smtpUser}>`,
-      to: recipient.trim(),
+      to: toList.join(', '),
+      cc: ccList.length ? ccList.join(', ') : undefined,
       subject: subject || `Quotation ${quotationNumber}`,
       text: `Dear Sir/Madam,\n\nPlease find attached the quotation.\n\nBest regards,\nSynov IT Services`,
       html: `<p>Dear Sir/Madam,</p><p>Please find attached the quotation ${quotationNumber}.</p><p>Best regards,<br>Synov IT Services</p>`,
