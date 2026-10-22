@@ -58,8 +58,11 @@ export const setStoredAuth = (data: AuthSessionData, rememberMe: boolean) => {
   const targetStorage = rememberMe ? window.localStorage : window.sessionStorage;
   targetStorage.setItem(data.user.role === 'admin' ? ADMIN_AUTH_KEY : EMPLOYEE_AUTH_KEY, JSON.stringify(data));
 
+  const authKey = data.user.role === 'admin' ? ADMIN_AUTH_KEY : EMPLOYEE_AUTH_KEY;
   if (rememberMe) {
-    window.sessionStorage.removeItem(data.user.role === 'admin' ? ADMIN_AUTH_KEY : EMPLOYEE_AUTH_KEY);
+    window.sessionStorage.removeItem(authKey);
+  } else {
+    window.localStorage.removeItem(authKey);
   }
 };
 

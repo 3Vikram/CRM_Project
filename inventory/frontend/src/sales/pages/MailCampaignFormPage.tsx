@@ -21,8 +21,6 @@ export default function MailCampaignFormPage() {
   const [companyProfile, setCompanyProfile] = useState<CompanyProfileRecord | null>(null)
   const [image, setImage] = useState<File | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
-  const [scheduledDate, setScheduledDate] = useState('')
-  const [scheduledTime, setScheduledTime] = useState('')
   const [batchId, setBatchId] = useState('')
   const [batchName, setBatchName] = useState('')
   const [batchNumber, setBatchNumber] = useState<number | ''>('')
@@ -63,8 +61,6 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
       setCampaignBody(campaign.campaignBody || '')
       setFooter(campaign.footer || '')
       setImagePreviewUrl(resolveImageUrl(campaign.image))
-      setScheduledDate(campaign.scheduledDate || '')
-      setScheduledTime(campaign.scheduledTime || '')
       setBatchId(campaign.batchId || '')
       setBatchName(campaign.batchName || '')
       setBatchNumber(campaign.batchNumber || '')
@@ -114,10 +110,6 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
       setError('Select an employee and one of their contact batches before sending or scheduling.')
       return
     }
-    if (action === 'Scheduled' && (!scheduledDate || !scheduledTime)) {
-      setError('Scheduled date and time are required.')
-      return
-    }
     setIsSaving(true)
     setError('')
     const formData = new FormData()
@@ -130,8 +122,6 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
     formData.append('status', action)
     formData.append('createdBy', typeof window !== 'undefined' ? (window.localStorage.getItem('userName') || window.localStorage.getItem('name') || 'Admin') : 'Admin')
     formData.append('createdDate', new Date().toISOString().split('T')[0])
-    formData.append('scheduledDate', action === 'Scheduled' ? scheduledDate : '')
-    formData.append('scheduledTime', action === 'Scheduled' ? scheduledTime : '')
     formData.append('batchName', batchName)
     formData.append('batchNumber', batchNumber ? String(batchNumber) : '')
     formData.append('batchId', batchId)
@@ -235,21 +225,9 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
             <TiptapEditor value={footer} onChange={setFooter} placeholder="Write your campaign footer" companyLogoUrl={logoUrl} />
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-gray-700">Scheduled Date</span>
-              <input type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
-            </label>
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-gray-700">Scheduled Time</span>
-              <input type="time" value={scheduledTime} onChange={(event) => setScheduledTime(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
-            </label>
-          </div>
-
           <div className="flex justify-end gap-3 border-t border-[#EFECE5] pt-6">
               <button type="button" onClick={() => setIsPreviewOpen(true)} className="rounded-lg border border-[#111827] bg-white px-6 py-3 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8]">Preview</button>
             <button type="button" onClick={(event) => void saveCampaign(event, 'Draft')} disabled={isSaving} className="rounded-lg border border-[#111827] bg-white px-6 py-3 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8] disabled:opacity-60">Save Draft</button>
-            <button type="button" onClick={(event) => void saveCampaign(event, 'Scheduled')} disabled={isSaving} className="rounded-lg border border-amber-600 bg-white px-6 py-3 text-sm font-semibold text-amber-700 disabled:opacity-60">Schedule</button>
             <button type="submit" disabled={isSaving} className="rounded-lg bg-[#111827] px-6 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-60">{isSaving ? 'Submitting...' : 'Send'}</button>
           </div>
         </form>

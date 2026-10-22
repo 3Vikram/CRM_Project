@@ -68,7 +68,7 @@ export default function SalesLoginPage() {
         setError(response.data?.message || 'Invalid email or password')
         return
       }
-      setStoredAuth({ token: response.data.token, user: response.data.user }, true)
+      setStoredAuth({ token: response.data.token, user: response.data.user }, false)
       localStorage.setItem(SALES_AUTH_KEY, 'true')
       navigate(firstAccessiblePath(response.data.user?.permissions), { replace: true })
     } catch (loginError) {
