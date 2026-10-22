@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import synovLogo from '../assets.png'
@@ -45,6 +46,7 @@ export default function SalesLoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -111,16 +113,27 @@ export default function SalesLoginPage() {
 
           <div>
             <label htmlFor="sales-password" className="mb-2 block text-sm font-medium text-[#1F1D1A]">Password</label>
-            <input
-              id="sales-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-[#E7E3DA] bg-[#F8F7F3] px-3 py-3 text-sm text-[#1F1D1A] outline-none transition focus:border-[#B8B0A0] focus:ring-2 focus:ring-[#E7E3DA]"
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              required
-            />
+            <div className="relative">
+              <input
+                id="sales-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-lg border border-[#E7E3DA] bg-[#F8F7F3] px-3 py-3 pr-11 text-sm text-[#1F1D1A] outline-none transition focus:border-[#B8B0A0] focus:ring-2 focus:ring-[#E7E3DA]"
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-[#6B6657] hover:text-[#1F1D1A] focus:outline-none"
+              >
+                {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+              </button>
+            </div>
           </div>
 
           {error ? (
