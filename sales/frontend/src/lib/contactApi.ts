@@ -32,6 +32,11 @@ async function requestWithFallback(method: 'get' | 'post' | 'put' | 'delete', ur
       return response;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
+        const responseData = error.response.data as { message?: unknown; error?: unknown } | undefined;
+        const responseMessage = [responseData?.message, responseData?.error].find(
+          (message): message is string => typeof message === 'string' && Boolean(message.trim())
+        );
+        if (responseMessage) throw new Error(responseMessage);
         throw error;
       }
       lastError = error;

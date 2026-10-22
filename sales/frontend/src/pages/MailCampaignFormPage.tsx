@@ -90,7 +90,10 @@ export default function MailCampaignFormPage() {
         setEmployeeId(session.user.id)
         setEmployeeName(ownGroup?.employeeName || session.user.name)
       }
-    }).catch(() => setEmployeeGroups([]))
+    }).catch((loadError) => {
+      setEmployeeGroups([])
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load employee and batch options.')
+    })
   }, [])
 
   const handleImageChange = (file: File | null) => {

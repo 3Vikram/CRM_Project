@@ -1,9 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   INVENTORY_SESSION_KEY,
   signInToInventory,
-  verifyInventorySession,
 } from '@/lib/inventoryAuth'
 
 interface LoginLocationState {
@@ -22,26 +21,6 @@ export default function InventoryLoginPage() {
     requestedPath?.startsWith('/inventory/') && requestedPath !== '/inventory/login'
       ? requestedPath
       : '/inventory'
-
-  useEffect(() => {
-    const token = localStorage.getItem(INVENTORY_SESSION_KEY)
-    if (!token) return
-
-    let cancelled = false
-    verifyInventorySession(token)
-      .then((isValid) => {
-        if (cancelled) return
-        if (isValid) navigate(destination, { replace: true })
-        else localStorage.removeItem(INVENTORY_SESSION_KEY)
-      })
-      .catch(() => {
-        if (!cancelled) localStorage.removeItem(INVENTORY_SESSION_KEY)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [destination, navigate])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

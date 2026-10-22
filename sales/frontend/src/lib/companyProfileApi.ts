@@ -1,7 +1,7 @@
 import { getCachedResponse } from './apiCache';
 import { getAuthHeaders } from './apiAuth';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/+$/, '');
+const API_BASE_URL = '/api';
 
 async function readApiError(response: Response): Promise<string> {
   const text = await response.clone().text();

@@ -2,7 +2,7 @@ import axios from 'axios'
 import { getAuthHeaders } from './apiAuth'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/mail-campaigns` : 'http://localhost:5001/api/mail-campaigns',
+  baseURL: '/api/mail-campaigns',
 })
 
 api.interceptors.request.use((config) => {
@@ -16,6 +16,9 @@ api.interceptors.request.use((config) => {
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error)) {
     const response = error.response?.data
+    if (typeof response === 'string' && response.trimStart().startsWith('<')) {
+      return `The campaign API returned HTML instead of JSON (HTTP ${error.response?.status ?? 'unknown'}). Check the API route and Vite proxy configuration.`
+    }
     if (response?.message) {
       const context = [response.errorCode || response.code, response.field].filter(Boolean).join(' / ')
       const validation = response.errors && typeof response.errors === 'object'
@@ -177,10 +180,14 @@ export const fetchRecipientCounts = async () => {
 }
 
 export const fetchRecipientData = async (modules?: string[]) => {
-  const { data } = await api.get('/recipient-data', {
-    params: { modules: modules?.join(',') || '' },
-  })
-  return data
+  try {
+    const { data } = await api.get('/recipient-data', {
+      params: { modules: modules?.join(',') || '' },
+    })
+    return data
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to load campaign recipient options.'))
+  }
 }
 
 export const sendCampaign = async (id: string, recipients?: string[]) => {

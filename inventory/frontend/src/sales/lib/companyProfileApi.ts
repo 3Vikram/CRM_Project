@@ -1,7 +1,7 @@
 import { getCachedResponse } from './apiCache';
 import { getAuthHeaders } from './apiAuth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = '/api';
 
 export interface CompanyProfileRecord {
   _id: string;

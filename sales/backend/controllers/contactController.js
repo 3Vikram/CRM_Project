@@ -178,8 +178,7 @@ exports.getContacts = async (req, res) => {
 };
 
 const buildEmployeeGroups = async () => {
-  const [employees, contactOwners, batchCounts, batches] = await Promise.all([
-    Employee.find({}).select('employeeName fullName email').lean(),
+  const [contactOwners, batchCounts, batches] = await Promise.all([
     Contact.aggregate([
       { $match: { employeeId: { $nin: ['', null] } } },
       { $group: {
@@ -228,15 +227,6 @@ const buildEmployeeGroups = async () => {
     return owner;
   };
 
-  employees.forEach((employee) => {
-    const employeeId = String(employee._id);
-    addOwner({
-      employeeId,
-      employeeEmail: employee.email,
-      employeeName: employee.employeeName || employee.fullName || employeeId,
-    }, true);
-  });
-
   contactOwners.forEach(({ _id, employeeEmail, employeeName, count }) => {
     const owner = addOwner({ employeeId: String(_id), employeeEmail, employeeName });
     if (owner) owner.customerCount += count;
@@ -258,6 +248,22 @@ const buildEmployeeGroups = async () => {
       fileName: batch.fileName,
       createdDate: batch.createdDate,
     });
+  });
+
+  const employeeIds = Array.from(ownersById.keys()).filter((id) => /^[a-f\d]{24}$/i.test(id));
+  const employeeEmails = Array.from(ownersByEmail.keys());
+  const employeeFilters = [];
+  if (employeeIds.length) employeeFilters.push({ _id: { $in: employeeIds } });
+  if (employeeEmails.length) employeeFilters.push({ email: { $in: employeeEmails } });
+  const employees = employeeFilters.length
+    ? await Employee.find({ $or: employeeFilters }).select('employeeName fullName email').lean()
+    : [];
+
+  employees.forEach((employee) => {
+    const owner = ownersById.get(String(employee._id)) || ownersByEmail.get(String(employee.email || '').trim().toLowerCase());
+    if (!owner) return;
+    owner.employeeEmail = String(employee.email || owner.employeeEmail).trim().toLowerCase();
+    owner.employeeName = employee.employeeName || employee.fullName || owner.employeeName;
   });
 
   return Array.from(groups.values())

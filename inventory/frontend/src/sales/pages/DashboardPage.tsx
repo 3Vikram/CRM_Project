@@ -387,6 +387,7 @@ export default function DashboardPage() {
     })
 
     const maxValue = Math.max(...trendData.flatMap((item) => [item.revenue, item.margin]), 1)
+    const minValue = Math.min(...trendData.flatMap((item) => [item.revenue, item.margin]), 0)
 
     return {
       activeCustomers,
@@ -408,6 +409,7 @@ export default function DashboardPage() {
       previousMargin,
       trendData,
       maxValue,
+      minValue,
     }
   }, [quotationCount, selectedMonth, selectedScope, selectedYearNumber])
 
@@ -432,14 +434,18 @@ export default function DashboardPage() {
   const chartWidth = 760
   const chartHeight = 320
   const padding = 28
+  const plotBottom = chartHeight - padding
+  const plotHeight = chartHeight - padding * 2
+  const valueRange = (dataset.maxValue - dataset.minValue) || 1
+  const scaleY = (value: number) => plotBottom - ((value - dataset.minValue) / valueRange) * plotHeight
+  const zeroY = scaleY(0)
   const chartSteps = dataset.trendData.length - 1
 
   const buildLinePath = (key: 'revenue' | 'margin') => {
     return dataset.trendData
       .map((point, index) => {
         const currentX = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
-        const yMax = dataset.maxValue || 1
-        const currentY = chartHeight - padding - (point[key] / yMax) * (chartHeight - padding * 2)
+        const currentY = scaleY(point[key])
         return `${index === 0 ? 'M' : 'L'} ${currentX} ${currentY}`
       })
       .join(' ')
@@ -581,13 +587,16 @@ export default function DashboardPage() {
                           )
                         })}
 
+                        {dataset.minValue < 0 ? (
+                          <line x1={padding} x2={chartWidth - padding} y1={zeroY} y2={zeroY} stroke="#9CA3AF" strokeWidth="1" />
+                        ) : null}
                         <path d={revenuePath} fill="none" stroke="#0B4DDA" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                         <path d={marginPath} fill="none" stroke="#4B1D95" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 
                         {dataset.trendData.map((point, index) => {
                           const x = padding + (index / Math.max(chartSteps, 1)) * (chartWidth - padding * 2)
-                          const revenueY = chartHeight - padding - (point.revenue / dataset.maxValue) * (chartHeight - padding * 2)
-                          const marginY = chartHeight - padding - (point.margin / dataset.maxValue) * (chartHeight - padding * 2)
+                          const revenueY = scaleY(point.revenue)
+                          const marginY = scaleY(point.margin)
                           return (
                             <g key={`${point.monthKey}-dots`}>
                               <circle cx={x} cy={revenueY} r="3" fill="#0B4DDA" />

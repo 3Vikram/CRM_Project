@@ -22,6 +22,7 @@ export default function ContactsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [openContactId, setOpenContactId] = useState<string | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
@@ -43,8 +44,10 @@ export default function ContactsPage() {
     try {
       const response = await fetchContacts({ page: 1, limit: 1000, employeeId: selectedEmployeeId || undefined, batchId: batchId || undefined })
       setAllContacts(response.data || [])
+      setLoadError(null)
     } catch (error) {
-      setFeedbackMessage(error instanceof Error ? error.message : 'Unable to load contacts.')
+      setAllContacts([])
+      setLoadError(error instanceof Error ? error.message : 'Unable to load contacts.')
     } finally {
       setIsLoading(false)
     }
@@ -174,6 +177,12 @@ export default function ContactsPage() {
         </div>
       ) : null}
 
+      {loadError ? (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Unable to load contacts: {loadError}
+        </div>
+      ) : null}
+
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
         <div className="overflow-hidden rounded-lg border border-[#EFECE5]">
           {isLoading ? (
@@ -216,7 +225,9 @@ export default function ContactsPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-16 text-center text-[18px] text-gray-500 border-r border-[#D1D5DB]">No contacts found.</td>
+                      <td colSpan={7} className="px-6 py-16 text-center text-[18px] text-gray-500 border-r border-[#D1D5DB]">
+                        {loadError ? 'Contacts could not be loaded.' : 'No contacts found.'}
+                      </td>
                     </tr>
                   )}
                 </tbody>
