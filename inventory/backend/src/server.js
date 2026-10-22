@@ -1,61 +1,54 @@
-import dns from 'dns';
-dns.setServers(['8.8.8.8']);
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import path from 'path';
 import dotenv from 'dotenv';
-import inventoryRoutes from './routes/inventory.js';
-import inventoryAuthRoutes, { requireInventoryAuth } from './routes/inventoryAuth.js';
-import inventoryEmployeeRoutes from './routes/inventoryEmployees.js';
-import assetRoutes from './routes/asset.js';
-import productRoutes from './routes/products.js';
-import deliveryChallanRoutes from './routes/deliveryChallans.js';
-import returnedChallanRoutes from './routes/returnedChallans.js';
-import dailyEmailRoutes from './routes/dailyEmail.js';
-import accessoriesRoutes from './routes/accessories.js';
-import { DailyEmailSettings } from './models/DailyEmailSettings.js';
-import { EmailHistory } from './models/EmailHistory.js';
-import { initializeEmailService } from './services/emailService.js';
-import { startEmailScheduler } from './services/emailScheduler.js';
+import { fileURLToPath } from 'node:url';
 
-dotenv.config();
+const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(serverDirectory, '../.env') });
+
+const MONGO_URI = process.env.MONGO_URI?.trim();
+if (!MONGO_URI) {
+  console.error('[Inventory] Missing required MONGO_URI in inventory/backend/.env');
+  process.exit(1);
+}
+
+const [
+  { default: inventoryRoutes },
+  { default: inventoryAuthRoutes, requireInventoryAuth },
+  { default: inventoryEmployeeRoutes },
+  { default: assetRoutes },
+  { default: productRoutes },
+  { default: deliveryChallanRoutes },
+  { default: returnedChallanRoutes },
+  { default: dailyEmailRoutes },
+  { default: accessoriesRoutes },
+  { initializeEmailService },
+  { startEmailScheduler, stopEmailScheduler },
+] = await Promise.all([
+  import('./routes/inventory.js'),
+  import('./routes/inventoryAuth.js'),
+  import('./routes/inventoryEmployees.js'),
+  import('./routes/asset.js'),
+  import('./routes/products.js'),
+  import('./routes/deliveryChallans.js'),
+  import('./routes/returnedChallans.js'),
+  import('./routes/dailyEmail.js'),
+  import('./routes/accessories.js'),
+  import('./services/emailService.js'),
+  import('./services/emailScheduler.js'),
+]);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRY_MAX_DELAY_MS = 30_000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://0.0.0.0:27017/3vikram-crm';
-
-mongoose
-  .connect(MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log('✓ Connected to MongoDB');
-  })
-  .catch((err) => {
-    console.error('✗ MongoDB connection error:', err);
-    process.exit(1);
-  });
-
-// Initialize email service
-const emailServiceReady = initializeEmailService();
-
-// Start email scheduler if email service is configured
-if (emailServiceReady) {
-  startEmailScheduler().catch((err) => {
-    console.error('✗ Error starting email scheduler:', err.message);
-  });
-}
-
-// Routes
 app.use('/api/inventory/auth', inventoryAuthRoutes);
 app.use('/api/inventory', requireInventoryAuth);
 app.use('/api/inventory/employees', inventoryEmployeeRoutes);
@@ -73,12 +66,122 @@ app.use('/api/returned-challans', returnedChallanRoutes);
 app.use('/api/daily-email', dailyEmailRoutes);
 app.use('/api/accessories', accessoriesRoutes);
 
-// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`✓ Server running on http://0.0.0.0:${PORT}`);
+let isShuttingDown = false;
+let httpServer = null;
+let retryTimer = null;
+let resolveRetry = null;
+
+const sanitizeMongoError = (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/mongodb(?:\+srv)?:\/\/[^\s"'`]+/gi, '[MongoDB URI]')
+    .replace(/(password|passwd|pwd)\s*[:=]\s*[^,\s;]+/gi, '$1=[REDACTED]');
+};
+
+mongoose.connection.on('disconnected', () => {
+  if (!isShuttingDown) console.warn('[Inventory] MongoDB disconnected; waiting for driver reconnection.');
+});
+mongoose.connection.on('reconnected', () => {
+  if (!isShuttingDown) console.info('[Inventory] MongoDB reconnected.');
+});
+mongoose.connection.on('error', (error) => {
+  if (!isShuttingDown) console.error('[Inventory] MongoDB connection event:', sanitizeMongoError(error));
+});
+
+const waitForRetry = (delay) => new Promise((resolve) => {
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    resolveRetry = null;
+    resolve();
+  }, delay);
+  resolveRetry = () => {
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    resolveRetry = null;
+    resolve();
+  };
+});
+
+const cancelRetry = () => {
+  const resolve = resolveRetry;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  resolveRetry = null;
+  resolve?.();
+};
+
+const retryUntilReady = async (label, operation) => {
+  let attempt = 0;
+  while (!isShuttingDown) {
+    attempt += 1;
+    console.info(`[Inventory] ${label} attempt ${attempt}.`);
+    try {
+      return await operation();
+    } catch (error) {
+      const delay = Math.min(RETRY_BASE_DELAY_MS * (2 ** Math.min(attempt - 1, 5)), RETRY_MAX_DELAY_MS);
+      console.error(`[Inventory] ${label} failed: ${sanitizeMongoError(error)}. Retrying in ${delay}ms.`);
+      await waitForRetry(delay);
+    }
+  }
+  return null;
+};
+
+const shutdown = async (reason, exitCode = 0) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  process.exitCode = exitCode;
+  console.info(`[Inventory] Shutting down (${reason}).`);
+  cancelRetry();
+  stopEmailScheduler();
+
+  try {
+    if (httpServer?.listening) {
+      await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
+    }
+  } catch (error) {
+    console.error('[Inventory] HTTP server shutdown error:', error.message);
+    process.exitCode = 1;
+  }
+  try {
+    await mongoose.disconnect();
+  } catch (error) {
+    console.error('[Inventory] MongoDB shutdown error:', sanitizeMongoError(error));
+    process.exitCode = 1;
+  }
+  console.info('[Inventory] Shutdown complete.');
+};
+
+process.once('SIGINT', () => { void shutdown('SIGINT'); });
+process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+
+const start = async () => {
+  await retryUntilReady('MongoDB startup connection', () => mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 10_000,
+    connectTimeoutMS: 10_000,
+  }));
+  if (isShuttingDown) return;
+  console.info('[Inventory] MongoDB connection established.');
+
+  const emailServiceReady = initializeEmailService();
+  if (emailServiceReady) {
+    await retryUntilReady('Daily email scheduler initialization', startEmailScheduler);
+    if (isShuttingDown) return;
+  }
+
+  httpServer = app.listen(PORT, () => {
+    console.log(`✓ Server running on http://0.0.0.0:${PORT}`);
+  });
+  httpServer.on('error', (error) => {
+    console.error('[Inventory] HTTP server error:', error.message);
+    void shutdown('HTTP server error', 1);
+  });
+};
+
+void start().catch((error) => {
+  console.error('[Inventory] Startup failed:', sanitizeMongoError(error));
+  void shutdown('startup failure', 1);
 });

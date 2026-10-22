@@ -13,28 +13,26 @@ const getIstDateKey = (date = new Date()) => date.toLocaleDateString('en-CA', {
 })
 
 export const startEmailScheduler = async () => {
-  try {
-    const settings = await DailyEmailSettings.findOne()
+  if (scheduledJob) return
 
-    if (!settings) {
-      console.log('ℹ No email settings configured. Daily email scheduler not started.')
-      return
-    }
+  const settings = await DailyEmailSettings.findOne()
 
-    const dailyEnabled =
-      settings.dailyReportEnabled ??
-      settings.morningReportEnabled ??
-      true
+  if (!settings) {
+    console.log('ℹ No email settings configured. Daily email scheduler not started.')
+    return
+  }
 
-    if (dailyEnabled) {
-      scheduledJob = cron.schedule('0 11 * * *', async () => {
-        await runDailyEmailJob()
-      }, { timezone: 'Asia/Kolkata' })
+  const dailyEnabled =
+    settings.dailyReportEnabled ??
+    settings.morningReportEnabled ??
+    true
 
-      console.log('✓ Daily email scheduler started')
-    }
-  } catch (error) {
-    console.error('✗ Error starting daily email scheduler:', error.message)
+  if (dailyEnabled) {
+    scheduledJob = cron.schedule('0 11 * * *', async () => {
+      await runDailyEmailJob()
+    }, { timezone: 'Asia/Kolkata' })
+
+    console.log('✓ Daily email scheduler started')
   }
 }
 
