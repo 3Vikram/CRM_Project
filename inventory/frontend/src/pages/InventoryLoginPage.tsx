@@ -1,7 +1,11 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  INVENTORY_SESSION_KEY,
+  clearInventorySession,
+  getInventorySession,
+  getInventorySessionToken,
+  setInventorySessionToken,
   signInToInventory,
 } from '@/lib/inventoryAuth'
 
@@ -14,6 +18,7 @@ export default function InventoryLoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const requestedPath = (location.state as LoginLocationState | null)?.from
@@ -22,6 +27,29 @@ export default function InventoryLoginPage() {
       ? requestedPath
       : '/inventory'
 
+  useEffect(() => {
+    const token = getInventorySessionToken()
+    if (!token) return
+
+    let cancelled = false
+    getInventorySession(token)
+      .then((user) => {
+        if (cancelled) return
+        if (getInventorySessionToken() !== token) return
+        if (user) navigate(destination, { replace: true })
+        else clearInventorySession()
+      })
+      .catch(() => {
+        if (!cancelled && getInventorySessionToken() === token) {
+          clearInventorySession()
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [destination, navigate])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
@@ -29,7 +57,12 @@ export default function InventoryLoginPage() {
 
     try {
       const token = await signInToInventory(email, password)
-      localStorage.setItem(INVENTORY_SESSION_KEY, token)
+      setInventorySessionToken(token)
+      const user = await getInventorySession(token)
+      if (!user) {
+        clearInventorySession()
+        throw new Error('Your credentials were accepted, but the Inventory session could not be verified. Please try again.')
+      }
       navigate(destination, { replace: true })
     } catch (signInError) {
       setError(
@@ -78,16 +111,27 @@ export default function InventoryLoginPage() {
             <label className="mb-2 block text-sm font-medium text-[#06283D]" htmlFor="password">
               Password
             </label>
-            <input
-              autoComplete="current-password"
-              className="w-full rounded-xl border border-[#D7DEE8] bg-white px-4 py-3 text-sm text-[#06283D] outline-none transition focus:border-[#0B3A53] focus:ring-2 focus:ring-[#0B3A53]/15"
-              id="password"
-              name="password"
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
+            <div className="relative">
+              <input
+                autoComplete="current-password"
+                className="w-full rounded-xl border border-[#D7DEE8] bg-white px-4 py-3 pr-12 text-sm text-[#06283D] outline-none transition focus:border-[#0B3A53] focus:ring-2 focus:ring-[#0B3A53]/15"
+                id="password"
+                name="password"
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type={isPasswordVisible ? 'text' : 'password'}
+                value={password}
+              />
+              <button
+                aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                aria-pressed={isPasswordVisible}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-[#5F6B76] transition hover:text-[#06283D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B3A53]"
+                onClick={() => setIsPasswordVisible((visible) => !visible)}
+                type="button"
+              >
+                {isPasswordVisible ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
+              </button>
+            </div>
           </div>
 
           {error && (

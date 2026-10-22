@@ -7,7 +7,13 @@ import { Modal } from '@/sales/components/modal'
 import { Toast } from '@/sales/components/toast'
 import { deleteEmployee, fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
-import { INVENTORY_SESSION_KEY, signInToInventory, verifyInventorySession } from '@/lib/inventoryAuth'
+import {
+  clearInventorySession,
+  getInventorySessionToken,
+  setInventorySessionToken,
+  signInToInventory,
+  verifyInventorySession,
+} from '@/lib/inventoryAuth'
 
 const tableCellClass = 'px-3 py-3 border-r border-[#E5E7EB] align-top whitespace-nowrap'
 
@@ -60,7 +66,7 @@ function InventoryEmployeesPanel() {
         throw new Error('This Inventory account cannot manage employees. Sign in with the Inventory administrator credentials.')
       }
       if (response.status === 401) {
-        localStorage.removeItem(INVENTORY_SESSION_KEY)
+        clearInventorySession()
         setToken('')
       }
       if (!response.ok) throw new Error(result.error || 'Unable to load Inventory employees.')
@@ -73,7 +79,7 @@ function InventoryEmployeesPanel() {
   }
 
   useEffect(() => {
-    const storedToken = localStorage.getItem(INVENTORY_SESSION_KEY)
+    const storedToken = getInventorySessionToken()
     if (!storedToken) {
       setIsCheckingSession(false)
       return
@@ -84,14 +90,14 @@ function InventoryEmployeesPanel() {
       .then((isValid) => {
         if (cancelled) return
         if (!isValid) {
-          localStorage.removeItem(INVENTORY_SESSION_KEY)
+          clearInventorySession()
           return
         }
         setToken(storedToken)
         void loadEmployees(storedToken)
       })
       .catch(() => {
-        if (!cancelled) localStorage.removeItem(INVENTORY_SESSION_KEY)
+        if (!cancelled) clearInventorySession()
       })
       .finally(() => {
         if (!cancelled) setIsCheckingSession(false)
@@ -108,7 +114,7 @@ function InventoryEmployeesPanel() {
     setMessage('')
     try {
       const sessionToken = await signInToInventory(loginEmail, loginPassword)
-      localStorage.setItem(INVENTORY_SESSION_KEY, sessionToken)
+      setInventorySessionToken(sessionToken)
       setToken(sessionToken)
       setLoginPassword('')
       await loadEmployees(sessionToken)
@@ -170,7 +176,7 @@ function InventoryEmployeesPanel() {
   }
 
   const handleSignOut = () => {
-    localStorage.removeItem(INVENTORY_SESSION_KEY)
+    clearInventorySession()
     setToken('')
     setEmployees([])
     resetForm()

@@ -116,11 +116,23 @@ const AssetSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    supplierId: {
+      type: String,
+      default: '',
+    },
+    supplierName: {
+      type: String,
+      default: '',
+    },
     invoiceNumber: {
       type: String,
       default: '',
     },
     customerName: {
+      type: String,
+      default: '',
+    },
+    customerId: {
       type: String,
       default: '',
     },

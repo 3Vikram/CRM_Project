@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -23,7 +24,7 @@ import {
 } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
 import { formatCurrency } from '@/lib/utils'
-import { createOutward, updateAsset, type Asset, triggerInventoryRefresh } from '@/hooks/useAssets'
+import { createOutward, fetchInventoryCustomers, updateAsset, type Asset, type InventoryCustomerOption, triggerInventoryRefresh } from '@/hooks/useAssets'
 
 const outwardTypes = ['Rent', 'Sell'] as const
 
@@ -39,6 +40,10 @@ export default function OutwardEntry() {
   console.log('Received Asset:', asset)
 
   const [customerName, setCustomerName] = useState('')
+  const [customerId, setCustomerId] = useState('')
+  const [customers, setCustomers] = useState<InventoryCustomerOption[]>([])
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [customersError, setCustomersError] = useState('')
   const [outwardType, setOutwardType] = useState<OutwardType>('Rent')
   const [quantity, setQuantity] = useState('1')
   const [rate, setRate] = useState<number>(asset?.price ?? 0)
@@ -54,6 +59,27 @@ export default function OutwardEntry() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setCustomersLoading(true)
+    setCustomersError('')
+
+    fetchInventoryCustomers()
+      .then((options) => {
+        if (!cancelled) setCustomers(options)
+      })
+      .catch((error) => {
+        if (!cancelled) setCustomersError(error instanceof Error ? error.message : 'Unable to load customer names.')
+      })
+      .finally(() => {
+        if (!cancelled) setCustomersLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!asset) return
@@ -126,6 +152,7 @@ export default function OutwardEntry() {
     const outwardData = {
       assetId: asset.id,
       assetName: asset.productName || asset.name,
+      customerId,
       customerName: customerName.trim(),
       outwardType,
       quantity: Number(quantity),
@@ -149,6 +176,8 @@ export default function OutwardEntry() {
       if (isClosingExistingRental) {
         const updatePayload: Partial<Asset> = {
           status: 'available',
+          customerId,
+          customerName: customerName.trim(),
           rentEndDate: rentEndDate,
           rentStartDate: rentStartDate,
           productSerialNumber: asset.productSerialNumber || asset.serialNumber,
@@ -237,14 +266,40 @@ export default function OutwardEntry() {
               <Box sx={{ display: 'grid', gap: '14px' }}>
                 <Box>
                   <Typography sx={{ fontSize: 14, fontWeight: 500, color: '#1F2937', mb: '6px' }}>Customer Name <Box component="span" sx={{ color: 'red' }}>*</Box></Typography>
-                  <TextField
-                    variant="outlined"
-                    value={customerName}
-                    onChange={(event) => setCustomerName(event.target.value)}
+                  <Autocomplete
+                    options={customers}
+                    value={customers.find((customer) => customer.id === customerId) || null}
+                    onChange={(_, customer) => {
+                      setCustomerId(customer?.id || '')
+                      setCustomerName(customer?.customerName || '')
+                    }}
+                    getOptionLabel={(customer) => customer.customerName}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderOption={(props, customer) => (
+                      <li {...props}>
+                        <Box sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4 }}>
+                          {customer.customerName}
+                        </Box>
+                      </li>
+                    )}
+                    loading={customersLoading}
+                    loadingText="Loading customers..."
+                    noOptionsText={customersError ? 'Unable to load customers' : 'No customers available'}
                     fullWidth
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    placeholder=""
-                    sx={{ '& .MuiOutlinedInput-root': { height: 40, borderRadius: 1, backgroundColor: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' }, input: { padding: '8px 10px', fontSize: 14, color: '#000' } }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder={customersLoading ? 'Loading customers...' : 'Select a customer'}
+                        error={Boolean(customersError)}
+                        helperText={customersError || (!customersLoading && customers.length === 0 ? 'No customers are saved in Sales yet.' : '')}
+                        sx={{
+                          '& .MuiOutlinedInput-root': { minHeight: 40, height: 'auto', borderRadius: 1, backgroundColor: '#fff', flexWrap: 'nowrap' },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' },
+                          '& .MuiAutocomplete-input': { minWidth: 0, padding: '8px 10px !important', fontSize: 14, color: '#000', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' },
+                          '& .MuiFormHelperText-root': { mx: 0 },
+                        }}
+                      />
+                    )}
                   />
                 </Box>
 

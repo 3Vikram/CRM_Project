@@ -29,6 +29,7 @@ import {
 import { DataGrid, GridFooterContainer, GridPagination, type GridColDef, type GridRenderCellParams, type GridRowSelectionModel } from '@mui/x-data-grid'
 import { Add, Delete, Download, Edit, KeyboardReturn, Visibility, WarningAmber } from '@mui/icons-material'
 import { formatCurrency } from '@/lib/utils'
+import { getInventorySessionToken } from '@/lib/inventoryAuth'
 import { ActionMenu } from '@/components/ActionMenu'
 import { SearchableDropdown } from '@/components/ui/searchable-dropdown'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
@@ -458,7 +459,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
           id: asset.id,
           assetId: asset.assetId || '-',
           purchaseDate,
-          supplierName: asset.vendorName || '-',
+          supplierName: asset.supplierName || asset.vendorName || '-',
           productName: asset.productName || asset.name || '-',
           productDescription: asset.productDescription || asset.description || '-',
           serialNumber: asset.serialNumber || asset.productSerialNumber || '-',
@@ -1676,7 +1677,8 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
 function AssetDialog({ open, title, asset, mode = 'single', productCatalog, productModelOptions, onClose, onSaved }: { open: boolean; title: string; asset: Asset | null; mode?: 'single' | 'bulk'; productCatalog: ProductCatalogItem[]; productModelOptions: string[]; onClose: () => void; onSaved: (message?: string) => void }) {
   const initialAddForm = {
     invoiceDate: new Date().toISOString().split('T')[0],
-    vendorName: '',
+    supplierId: '',
+    supplierName: '',
     productDescription: '',
     price: '',
     productModel: '',
@@ -1699,6 +1701,84 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [supplierOptions, setSupplierOptions] = useState<Array<{ id: string; supplierName: string }>>([])
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
+  const [suppliersError, setSuppliersError] = useState('')
+  const isAddMode = !asset
+
+  useEffect(() => {
+    if (!open || !isAddMode) return
+
+    let cancelled = false
+    setSuppliersLoading(true)
+    setSuppliersError('')
+    const token = getInventorySessionToken()
+    if (!token) {
+      setSuppliersError('Your Inventory session has expired. Sign in again to load suppliers.')
+      setSuppliersLoading(false)
+      return
+    }
+
+    fetch('/api/suppliers/inventory-options', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        const responseBody = await response.text()
+        let result: { data?: unknown; message?: string; error?: string }
+        try {
+          result = responseBody ? JSON.parse(responseBody) : {}
+        } catch {
+          console.error('Inventory supplier options returned a non-JSON response.', {
+            path: '/api/suppliers/inventory-options',
+            method: 'GET',
+            authorizationHeaderPresent: true,
+            credentials: 'same-origin',
+            status: response.status,
+            statusText: response.statusText,
+          })
+          throw new Error(`Unable to load suppliers (HTTP ${response.status}).`)
+        }
+        if (!response.ok) {
+          const message = result.message || result.error || 'Supplier request was rejected.'
+          console.error('Inventory supplier options request failed.', {
+            path: '/api/suppliers/inventory-options',
+            method: 'GET',
+            authorizationHeaderPresent: true,
+            credentials: 'same-origin',
+            status: response.status,
+            statusText: response.statusText,
+            message,
+          })
+          throw new Error(`${message} (HTTP ${response.status})`)
+        }
+        if (!Array.isArray(result.data)) {
+          console.error('Inventory supplier options response is missing the data list.', {
+            status: response.status,
+          })
+          throw new Error('Supplier list response was invalid.')
+        }
+        return result.data as Array<{ id: string; supplierName: string }>
+      })
+      .then((suppliers) => {
+        if (!cancelled) {
+          setSupplierOptions(suppliers)
+          if (suppliers.length === 0) console.info('Inventory supplier options returned no saved suppliers.')
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Unable to load Inventory supplier options.', error)
+          setSuppliersError(error instanceof Error ? error.message : 'Unable to load supplier names.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSuppliersLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, isAddMode])
 
   const handleProductSelection = (productName: string | null) => {
     const selectedProduct = productCatalog.find((product: ProductCatalogItem) => product.productName === productName)
@@ -1710,7 +1790,6 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
       productModel: selectedProduct ? selectedProduct.productModel || prev.productModel : prev.productModel,
       hsnSac: selectedProduct ? selectedProduct.hsnSac || prev.hsnSac : prev.hsnSac,
       gst: selectedProduct ? selectedProduct.gst || prev.gst : prev.gst,
-      vendorName: selectedProduct ? selectedProduct.vendorName || prev.vendorName : prev.vendorName,
       price: selectedProduct && (!prev.price || prev.price === '') ? String(selectedProduct.defaultPrice || selectedProduct.price || '') : prev.price,
     }))
   }
@@ -1725,7 +1804,6 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
       productDescription: selectedProduct ? selectedProduct.description || prev.productDescription : prev.productDescription,
       hsnSac: selectedProduct ? selectedProduct.hsnSac || prev.hsnSac : prev.hsnSac,
       gst: selectedProduct ? selectedProduct.gst || prev.gst : prev.gst,
-      vendorName: selectedProduct ? selectedProduct.vendorName || prev.vendorName : prev.vendorName,
       price: selectedProduct && (!prev.price || prev.price === '') ? String(selectedProduct.defaultPrice || selectedProduct.price || '') : prev.price,
     }))
   }
@@ -1734,7 +1812,8 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
     if (asset) {
       setForm({
         invoiceDate: asset.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : '',
-        vendorName: asset.vendorName || '',
+        supplierId: asset.supplierId || '',
+        supplierName: asset.supplierName || asset.vendorName || '',
         productDescription: asset.productDescription || asset.description || '',
         price: asset.price ? String(asset.price) : '',
         productModel: asset.productModel || '',
@@ -1759,7 +1838,6 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
     setSubmitError(null)
   }, [asset, mode])
 
-  const isAddMode = !asset
   const isBulkMode = isAddMode && mode === 'bulk'
   const parseSerialNumbers = (value?: string | null) => (value ?? '').split(',').map((serial) => serial.trim()).filter(Boolean)
   const serialNumbers = parseSerialNumbers(form.serialNumbers)
@@ -1770,7 +1848,7 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
     if (isAddMode) {
       if (!form.invoiceDate) nextErrors.invoiceDate = 'Invoice Date is required'
       if (!form.invoiceNumber.trim()) nextErrors.invoiceNumber = 'Invoice Number is required'
-      if (!form.vendorName.trim()) nextErrors.vendorName = 'Vendor Name is required'
+      if (!form.supplierName.trim()) nextErrors.supplierName = 'Supplier Name is required'
       if (!form.productName.trim()) nextErrors.productName = 'Product Name is required'
       if (!form.quantity || Number(form.quantity) <= 0) nextErrors.quantity = 'Quantity must be greater than 0'
       if (!form.inwardType.trim()) nextErrors.inwardType = 'Inward Type is required'
@@ -1867,7 +1945,9 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
             warrantyExpiry: form.warrantyDate || undefined,
             inwardDate: form.invoiceDate || undefined,
             invoiceNumber: form.invoiceNumber,
-            vendorName: form.vendorName,
+            supplierId: form.supplierId,
+            supplierName: form.supplierName,
+            vendorName: form.supplierName,
             inwardType: form.inwardType,
             quantity: Number(form.quantity) || 1,
           })
@@ -1876,7 +1956,9 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
         const result = await createBulkAssets({
           invoiceDate: form.invoiceDate,
           invoiceNumber: form.invoiceNumber,
-          vendorName: form.vendorName,
+          supplierId: form.supplierId,
+          supplierName: form.supplierName,
+          vendorName: form.supplierName,
           productName: form.productName,
           productDescription: form.productDescription,
           warrantyDate: form.warrantyDate || undefined,
@@ -1925,16 +2007,84 @@ function AssetDialog({ open, title, asset, mode = 'single', productCatalog, prod
                   fullWidth
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
-                <TextField
-                  label="Vendor Name"
-                  name="vendorName"
-                  value={form.vendorName}
-                  onChange={handleChange}
-                  required
-                  error={Boolean(errors.vendorName)}
-                  helperText={errors.vendorName}
-                  fullWidth
-                />
+                <FormControl fullWidth required error={Boolean(errors.supplierName)}>
+                  <InputLabel id="asset-supplier-label" shrink>
+                    Supplier Name
+                  </InputLabel>
+                  <Select
+                    labelId="asset-supplier-label"
+                    label="Supplier Name"
+                    name="supplierId"
+                    value={form.supplierId}
+                    sx={{
+                      height: 56,
+                      '& .MuiSelect-select': {
+                        boxSizing: 'border-box',
+                        display: 'block',
+                        overflow: 'hidden',
+                        paddingTop: '16.5px',
+                        paddingBottom: '16.5px',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      },
+                    }}
+                    MenuProps={{
+                      slotProps: {
+                        paper: {
+                          sx: { maxWidth: 'min(420px, calc(100vw - 32px))' },
+                        },
+                      },
+                    }}
+                    onChange={(event) => {
+                      const supplier = supplierOptions.find((option) => option.id === event.target.value)
+                      setForm((prev) => ({
+                        ...prev,
+                        supplierId: supplier?.id || '',
+                        supplierName: supplier?.supplierName || '',
+                      }))
+                      if (errors.supplierName) {
+                        setErrors((prev) => {
+                          const next = { ...prev }
+                          delete next.supplierName
+                          return next
+                        })
+                      }
+                    }}
+                    displayEmpty
+                  >
+                    <MenuItem value="" disabled>
+                      {suppliersLoading ? 'Loading suppliers…' : 'Select a supplier'}
+                    </MenuItem>
+                    {supplierOptions.map((supplier) => (
+                      <MenuItem
+                        key={supplier.id}
+                        value={supplier.id}
+                        sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4 }}
+                      >
+                        {supplier.supplierName}
+                      </MenuItem>
+                    ))}
+                    {suppliersError && (
+                      <MenuItem value="__supplier-error" disabled>
+                        Unable to load suppliers
+                      </MenuItem>
+                    )}
+                    {!suppliersLoading && !suppliersError && supplierOptions.length === 0 && (
+                      <MenuItem value="__no-suppliers" disabled>
+                        No suppliers available
+                      </MenuItem>
+                    )}
+                  </Select>
+                  {errors.supplierName ? (
+                    <Typography variant="caption" color="error">{errors.supplierName}</Typography>
+                  ) : suppliersError ? (
+                    <Typography variant="caption" color="error">{suppliersError}</Typography>
+                  ) : suppliersLoading ? (
+                    <Typography variant="caption" color="text.secondary">Loading suppliers…</Typography>
+                  ) : supplierOptions.length === 0 ? (
+                    <Typography variant="caption" color="text.secondary">No suppliers are saved in Sales yet.</Typography>
+                  ) : null}
+                </FormControl>
                 <TextField
                   label="Product Description"
                   name="productDescription"

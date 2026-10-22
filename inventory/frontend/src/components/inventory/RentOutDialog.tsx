@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Button,
+  Autocomplete,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,7 +16,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { Asset } from '@/hooks/useAssets'
+import { fetchInventoryCustomers, type Asset, type InventoryCustomerOption } from '@/hooks/useAssets'
 import type { RentOutFormValues } from '@/components/inventory/rentOutTypes'
 
 interface RentOutDialogProps {
@@ -34,6 +35,7 @@ const initialValues = (asset?: Asset | null): RentOutFormValues => {
   const isSold = String(asset?.status || '').trim().toLowerCase() === 'sold'
 
   return {
+  customerId: asset?.customerId || '',
   customerName: asset?.customerName || '',
   documentNumber: asset?.documentNumber || '',
   productName: asset?.productName || asset?.name || '',
@@ -52,10 +54,35 @@ const initialValues = (asset?: Asset | null): RentOutFormValues => {
 
 export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'Update' }: RentOutDialogProps) {
   const [values, setValues] = useState<RentOutFormValues>(initialValues(asset))
+  const [customers, setCustomers] = useState<InventoryCustomerOption[]>([])
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [customersError, setCustomersError] = useState('')
 
   useEffect(() => {
     setValues(initialValues(asset))
   }, [asset, open])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setCustomersLoading(true)
+    setCustomersError('')
+
+    fetchInventoryCustomers()
+      .then((options) => {
+        if (!cancelled) setCustomers(options)
+      })
+      .catch((error) => {
+        if (!cancelled) setCustomersError(error instanceof Error ? error.message : 'Unable to load customer names.')
+      })
+      .finally(() => {
+        if (!cancelled) setCustomersLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   const handleChange = <K extends keyof RentOutFormValues>(field: K, value: RentOutFormValues[K]) => {
     setValues((current) => ({ ...current, [field]: value }))
@@ -127,6 +154,57 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
                     label={field.label}
                     value={values[field.key]}
                     onChange={(event) => handleChange(field.key, event.target.value as never)}
+                  />
+                </Grid>
+              )
+            }
+
+            if (field.key === 'customerName') {
+              const selectedCustomer =
+                customers.find((customer) => customer.id === values.customerId) ||
+                customers.find((customer) => customer.customerName === values.customerName) ||
+                null
+
+              return (
+                <Grid key={field.key} size={{ xs: 12, md: field.md }}>
+                  <Autocomplete
+                    options={customers}
+                    value={selectedCustomer}
+                    onChange={(_, customer) => {
+                      setValues((current) => ({
+                        ...current,
+                        customerId: customer?.id || '',
+                        customerName: customer?.customerName || '',
+                      }))
+                    }}
+                    getOptionLabel={(customer) => customer.customerName}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderOption={(props, customer) => (
+                      <li {...props}>
+                        <Box sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4 }}>
+                          {customer.customerName}
+                        </Box>
+                      </li>
+                    )}
+                    loading={customersLoading}
+                    loadingText="Loading customers..."
+                    noOptionsText={customersError ? 'Unable to load customers' : 'No customers available'}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        required
+                        label={field.label}
+                        placeholder={customersLoading ? 'Loading customers...' : 'Select a customer'}
+                        error={Boolean(customersError)}
+                        helperText={customersError || (!customersLoading && customers.length === 0 ? 'No customers are saved in Sales yet.' : '')}
+                        slotProps={{ ...params.slotProps, inputLabel: { shrink: true } }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': { minHeight: 56, flexWrap: 'nowrap' },
+                          '& .MuiAutocomplete-input': { minWidth: 0, textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' },
+                        }}
+                      />
+                    )}
                   />
                 </Grid>
               )

@@ -332,9 +332,12 @@ const toAssetPayload = (asset) => {
     createdBy: asset.createdBy,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
+    supplierId: asset.supplierId || '',
+    supplierName: asset.supplierName || asset.vendorName || '',
     vendorName: asset.vendorName || '',
     invoiceNumber: asset.invoiceNumber || '',
     customerName: asset.customerName || '',
+    customerId: asset.customerId || '',
     documentNumber: asset.documentNumber || '',
     rentStartDate: asset.rentStartDate || '',
     rentEndDate: asset.rentEndDate || '',
@@ -473,6 +476,7 @@ const updateLatestRentOutMovement = async (assetId, payload) => {
   if (!latestRentOut) return null
 
   const fieldsToUpdate = [
+    'customerId',
     'customerName',
     'documentNumber',
     'invoiceNumber',
@@ -850,7 +854,8 @@ router.post('/assets/bulk', async (req, res) => {
     }
 
     const assetName = String(common.productName || common.name || '').trim();
-    const vendorName = String(common.vendorName || '').trim();
+    const supplierName = String(common.supplierName || common.vendorName || '').trim();
+    const supplierId = String(common.supplierId || '').trim();
     const invoiceNumber = String(common.invoiceNumber || '').trim();
     const invoiceDateValue = common.invoiceDate || common.inwardDate || common.purchaseDate || new Date().toISOString().split('T')[0];
     const invoiceDate = new Date(invoiceDateValue);
@@ -859,7 +864,7 @@ router.post('/assets/bulk', async (req, res) => {
     const price = Number(common.price);
 
     if (!assetName) return res.status(400).json({ error: 'Product Name is required' });
-    if (!vendorName) return res.status(400).json({ error: 'Vendor Name is required' });
+    if (!supplierName) return res.status(400).json({ error: 'Supplier Name is required' });
     if (!invoiceNumber) return res.status(400).json({ error: 'Invoice Number is required' });
     if (Number(common.quantity) !== serials.length) return res.status(400).json({ error: 'Quantity must match the number of serial numbers' });
     if (Number.isNaN(price)) return res.status(400).json({ error: 'Price must be numeric' });
@@ -889,7 +894,9 @@ router.post('/assets/bulk', async (req, res) => {
       productDescription: String(common.productDescription || common.description || '').trim(),
       status: 'available',
       inwardDate: invoiceDate,
-      vendorName,
+      supplierId,
+      supplierName,
+      vendorName: supplierName,
       invoiceNumber,
       inwardType: common.inwardType || 'Purchase',
       createdBy: common.createdBy || 'System',
@@ -958,6 +965,8 @@ router.post('/assets', async (req, res) => {
       inwardDate,
       invoiceNumber,
       vendorName,
+      supplierId,
+      supplierName,
       productName,
       productDescription,
       warrantyDate,
@@ -973,7 +982,8 @@ router.post('/assets', async (req, res) => {
     const assetName = String(productName || name || '').trim();
     const invoiceDateValue = inwardDate || purchaseDate || new Date().toISOString().split('T')[0];
     const assetCategory = category ?? '';
-    const assetVendorName = String(vendorName || '').trim();
+    const assetSupplierName = String(supplierName || vendorName || '').trim();
+    const assetSupplierId = String(supplierId || '').trim();
     const assetSerialNumber = String(productSerialNumber || serialNumber || '').trim();
     const descriptionText = String(productDescription || description || '').trim();
     const assetWarrantyExpiry = warrantyDate || warrantyExpiry || null;
@@ -984,7 +994,7 @@ router.post('/assets', async (req, res) => {
     const warrantyDateCheck = assetWarrantyExpiry ? new Date(assetWarrantyExpiry) : null;
 
     if (!assetName) return res.status(400).json({ error: 'Product Name is required' });
-    if (!assetVendorName) return res.status(400).json({ error: 'vendorName is required' });
+    if (!assetSupplierName) return res.status(400).json({ error: 'Supplier Name is required' });
     if (!invoiceNumber || String(invoiceNumber).trim() === '') return res.status(400).json({ error: 'invoiceNumber is required' });
     if (!assetSerialNumber) return res.status(400).json({ error: 'Product Serial Number is required' });
     if (assetQuantity <= 0) return res.status(400).json({ error: 'Quantity must be greater than 0' });
@@ -1013,7 +1023,9 @@ router.post('/assets', async (req, res) => {
       existingAsset.description = descriptionText || existingAsset.description || '';
       existingAsset.productDescription = descriptionText || existingAsset.productDescription || existingAsset.description || '';
       existingAsset.category = assetCategory !== undefined ? assetCategory : existingAsset.category || '';
-      existingAsset.vendorName = assetVendorName || existingAsset.vendorName || '';
+      existingAsset.supplierId = assetSupplierId || existingAsset.supplierId || '';
+      existingAsset.supplierName = assetSupplierName || existingAsset.supplierName || existingAsset.vendorName || '';
+      existingAsset.vendorName = assetSupplierName || existingAsset.vendorName || '';
       existingAsset.invoiceNumber = invoiceNumber || existingAsset.invoiceNumber || '';
       existingAsset.inwardType = inwardType || existingAsset.inwardType || 'Purchase';
       existingAsset.inwardDate = invoiceDate;
@@ -1068,7 +1080,9 @@ router.post('/assets', async (req, res) => {
       productDescription: descriptionText,
       status: assetStatus,
       inwardDate: invoiceDate,
-      vendorName: assetVendorName,
+      supplierId: assetSupplierId,
+      supplierName: assetSupplierName,
+      vendorName: assetSupplierName,
       invoiceNumber: String(invoiceNumber || '').trim(),
       inwardType: inwardType || 'Purchase',
       createdBy: createdBy || 'System',
@@ -1207,6 +1221,7 @@ router.post('/outward', async (req, res) => {
     }
 
     asset.customerName = String(customerName || '').trim();
+    asset.customerId = String(customerId || '').trim();
     asset.documentNumber = String(documentNumber || '').trim();
     asset.rentStartDate = String(rentStartDate || '').trim();
     asset.rentEndDate = String(rentEndDate || '').trim();
@@ -1334,12 +1349,14 @@ router.post('/return', async (req, res) => {
     const originalRentEndDate = String(asset.rentEndDate || '').trim();
     const originalDocumentNumber = String(asset.documentNumber || '').trim();
     const originalCustomerName = String(asset.customerName || '').trim();
+    const originalCustomerId = String(asset.customerId || '').trim();
 
     if (normalizedStatus === 'rented') {
       const rentReturnDate = String(rentEndDate || returnDateValue || '').trim();
       asset.status = 'available';
       asset.availableQuantity = Math.max(Number(asset.availableQuantity ?? asset.quantity ?? 0), Number(asset.quantity ?? 1));
       asset.customerName = '';
+      asset.customerId = '';
       asset.rentStartDate = '';
       asset.rentEndDate = ''; 
       asset.documentNumber = '';
@@ -1350,6 +1367,7 @@ router.post('/return', async (req, res) => {
         assetId: asset._id,
         assetName: asset.name,
         customerName: String(customerName || originalCustomerName || '').trim(),
+        customerId: originalCustomerId,
         type: 'RETURNED',
         quantity: returnQuantity,
         serialNumber: asset.serialNumber || asset.productSerialNumber || '',
@@ -1620,6 +1638,7 @@ router.put('/assets/:id', async (req, res) => {
       vendorName,
       inwardType,
       customerName,
+      customerId,
       documentNumber,
       rentStartDate,
       rentEndDate,
@@ -1636,6 +1655,7 @@ router.put('/assets/:id', async (req, res) => {
     const originalRentStartDate = String(asset.rentStartDate || '').trim();
     const originalRentEndDate = String(asset.rentEndDate || '').trim();
     const originalCustomerName = String(asset.customerName || '').trim();
+    const originalCustomerId = String(asset.customerId || '').trim();
     const originalDocumentNumber = String(asset.documentNumber || '').trim();
 
     const nextName = name || req.body.productName || asset.name;
@@ -1671,9 +1691,15 @@ router.put('/assets/:id', async (req, res) => {
     }
     if (inwardDate !== undefined) asset.inwardDate = inwardDate;
     if (invoiceNumber !== undefined) asset.invoiceNumber = invoiceNumber;
-    if (vendorName !== undefined) asset.vendorName = vendorName;
+    if (req.body.supplierId !== undefined) asset.supplierId = String(req.body.supplierId || '');
+    if (req.body.supplierName !== undefined || vendorName !== undefined) {
+      const nextSupplierName = String(req.body.supplierName || vendorName || '').trim();
+      asset.supplierName = nextSupplierName;
+      asset.vendorName = nextSupplierName;
+    }
     if (inwardType) asset.inwardType = inwardType;
     if (customerName !== undefined) asset.customerName = String(customerName || '').trim();
+    if (req.body.customerId !== undefined) asset.customerId = String(req.body.customerId || '').trim();
     if (documentNumber !== undefined) asset.documentNumber = String(documentNumber || '').trim();
     if (rentStartDate !== undefined) asset.rentStartDate = String(rentStartDate || '').trim();
     if (rentEndDate !== undefined) asset.rentEndDate = String(rentEndDate || '').trim();
@@ -1721,7 +1747,7 @@ router.put('/assets/:id', async (req, res) => {
       'serialNumber', 'productSerialNumber', 'manufacturer', 'location',
       'quantity', 'availableQuantity', 'minStockLevel', 'price', 'purchaseDate',
       'warrantyExpiry', 'warrantyDate', 'description', 'productDescription',
-      'inwardDate', 'invoiceNumber', 'vendorName', 'inwardType', 'customerName',
+      'inwardDate', 'invoiceNumber', 'vendorName', 'supplierId', 'supplierName', 'inwardType', 'customerName', 'customerId',
       'documentNumber', 'rentStartDate', 'rentEndDate', 'status'
     ];
 
@@ -1742,7 +1768,8 @@ router.put('/assets/:id', async (req, res) => {
           rentEndDate: String(rentEndDate || '').trim(),
           invoiceNumber: String(invoiceNumber || asset.invoiceNumber || ''),
           documentNumber: String(documentNumber || asset.documentNumber || ''),
-          customerName: String(asset.customerName || ''),
+          customerName: String(originalCustomerName || asset.customerName || ''),
+          customerId: originalCustomerId || String(asset.customerId || ''),
           remarks: String(req.body.remarks || ''),
           price: price !== undefined ? Number(price) : undefined,
         });
@@ -1752,6 +1779,7 @@ router.put('/assets/:id', async (req, res) => {
 
       updatePayload.status = 'available';
       updatePayload.customerName = '';
+      updatePayload.customerId = '';
       updatePayload.rentStartDate = '';
       updatePayload.rentEndDate = '';
       updatePayload.documentNumber = '';
@@ -1809,6 +1837,7 @@ router.put('/assets/:id', async (req, res) => {
                   invoiceNumber: String(invoiceNumber || asset.invoiceNumber || ''),
                   documentNumber: String(documentNumber || asset.documentNumber || ''),
                   customerName: String(originalCustomerName || asset.customerName || ''),
+                  customerId: originalCustomerId,
                   remarks: String(req.body.remarks || ''),
                   price: price !== undefined ? Number(price) : undefined,
                 })
@@ -1845,6 +1874,10 @@ router.put('/assets/:id', async (req, res) => {
               newStatusNormalized === 'available' && normalizeAssetStatus(previousStatus) === 'rented'
                 ? originalCustomerName
                 : String(asset.customerName || '').trim(),
+            customerId:
+              newStatusNormalized === 'available' && normalizeAssetStatus(previousStatus) === 'rented'
+                ? originalCustomerId
+                : String(asset.customerId || '').trim(),
             remarks: String(req.body.remarks || ''),
             description: `Status changed from ${from} to ${to}`,
             performedBy: req.body.performedBy || 'System',

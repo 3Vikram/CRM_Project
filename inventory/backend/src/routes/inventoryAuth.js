@@ -69,6 +69,35 @@ export function requireInventoryAdmin(req, res, next) {
   return next();
 }
 
+export async function requireInventoryAuth(req, res, next) {
+  const config = getAuthConfig();
+  if (!configured(config)) {
+    return res.status(503).json({ error: 'Inventory sign-in is not configured' });
+  }
+
+  const authorization = req.get('authorization') || '';
+  const token = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : '';
+  const claims = getTokenClaims(token, config.secret);
+
+  if (!claims) return res.status(401).json({ error: 'Inventory sign-in required.' });
+  if (claims.role === 'employee') {
+    try {
+      const employee = await InventoryEmployee.findById(claims.employeeId);
+      if (!employee?.isActive) {
+        return res.status(401).json({ error: 'Inventory sign-in required.' });
+      }
+    } catch {
+      return res.status(500).json({ error: 'Unable to verify Inventory session.' });
+    }
+  } else if (claims.role && claims.role !== 'admin') {
+    return res.status(401).json({ error: 'Inventory sign-in required.' });
+  }
+
+  return next();
+}
+
 router.post('/login', async (req, res) => {
   const config = getAuthConfig();
   if (!configured(config)) {
@@ -82,7 +111,9 @@ router.post('/login', async (req, res) => {
   const validPassword = safeEqual(password, config.password);
 
   if (validEmail && validPassword) {
-    return res.json({ token: createToken(config.secret, { role: 'admin' }) });
+    return res.json({
+      token: createToken(config.secret, { role: 'admin', email: config.email }),
+    });
   }
 
   try {
@@ -119,7 +150,33 @@ router.get('/session', (req, res) => {
     return res.status(401).json({ authenticated: false });
   }
 
-  return res.json({ authenticated: true, role: claims.role || 'admin' });
+  if (claims.role === 'employee') {
+    return InventoryEmployee.findById(claims.employeeId)
+      .then((employee) => {
+        if (!employee?.isActive) {
+          return res.status(401).json({ authenticated: false });
+        }
+        return res.json({
+          authenticated: true,
+          user: {
+            id: employee.id,
+            name: employee.employeeName,
+            email: employee.email,
+            role: 'employee',
+          },
+        });
+      })
+      .catch(() => res.status(500).json({ error: 'Unable to verify Inventory session.' }));
+  }
+
+  return res.json({
+    authenticated: true,
+    user: {
+      id: 'admin',
+      email: config.email,
+      role: 'admin',
+    },
+  });
 });
 
 export default router;

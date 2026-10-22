@@ -31,6 +31,9 @@ export interface Asset {
   updatedAt: string
   bulkUploadId?: string | null
   vendorName?: string
+  supplierId?: string
+  supplierName?: string
+  customerId?: string
   invoiceNumber?: string
   customerName?: string
   documentNumber?: string
@@ -121,6 +124,27 @@ export interface AssetSerialHistoryResponse {
 }
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+
+export interface InventoryCustomerOption {
+  id: string
+  customerName: string
+}
+
+export async function fetchInventoryCustomers(): Promise<InventoryCustomerOption[]> {
+  const response = await fetch(`${API_URL}/api/customers/inventory-options`)
+  const result: { success?: boolean; data?: InventoryCustomerOption[]; message?: string } = await response
+    .json()
+    .catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(result.message || `Unable to load customers (HTTP ${response.status}).`)
+  }
+  if (!Array.isArray(result.data)) {
+    throw new Error('Customer list response was invalid.')
+  }
+
+  return result.data
+}
 
 export function triggerInventoryRefresh() {
   if (typeof window !== 'undefined') {
@@ -309,6 +333,7 @@ export async function getAssetSerialHistory(serialNumber: string) {
 export async function createOutward(outwardData: {
   assetId?: string
   assetName?: string
+  customerId?: string
   customerName: string
   outwardType: 'Rent' | 'Sell'
   quantity: number

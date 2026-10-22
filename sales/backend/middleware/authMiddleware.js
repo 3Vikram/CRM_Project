@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { createHmac, timingSafeEqual } = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'synov-crm-secret-key-change-me';
 
@@ -22,6 +23,49 @@ const authMiddleware = (req, res, next) => {
     return next();
   } catch (_error) {
     return res.status(401).json({ success: false, message: 'Session expired or invalid.' });
+  }
+};
+
+const inventoryAuthMiddleware = (req, res, next) => {
+  const request = `${req.method} ${req.originalUrl}`;
+  const secret = process.env.INVENTORY_AUTH_SECRET;
+  if (!secret || secret.length < 32) {
+    console.error(`Inventory supplier authorization is unavailable for ${request}: INVENTORY_AUTH_SECRET is missing or invalid.`);
+    return res.status(503).json({ success: false, message: 'Inventory authentication is not configured.' });
+  }
+
+  const authorization = req.headers.authorization || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  const [payload, signature, extra] = token.split('.');
+  if (!payload || !signature || extra) {
+    console.warn(`Inventory supplier authorization rejected for ${request}: missing or malformed Bearer token.`);
+    return res.status(401).json({ success: false, message: 'Inventory sign-in required.' });
+  }
+
+  const expected = Buffer.from(createHmac('sha256', secret).update(payload).digest('base64url'));
+  const received = Buffer.from(signature);
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    console.warn(`Inventory supplier authorization rejected for ${request}: token signature mismatch.`);
+    return res.status(401).json({ success: false, message: 'Inventory sign-in required.' });
+  }
+
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (
+      !Number.isFinite(claims.exp) ||
+      claims.exp <= Date.now() ||
+      (claims.role !== 'admin' && claims.role !== 'employee') ||
+      (claims.role === 'employee' && !claims.employeeId)
+    ) {
+      console.warn(`Inventory supplier authorization rejected for ${request}: token expired or claims invalid.`);
+      return res.status(401).json({ success: false, message: 'Inventory sign-in required.' });
+    }
+
+    req.inventoryUser = claims;
+    return next();
+  } catch (_error) {
+    console.warn(`Inventory supplier authorization rejected for ${request}: token payload invalid.`);
+    return res.status(401).json({ success: false, message: 'Inventory sign-in required.' });
   }
 };
 
@@ -92,4 +136,4 @@ const requireLeadRecordPermission = (action, resource = 'lead') => async (req, r
   }
 };
 
-module.exports = { authMiddleware, requirePermission, requireAnyPermission, requireAdmin, requireLeadRecordPermission, getPermissionValue, JWT_SECRET };
+module.exports = { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireAdmin, requireLeadRecordPermission, getPermissionValue, JWT_SECRET };

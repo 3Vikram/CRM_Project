@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { clearInventorySession, installInventoryApiAuthorization } from '@/lib/inventoryAuth'
 import { InventoryLayout } from '@/components/inventory-layout'
 import ModuleSelectPage from '@/pages/ModuleSelectPage'
 import InventoryOverviewPage from '@/pages/InventoryOverviewPage'
@@ -66,6 +68,8 @@ import EmployeesPage from '@/sales/pages/EmployeesPage'
 import EmployeeFormPage from '@/sales/pages/EmployeeFormPage'
 import ReportsPage from '@/sales/pages/ReportsPage'
 import ReportDetailPage from '@/sales/pages/ReportDetailPage'
+
+installInventoryApiAuthorization()
 
 axios.interceptors.request.use((config) => {
   const token = getStoredAuth()?.token
@@ -438,6 +442,14 @@ function InventoryRoutes() {
             </InventoryLayout>
           }
         />
+        <Route
+          path="/inventory/*"
+          element={
+            <InventoryLayout>
+              <Navigate to="/inventory" replace />
+            </InventoryLayout>
+          }
+        />
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -446,6 +458,25 @@ function InventoryRoutes() {
 
 function AppRoutes() {
   const { pathname } = useLocation()
+  useEffect(() => {
+    if (!pathname.startsWith('/inventory')) clearInventorySession()
+  }, [pathname])
+
+  useEffect(() => {
+    const clearSessionWhenLeavingPage = () => clearInventorySession()
+    const redirectRestoredInventoryPage = (event: PageTransitionEvent) => {
+      if (event.persisted && window.location.pathname.startsWith('/inventory')) {
+        window.location.replace('/inventory/login')
+      }
+    }
+    window.addEventListener('pagehide', clearSessionWhenLeavingPage)
+    window.addEventListener('pageshow', redirectRestoredInventoryPage)
+    return () => {
+      window.removeEventListener('pagehide', clearSessionWhenLeavingPage)
+      window.removeEventListener('pageshow', redirectRestoredInventoryPage)
+    }
+  }, [])
+
   const isSalesRoute =
     pathname === '/sales' ||
     pathname.startsWith('/sales/') ||

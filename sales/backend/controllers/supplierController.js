@@ -153,6 +153,31 @@ exports.getSuppliers = async (req, res) => {
   }
 };
 
+exports.getInventorySupplierOptions = async (_req, res) => {
+  try {
+    const suppliers = await Supplier.find({
+      supplierName: { $type: 'string', $regex: /\S/ },
+    })
+      .select({ _id: 1, supplierName: 1 })
+      .sort({ supplierName: 1, _id: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: suppliers.map(({ _id, supplierName }) => ({
+        id: String(_id),
+        supplierName,
+      })),
+    });
+  } catch (error) {
+    console.error('Unable to load Inventory supplier options:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load supplier names.',
+    });
+  }
+};
+
 exports.getSupplierById = async (req, res) => {
   try {
     const supplier = await Supplier.findById(req.params.id).lean();
@@ -231,6 +256,7 @@ exports.deleteSupplier = async (req, res) => {
 
 module.exports = {
   getSuppliers: exports.getSuppliers,
+  getInventorySupplierOptions: exports.getInventorySupplierOptions,
   getSupplierById: exports.getSupplierById,
   createSupplier: exports.createSupplier,
   updateSupplier: exports.updateSupplier,
