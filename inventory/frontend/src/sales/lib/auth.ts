@@ -1,3 +1,5 @@
+import { clearApiCache } from './apiCache';
+
 export type AuthRole = 'employee' | 'admin';
 
 export interface AuthSessionData {
@@ -55,15 +57,12 @@ export const getStoredAuth = (role?: AuthRole): AuthSessionData | null => {
 export const setStoredAuth = (data: AuthSessionData, rememberMe: boolean) => {
   if (typeof window === 'undefined') return;
 
+  // Remove any previous login (admin or employee, in both storages) and cached data,
+  // so the account that just signed in is the only active session.
+  clearStoredAuth();
+
   const targetStorage = rememberMe ? window.localStorage : window.sessionStorage;
   targetStorage.setItem(data.user.role === 'admin' ? ADMIN_AUTH_KEY : EMPLOYEE_AUTH_KEY, JSON.stringify(data));
-
-  const authKey = data.user.role === 'admin' ? ADMIN_AUTH_KEY : EMPLOYEE_AUTH_KEY;
-  if (rememberMe) {
-    window.sessionStorage.removeItem(authKey);
-  } else {
-    window.localStorage.removeItem(authKey);
-  }
 };
 
 export const clearStoredAuth = () => {
@@ -73,6 +72,7 @@ export const clearStoredAuth = () => {
   window.localStorage.removeItem(ADMIN_AUTH_KEY);
   window.sessionStorage.removeItem(EMPLOYEE_AUTH_KEY);
   window.sessionStorage.removeItem(ADMIN_AUTH_KEY);
+  clearApiCache();
 };
 
 export const isAuthenticated = (role?: AuthRole) => {

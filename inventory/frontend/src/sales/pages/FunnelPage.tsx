@@ -10,7 +10,6 @@ import {
   Eye,
   FileText,
   Pencil,
-  Plus,
   Printer,
   Search,
   Trash2,
@@ -60,6 +59,8 @@ export default function FunnelPage() {
   const [customers, setCustomers] = useState<Array<{ companyName?: string; customerName?: string; accountType?: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [createdBy, setCreatedBy] = useState('all')
   const [createdDate, setCreatedDate] = useState('all')
   const [expectedClosure, setExpectedClosure] = useState('all')
@@ -159,14 +160,18 @@ export default function FunnelPage() {
     setPage((currentPage) => Math.min(currentPage, pageCount))
   }, [pageCount])
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this funnel item?')) return
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return
+    setIsDeleting(true)
     try {
-      await deleteLead(id)
-      setFunnels((prev) => prev.filter((row) => row._id !== id))
+      await deleteLead(pendingDeleteId)
+      setFunnels((prev) => prev.filter((row) => row._id !== pendingDeleteId))
       setToast('Funnel item deleted')
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Failed to delete funnel item')
+    } finally {
+      setIsDeleting(false)
+      setPendingDeleteId(null)
     }
   }
 
@@ -239,14 +244,6 @@ export default function FunnelPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <h1 className="crm-page-heading">Funnel Dashboard</h1>
-        <button
-          type="button"
-          onClick={() => navigate('/sales/funnels/new')}
-          className="inline-flex items-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f2937]"
-        >
-          <Plus className="h-4 w-4" />
-          GENERATE NEW +
-        </button>
       </div>
 
       <div className="h-px w-full bg-[#DAD4C7]" />
@@ -442,7 +439,7 @@ export default function FunnelPage() {
                         <button type="button" onClick={() => navigate(`/sales/quotations/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">
                           <Pencil className="h-4 w-4" />
                         </button>
-                        <button type="button" onClick={() => handleDelete(row._id)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete">
+                        <button type="button" onClick={() => setPendingDeleteId(row._id)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -478,6 +475,38 @@ export default function FunnelPage() {
         </div>
       </div>
 
+      {pendingDeleteId ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete funnel"
+          onClick={() => { if (!isDeleting) setPendingDeleteId(null) }}
+        >
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900">Delete Funnel</h2>
+            <p className="mt-2 text-sm text-gray-600">Are you sure you want to delete this funnel?</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteId(null)}
+                disabled={isDeleting}
+                className="rounded-lg border border-[#111827] bg-white px-5 py-2.5 text-sm font-semibold text-[#111827] hover:bg-[#F2EFE8] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={isDeleting}
+                className="rounded-lg bg-[#111827] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1f2937] disabled:opacity-60"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
     </div>
   )

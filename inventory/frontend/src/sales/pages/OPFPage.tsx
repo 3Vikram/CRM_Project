@@ -39,6 +39,8 @@ const formatCurrency = (value?: number | string) => {
 const getUniqueValues = (items: Array<string | undefined>) =>
   Array.from(new Set(items.filter(Boolean) as string[])).sort()
 
+const getRenewalDate = (item: { renewalDate?: string; amcRenewalDate?: string }) => item.renewalDate || item.amcRenewalDate
+
 export default function OPFPage() {
   const navigate = useNavigate()
   const [opfData, setOPFData] = useState<OPFRecord[]>([])
@@ -84,7 +86,7 @@ export default function OPFPage() {
   const filterOptions = useMemo(() => {
     const createdByOptions = getUniqueValues(opfData.map((item) => item.createdBy))
     const createdDateOptions = getUniqueValues(opfData.map((item) => formatDate(item.createdDate)))
-    const renewalDateOptions = getUniqueValues(opfData.map((item) => formatDate(item.renewalDate)))
+    const renewalDateOptions = getUniqueValues(opfData.map((item) => formatDate(getRenewalDate(item))))
     const customerNameOptions = getUniqueValues([
       ...opfData.map((item) => item.customerName),
       ...customers.map((customer) => customer.customerName || customer.companyName),
@@ -106,7 +108,7 @@ export default function OPFPage() {
     return opfData.filter((item) => {
       if (createdBy !== 'all' && (item.createdBy || 'Admin') !== createdBy) return false
       if (createdDate !== 'all' && formatDate(item.createdDate) !== createdDate) return false
-      if (renewalDate !== 'all' && formatDate(item.renewalDate) !== renewalDate) return false
+      if (renewalDate !== 'all' && formatDate(getRenewalDate(item)) !== renewalDate) return false
       if (customerName !== 'all' && (item.customerName || '') !== customerName) return false
       if (approvalStatus !== 'all' && (item.approvalStatus || 'Pending') !== approvalStatus) return false
       if (product !== 'all' && (item.product || '') !== product) return false
@@ -150,7 +152,7 @@ export default function OPFPage() {
       String(formatCurrency(item.revenue)),
       String(formatCurrency(item.margin)),
       formatDate(item.createdDate),
-      formatDate(item.renewalDate),
+      formatDate(getRenewalDate(item)),
       item.approvalStatus || 'Pending',
       item.poFile?.fileName || '-',
     ])
@@ -341,7 +343,7 @@ export default function OPFPage() {
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatCurrency(item.revenue)}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatCurrency(item.margin)}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(item.createdDate)}</td>
-                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(item.renewalDate)}</td>
+                  <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(getRenewalDate(item))}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{item.approvalStatus || 'Pending'}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">
                     {item.poFile?.filePath ? (

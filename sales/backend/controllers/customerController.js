@@ -5,7 +5,7 @@
  */
 
 const Customer = require('../models/Customer');
-const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex: escapeQueryRegex } = require('../utils/queryUtils');
 
 const getNextCustomerId = async () => {
   const customers = await Customer.find({ customerId: /^CI-\d+$/ }).select({ customerId: 1 }).lean();
@@ -100,6 +100,22 @@ const parsePayload = (body = {}) => {
   return payload;
 };
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const findDuplicateCustomer = async ({ companyName, gstNumber } = {}, excludeId = null) => {
+  const conditions = [];
+  const name = String(companyName || '').trim().replace(/\s+/g, ' ');
+  if (name) {
+    conditions.push({ companyName: new RegExp(`^\\s*${escapeRegex(name).replace(/ /g, '\\s+')}\\s*$`, 'i') });
+  }
+  const gst = String(gstNumber || '').trim().toUpperCase();
+  if (gst) conditions.push({ gstNumber: gst });
+  if (!conditions.length) return null;
+  const query = { $or: conditions };
+  if (excludeId) query._id = { $ne: excludeId };
+  return Customer.findOne(query).select({ _id: 1, companyName: 1 }).lean();
+};
+
 exports.getCustomers = async (req, res) => {
   try {
     await ensureCustomerIds();
@@ -126,7 +142,7 @@ exports.getCustomers = async (req, res) => {
       ];
     }
 
-    if (createdBy) query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
+    if (createdBy) query.createdBy = new RegExp(`^${escapeQueryRegex(createdBy)}$`, 'i');
     if (status) query.status = status;
     if (accountType) query.accountType = accountType;
 
@@ -222,6 +238,10 @@ exports.createCustomer = async (req, res) => {
   try {
     await ensureCustomerIds();
     const payload = parsePayload(req.body);
+    const duplicate = await findDuplicateCustomer(payload);
+    if (duplicate) {
+      return res.status(409).json({ success: false, message: 'This customer already exists.' });
+    }
     if (req.files && req.files.length) {
       payload.documents = req.files.map((file) => ({
         fileName: file.originalname,
@@ -246,7 +266,7 @@ exports.createCustomer = async (req, res) => {
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
     if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'A customer with this email already exists' });
+      return res.status(400).json({ success: false, message: 'This customer already exists.' });
     }
     res.status(500).json({ success: false, message: error.message });
   }
@@ -256,6 +276,10 @@ exports.updateCustomer = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
     delete payload.customerId;
+    const duplicate = await findDuplicateCustomer(payload, req.params.id);
+    if (duplicate) {
+      return res.status(409).json({ success: false, message: 'This customer already exists.' });
+    }
     if (req.files && req.files.length) {
       payload.documents = req.files.map((file) => ({
         fileName: file.originalname,

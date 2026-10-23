@@ -46,8 +46,6 @@ export default function SupplierFormPage() {
     accountHolder: '',
     accountNumber: '',
     ifscCode: '',
-    loginEmailId: '',
-    loginPassword: '',
     contactType: '',
     contactName: '',
     designation: '',
@@ -89,8 +87,6 @@ export default function SupplierFormPage() {
           accountHolder: supplier.accountHolder || '',
           accountNumber: supplier.accountNumber || '',
           ifscCode: supplier.ifscCode || '',
-          loginEmailId: supplier.loginEmailId || '',
-          loginPassword: supplier.loginPassword || '',
           contactType: supplier.contactType || '',
           contactName: supplier.contactName || '',
           designation: supplier.designation || '',
@@ -161,8 +157,6 @@ export default function SupplierFormPage() {
       accountHolder: '',
       accountNumber: '',
       ifscCode: '',
-      loginEmailId: '',
-      loginPassword: '',
       contactType: '',
       contactName: '',
       designation: '',
@@ -273,14 +267,6 @@ export default function SupplierFormPage() {
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-slate-700">IFSC Code</span>
                   <input value={form.ifscCode} onChange={(event) => handleChange('ifscCode', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Login Email ID</span>
-                  <input value={form.loginEmailId} onChange={(event) => handleChange('loginEmailId', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Login Password</span>
-                  <input type="password" value={form.loginPassword} onChange={(event) => handleChange('loginPassword', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
                 </label>
               </div>
             </AccordionDetails>

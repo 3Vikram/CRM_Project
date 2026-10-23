@@ -261,6 +261,11 @@ export default function OPFGenerateFormPage() {
     if (!tax) newErrors.tax = 'Tax is required'
     if (!startDate) newErrors.startDate = 'Start Date is required'
     if (!endDate) newErrors.endDate = 'End Date is required'
+    if (!customerPONo.trim()) newErrors.customerPONo = 'Customer PO No is required'
+    if (!customerPODate) newErrors.customerPODate = 'Customer PO Date is required'
+    const hasNewDocument = uploadedDocuments.some((doc) => doc !== null)
+    if (!hasNewDocument && existingUploadedDocuments.length === 0) newErrors.uploadedDocuments = 'At least one document is required'
+    if (amc === 'Yes' && !amcRenewalDate) newErrors.amcRenewalDate = 'AMC Renewal Date is required'
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -399,6 +404,7 @@ export default function OPFGenerateFormPage() {
     const newDocuments = [...uploadedDocuments]
     newDocuments[index] = file
     setUploadedDocuments(newDocuments)
+    setErrors((prev) => ({ ...prev, uploadedDocuments: '' }))
   }
 
   if (isEditLoading) return <div className="py-8 text-center text-gray-500">Loading OPF form...</div>
@@ -683,20 +689,26 @@ export default function OPFGenerateFormPage() {
               />
             </FormField>
 
-            <FormField label="Customer PO No">
+            <FormField label="Customer PO No" required error={errors.customerPONo}>
               <input
                 type="text"
                 value={customerPONo}
-                onChange={(e) => setCustomerPONo(e.target.value)}
+                onChange={(e) => {
+                  setCustomerPONo(e.target.value)
+                  setErrors((prev) => ({ ...prev, customerPONo: '' }))
+                }}
                 className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
               />
             </FormField>
 
-            <FormField label="Customer PO Date">
+            <FormField label="Customer PO Date" required error={errors.customerPODate}>
               <input
                 type="date"
                 value={customerPODate}
-                onChange={(e) => setCustomerPODate(e.target.value)}
+                onChange={(e) => {
+                  setCustomerPODate(e.target.value)
+                  setErrors((prev) => ({ ...prev, customerPODate: '' }))
+                }}
                 className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
               />
             </FormField>
@@ -733,11 +745,14 @@ export default function OPFGenerateFormPage() {
             </FormField>
 
             {amc === 'Yes' && (
-              <FormField label="AMC Renewal Date" required>
+              <FormField label="AMC Renewal Date" required error={errors.amcRenewalDate}>
                 <input
                   type="date"
                   value={amcRenewalDate}
-                  onChange={(e) => setAmcRenewalDate(e.target.value)}
+                  onChange={(e) => {
+                    setAmcRenewalDate(e.target.value)
+                    setErrors((prev) => ({ ...prev, amcRenewalDate: '' }))
+                  }}
                   className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
                 />
               </FormField>
@@ -845,7 +860,7 @@ export default function OPFGenerateFormPage() {
             {uploadedDocuments.map((doc, index) => (
               <div key={index} className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Document</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Document <span className="text-red-500">*</span></label>
                   <input
                     type="file"
                     onChange={(e) => handleDocumentChange(index, e.target.files?.[0] || null)}
@@ -863,6 +878,7 @@ export default function OPFGenerateFormPage() {
                 </button>
               </div>
             ))}
+            {errors.uploadedDocuments && <p className="text-xs text-red-600">{errors.uploadedDocuments}</p>}
           </div>
         </div>
 

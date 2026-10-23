@@ -37,8 +37,6 @@ export interface SupplierRecord {
   accountHolder?: string;
   accountNumber?: string;
   ifscCode?: string;
-  loginEmailId?: string;
-  loginPassword?: string;
   contactType?: string;
   contactName?: string;
   designation?: string;
@@ -65,8 +63,6 @@ export interface SupplierPayload {
   accountHolder?: string;
   accountNumber?: string;
   ifscCode?: string;
-  loginEmailId?: string;
-  loginPassword?: string;
   contactType?: string;
   contactName?: string;
   designation?: string;

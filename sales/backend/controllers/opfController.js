@@ -226,6 +226,11 @@ exports.createOPF = async (req, res) => {
     payload.freightTax = normalizeNumber(payload.freightTax);
     payload.wht = normalizeNumber(payload.wht);
     payload.conversionRate = normalizeNumber(payload.conversionRate);
+    if (payload.amcRenewalDate) {
+      payload.renewalDate = payload.amcRenewalDate;
+    } else if ('amcRenewalDate' in payload) {
+      payload.renewalDate = null;
+    }
 
     if (!payload.opfNo) {
       payload.opfNo = await createOPFNo();
@@ -300,6 +305,11 @@ exports.updateOPF = async (req, res) => {
     payload.freightTax = normalizeNumber(payload.freightTax);
     payload.wht = normalizeNumber(payload.wht);
     payload.conversionRate = normalizeNumber(payload.conversionRate);
+    if (payload.amcRenewalDate) {
+      payload.renewalDate = payload.amcRenewalDate;
+    } else if ('amcRenewalDate' in payload) {
+      payload.renewalDate = null;
+    }
 
     const opf = await OPF.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
 

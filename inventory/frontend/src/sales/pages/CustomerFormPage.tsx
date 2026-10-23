@@ -380,8 +380,6 @@ export default function CustomerFormPage() {
     const invalidContact = form.contacts.some((contact) => !contact.contactType || !contact.name || !contact.email || !contact.phone)
     if (invalidContact) return 'Each contact must include Contact Type, Name, Email ID, and Contact Number.'
 
-    if (!form.documents.length) return 'At least one document is required.'
-
     return null
   }
 
