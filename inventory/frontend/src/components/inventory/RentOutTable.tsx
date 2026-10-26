@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Snackbar, Typography } from '@mui/material'
+import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, MenuItem, Select, Snackbar, Typography } from '@mui/material'
 import { DataGrid, GridFooterContainer, GridPagination, type GridColDef } from '@mui/x-data-grid'
 import { Delete, Edit } from '@mui/icons-material'
 import type { Asset } from '@/hooks/useAssets'
@@ -17,8 +17,8 @@ interface RentOutTableProps {
   customerNameFilter: string
   productModelFilter: string
   createdDateFilter: string
-  search?: string
   pageSize?: number
+  onPageSizeChange?: (pageSize: number) => void
   status?: 'rented' | 'sold'
 }
 
@@ -117,7 +117,7 @@ function buildRows(assets: Asset[], status: 'rented' | 'sold', transactionRates:
     })
 }
 
-export function RentOutTable({ assets, customerNameFilter, productModelFilter, createdDateFilter, search = '', pageSize = 8, status = 'rented' }: RentOutTableProps) {
+export function RentOutTable({ assets, customerNameFilter, productModelFilter, createdDateFilter, pageSize = 10, onPageSizeChange, status = 'rented' }: RentOutTableProps) {
   const navigate = useNavigate()
   const [rows, setRows] = useState<RentOutRow[]>([])
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
@@ -167,30 +167,23 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
     }
 
     void loadRows()
-    setPaginationModel({ pageSize, page: 0 })
     return () => {
       cancelled = true
     }
-  }, [assets, pageSize, status])
+  }, [assets, status])
+
+  useEffect(() => {
+    setPaginationModel({ pageSize, page: 0 })
+  }, [pageSize, customerNameFilter, productModelFilter, createdDateFilter, status])
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const customerMatch = !customerNameFilter || row.customerName.toLowerCase().includes(customerNameFilter.toLowerCase())
-      const productMatch = !productModelFilter || row.productModel.toLowerCase().includes(productModelFilter.toLowerCase())
+      const customerMatch = !customerNameFilter || row.customerName.trim() === customerNameFilter
+      const productMatch = !productModelFilter || row.productModel.trim() === productModelFilter
       const createdDateMatch = !createdDateFilter || (row.originalAsset.createdAt || '').slice(0, 10) === createdDateFilter
-      const searchMatch = !search || [row.customerName, row.documentNumber, row.productSerialNumber, row.productName, row.productDescription, row.productModel, String(row.ratePerMonth), row.rentStartDate, row.rentEndDate, String(row.totalMonths), row.invoiceNumber, row.remarks].join(' ').toLowerCase().includes(search.toLowerCase())
-      return customerMatch && productMatch && createdDateMatch && searchMatch
+      return customerMatch && productMatch && createdDateMatch
     })
-  }, [rows, customerNameFilter, productModelFilter, createdDateFilter, search])
-
-  const totals = useMemo(
-    () => ({
-      totalRentOutPrice: filteredRows.reduce((sum, row) => sum + (row.ratePerMonth || 0), 0),
-      totalMonths: filteredRows.reduce((sum, row) => sum + (row.totalMonths || 0), 0),
-      totalMonthwisePrice: filteredRows.reduce((sum, row) => sum + (row.monthwiseTotalPrice || 0), 0),
-    }),
-    [filteredRows]
-  )
+  }, [rows, customerNameFilter, productModelFilter, createdDateFilter])
 
   const totalRentOutAssets = filteredRows.length
 
@@ -391,10 +384,23 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, p: 2, borderBottom: '1px solid #E3E8EF', alignItems: { xs: 'stretch', md: 'center' }, justifyContent: 'space-between' }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, p: 2, borderBottom: '1px solid #E3E8EF', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}>
         <Typography variant="h6" sx={{ fontWeight: 700 }} color="#06283D">
           Rent Out Records
         </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">Show Entries</Typography>
+          <Select
+            size="small"
+            value={pageSize}
+            onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
+            sx={{ minWidth: 80, borderRadius: 2 }}
+          >
+            {[10, 20, 50, 100].map((size) => (
+              <MenuItem key={size} value={size}>{size}</MenuItem>
+            ))}
+          </Select>
+        </Box>
       </Box>
 
       <Box sx={{ height: 560, width: '100%', position: 'relative' }}>
@@ -409,8 +415,11 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
           rows={filteredRows}
           columns={columns}
           paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          pageSizeOptions={[5, 8, 12]}
+          onPaginationModelChange={(model) => {
+            setPaginationModel(model)
+            if (model.pageSize !== pageSize) onPageSizeChange?.(model.pageSize)
+          }}
+          pageSizeOptions={[10, 20, 50, 100]}
           disableRowSelectionOnClick
           getRowHeight={() => 'auto'}
           slots={{
@@ -420,9 +429,6 @@ export function RentOutTable({ assets, customerNameFilter, productModelFilter, c
                   <Typography variant="body2" sx={{ fontWeight: 700, color: '#06283D' }}>
                     Total Assets: {totalRentOutAssets}
                   </Typography>
-                  <Typography variant="body2">Rent Total: {formatCurrency(totals.totalRentOutPrice)}</Typography>
-                  <Typography variant="body2">Total Months: {totals.totalMonths}</Typography>
-                  <Typography variant="body2">Monthwise Total: {formatCurrency(totals.totalMonthwisePrice)}</Typography>
                 </Box>
                 <GridFooterContainer sx={{ borderTop: 0 }}>
                   <GridPagination />

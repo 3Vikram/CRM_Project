@@ -10,6 +10,7 @@ const INVENTORY_API_PREFIXES = [
   '/api/accessories',
   '/api/suppliers/inventory-options',
   '/api/customers/inventory-options',
+  '/api/opf/inventory-options',
 ]
 let inventoryApiAuthorizationInstalled = false
 

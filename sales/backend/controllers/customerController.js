@@ -202,16 +202,29 @@ exports.getInventoryCustomerOptions = async (_req, res) => {
         { companyName: { $type: 'string', $regex: /\S/ } },
       ],
     })
-      .select({ _id: 1, customerName: 1, companyName: 1 })
+      .select({ _id: 1, customerName: 1, companyName: 1, contacts: 1 })
       .sort({ customerName: 1, companyName: 1, _id: 1 })
       .lean();
 
     return res.status(200).json({
       success: true,
-      data: customers.map(({ _id, customerName, companyName }) => ({
-        id: String(_id),
-        customerName: customerName || companyName,
-      })),
+      data: customers.map(({ _id, customerName, companyName, contacts = [] }) => {
+        const customerContacts = Array.isArray(contacts) ? contacts : [];
+        const contactPersons = customerContacts
+          .map((contact) => String(contact?.name || '').trim())
+          .filter(Boolean);
+        const primaryContactPerson =
+          customerContacts.find((contact) => String(contact?.contactType || '').trim().toLowerCase() === 'primary')
+            ?.name?.trim() || contactPersons[0] || '';
+
+        return {
+          id: String(_id),
+          customerName: customerName || companyName,
+          companyName,
+          contactPersons,
+          primaryContactPerson,
+        };
+      }),
     });
   } catch (error) {
     console.error('Unable to load Inventory customer options:', error);

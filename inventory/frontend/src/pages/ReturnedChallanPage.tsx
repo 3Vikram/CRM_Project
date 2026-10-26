@@ -17,14 +17,9 @@ type ProductOption = {
 type CustomerOption = {
   id: string
   name: string
-  contactPersons?: string[]
-}
-
-type SalesCustomerRecord = {
-  _id: string
   companyName?: string
-  customerName?: string
-  contacts?: Array<{ name?: string }>
+  contactPersons: string[]
+  primaryContactPerson: string
 }
 
 type ReturnedChallanItem = {
@@ -83,22 +78,7 @@ type FormValues = {
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const SALES_API_URL = '/api'
-
-const getSalesAuthHeaders = (): Record<string, string> => {
-  for (const key of ['synov_employee_auth', 'synov_admin_auth']) {
-    const value = window.localStorage.getItem(key) || window.sessionStorage.getItem(key)
-    if (!value) continue
-
-    try {
-      const auth = JSON.parse(value) as { token?: string }
-      if (auth.token) return { Authorization: `Bearer ${auth.token}` }
-    } catch {
-      // Ignore malformed auth data, as the Sales auth helper does.
-    }
-  }
-
-  return {}
-}
+const SAVED_CUSTOMER_OPTION = '__saved-customer__'
 
 const makeKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 const today = () => {
@@ -143,6 +123,7 @@ export default function ReturnedChallanPage() {
   const [records, setRecords] = useState<ReturnedChallan[]>([])
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [customerLoadStatus, setCustomerLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [customerLoadError, setCustomerLoadError] = useState('')
   const [products, setProducts] = useState<ProductOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -151,7 +132,7 @@ export default function ReturnedChallanPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedRecord, setSelectedRecord] = useState<ReturnedChallan | null>(null)
   const [form, setForm] = useState<FormValues>(newForm)
-  const [contactPersonAutoFilled, setContactPersonAutoFilled] = useState(false)
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [items, setItems] = useState<ItemForm[]>([newItem()])
   const [dateFilter, setDateFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -194,38 +175,8 @@ export default function ReturnedChallanPage() {
         if (cancelled) return
         setRecords(recordsData)
         setProducts(productsData)
-
-        const salesCustomers: CustomerOption[] = []
-        let currentPage = 1
-        let totalPages = 1
-        do {
-          const response = await fetch(`${SALES_API_URL}/customers?page=${currentPage}&limit=100`, {
-            headers: getSalesAuthHeaders(),
-          })
-          const result = await response.json().catch(() => ({}))
-          if (!response.ok || result.success !== true || !Array.isArray(result.data)) {
-            throw new Error(result.message || 'Unable to load customers from Sales')
-          }
-
-          salesCustomers.push(...result.data
-            .filter((customer: SalesCustomerRecord) => customer?._id)
-            .map((customer: SalesCustomerRecord) => ({
-              id: customer._id,
-              name: customer.companyName || customer.customerName || 'Untitled Customer',
-              contactPersons: (customer.contacts || [])
-                .map((contact) => contact.name?.trim())
-                .filter((name): name is string => Boolean(name)),
-            })))
-          totalPages = Number(result.pagination?.totalPages) || 1
-          currentPage += 1
-        } while (currentPage <= totalPages)
-
-        if (cancelled) return
-        setCustomers(salesCustomers)
-        setCustomerLoadStatus('loaded')
       } catch (error) {
         if (!cancelled) {
-          setCustomerLoadStatus('error')
           notify(error instanceof Error ? error.message : 'Unable to load Returned Challan data', 'error')
         }
       } finally {
@@ -238,11 +189,78 @@ export default function ReturnedChallanPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCustomers = async () => {
+      try {
+        const response = await fetch(`${API_URL}${SALES_API_URL}/customers/inventory-options`)
+        const result: {
+          success?: boolean
+          data?: Array<{
+            id?: string
+            customerName?: string
+            companyName?: string
+            contactPersons?: string[]
+            primaryContactPerson?: string
+          }>
+          message?: string
+        } = await response.json().catch(() => ({}))
+
+        if (!response.ok || result.success !== true || !Array.isArray(result.data)) {
+          throw new Error(result.message || `Unable to load customers (HTTP ${response.status}).`)
+        }
+
+        const customerOptions = result.data.flatMap((customer) => {
+          const id = customer.id?.trim()
+          const name = customer.customerName?.trim()
+          return id && name
+            ? [{
+                id,
+                name,
+                companyName: customer.companyName?.trim(),
+                contactPersons: Array.isArray(customer.contactPersons)
+                  ? [...new Set(customer.contactPersons.map((contact) => contact.trim()).filter(Boolean))]
+                  : [],
+                primaryContactPerson: customer.primaryContactPerson?.trim() || '',
+              }]
+            : []
+        })
+
+        if (cancelled) return
+        setCustomers(customerOptions)
+        setCustomerLoadError('')
+        setCustomerLoadStatus('loaded')
+      } catch (error) {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : 'Unable to load customers.'
+        console.error('Unable to load Returned Challan customers:', error)
+        setCustomerLoadError(message)
+        setCustomerLoadStatus('error')
+        notify(message, 'error')
+      }
+    }
+
+    void loadCustomers()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (mode !== 'form' || !form.customerName || selectedCustomerId) return
+    const matchingCustomer = customers.find(
+      (customer) => customer.name === form.customerName || customer.companyName === form.customerName
+    )
+    if (matchingCustomer) setSelectedCustomerId(matchingCustomer.id)
+  }, [customers, form.customerName, mode, selectedCustomerId])
+
   const taxOptions = useMemo(
     () => [...new Set(products.map((product) => String(product.gst || '').trim()).filter(Boolean))].sort(),
     [products]
   )
-  const customerContacts = customers.find((customer) => customer.name === form.customerName)?.contactPersons || []
+  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId)
+  const customerContacts = selectedCustomer?.contactPersons || []
 
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
@@ -260,14 +278,14 @@ export default function ReturnedChallanPage() {
   const beginNew = () => {
     setEditingId(null)
     setForm(newForm())
-    setContactPersonAutoFilled(false)
+    setSelectedCustomerId('')
     setItems([newItem()])
     setMode('form')
   }
 
   const resetForm = () => {
     setForm(newForm())
-    setContactPersonAutoFilled(false)
+    setSelectedCustomerId('')
     setItems([newItem()])
   }
 
@@ -299,7 +317,10 @@ export default function ReturnedChallanPage() {
       if (!response.ok) throw new Error(data.error || 'Unable to load returned challan')
       const saved = data as ReturnedChallan
       setEditingId(saved.id)
-      setContactPersonAutoFilled(false)
+      const savedCustomer = customers.find(
+        (customer) => customer.name === saved.customerName || customer.companyName === saved.customerName
+      )
+      setSelectedCustomerId(savedCustomer?.id || '')
       setForm({
         customerName: saved.customerName || '',
         contactPerson: saved.contactPerson || '',
@@ -538,26 +559,35 @@ export default function ReturnedChallanPage() {
         <h2 className="mb-5 text-sm font-semibold uppercase tracking-[0.16em] text-gray-600">Main Details</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <label className="text-sm font-medium text-gray-700">Customer Name <span className="text-red-500">*</span>
-            <select required value={customers.find((customer) => customer.name === form.customerName)?.id || ''} onChange={(event) => {
+            <select required value={selectedCustomerId || (form.customerName ? SAVED_CUSTOMER_OPTION : '')} onChange={(event) => {
+              if (event.target.value === SAVED_CUSTOMER_OPTION) return
               const selectedCustomer = customers.find((customer) => customer.id === event.target.value)
-              const contactPerson = selectedCustomer?.contactPersons?.[0] || ''
-              setContactPersonAutoFilled(Boolean(contactPerson))
+              setSelectedCustomerId(selectedCustomer?.id || '')
+              const contacts = selectedCustomer?.contactPersons || []
+              const defaultContact = contacts.length === 1
+                ? contacts[0]
+                : contacts.includes(selectedCustomer?.primaryContactPerson || '')
+                  ? selectedCustomer?.primaryContactPerson || ''
+                  : ''
               setForm((current) => ({
                 ...current,
                 customerName: selectedCustomer?.name || '',
-                contactPerson,
+                contactPerson: defaultContact,
               }))
             }} className={`${inputClass} mt-2`}>
               <option value="">Select customer</option>
               {customerLoadStatus === 'loading' && <option disabled>Loading customers…</option>}
-              {customerLoadStatus === 'error' && <option disabled>Unable to load customers</option>}
+              {customerLoadStatus === 'error' && <option disabled>{customerLoadError || 'Unable to load customers'}</option>}
               {customerLoadStatus === 'loaded' && customers.length === 0 && <option disabled>No customers available</option>}
+              {form.customerName && !customers.some((customer) => customer.name === form.customerName || customer.companyName === form.customerName) && (
+                <option value={SAVED_CUSTOMER_OPTION}>{form.customerName}</option>
+              )}
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
             </select>
           </label>
           <label className="text-sm font-medium text-gray-700">Contact Person
-            <select disabled={contactPersonAutoFilled} value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} className={`${inputClass} mt-2`}>
-              <option value="">Select contact person</option>
+            <select value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} className={`${inputClass} mt-2`}>
+              <option value="">{selectedCustomer && customerContacts.length === 0 ? 'No contact person available' : 'Select contact person'}</option>
               {[...new Set([...customerContacts, ...(form.contactPerson ? [form.contactPerson] : [])])].map((contact) => <option key={contact} value={contact}>{contact}</option>)}
             </select>
           </label>

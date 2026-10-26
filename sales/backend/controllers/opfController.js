@@ -167,6 +167,38 @@ exports.getOPFs = async (req, res) => {
   }
 };
 
+exports.getInventoryOPFOptions = async (req, res) => {
+  try {
+    const fields = '_id opfNo customerName contactPerson customerPONo customerPODate product description quantity unitPrice tax partNo';
+    if (req.params.id) {
+      const opf = await OPF.findById(req.params.id).select(fields).lean();
+      if (!opf) return res.status(404).json({ success: false, message: 'OPF not found.' });
+      return res.status(200).json({ success: true, data: opf });
+    }
+
+    const { page, limit, skip } = parsePagination(req.query);
+    const query = { opfNo: { $exists: true, $ne: '' } };
+    const [opfRecords, total] = await Promise.all([
+      OPF.find(query).select(fields).sort({ createdDate: -1, _id: -1 }).skip(skip).limit(limit).lean(),
+      OPF.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: opfRecords,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching Inventory OPF options:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load OPF numbers from Sales.' });
+  }
+};
+
 exports.getOPFById = async (req, res) => {
   try {
     const opf = await OPF.findById(req.params.id).lean();

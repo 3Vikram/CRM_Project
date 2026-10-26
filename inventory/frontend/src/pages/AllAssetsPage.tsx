@@ -26,7 +26,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { DataGrid, GridFooterContainer, GridPagination, type GridColDef, type GridRenderCellParams, type GridRowSelectionModel } from '@mui/x-data-grid'
+import { DataGrid, GridFooterContainer, GridPagination, type GridColDef, type GridRenderCellParams } from '@mui/x-data-grid'
 import { Add, Delete, Download, Edit, KeyboardReturn, Visibility, WarningAmber } from '@mui/icons-material'
 import { formatCurrency } from '@/lib/utils'
 import { getInventorySessionToken } from '@/lib/inventoryAuth'
@@ -38,7 +38,6 @@ import {
   createOutward,
   createReturn,
   deleteAsset,
-  deleteBulkAssets,
   deleteAssetDocument,
   getAssetById,
   getAssetMovements,
@@ -176,10 +175,6 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
   const isReturnedPage = initialStatus === 'RETURNED' || initialStatus === 'returned' || location.pathname.includes('returned-assets')
   const showAddButton = initialStatus === 'IN_STOCK'
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
-  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() })
-  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
-  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [productCatalog, setProductCatalog] = useState<ProductCatalogItem[]>([])
   const [isReturnOpen, setIsReturnOpen] = useState(false)
@@ -651,52 +646,101 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
               )
             },
           } as GridColDef,
-          {
-            field: 'document',
-            headerName: 'Documents',
-            flex: 1.1,
-            minWidth: 180,
-            sortable: false,
-            renderCell: (params: any) => {
-              const asset = params.row.asset as Asset
-              const documentUrl = asset.document?.fileUrl
-
-              if (documentUrl) {
-                return (
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
-                      sx={{ textTransform: 'none', borderRadius: 1 }}
-                    >
-                      View PDF
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleDeleteDocument(asset)}
-                      sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#0B1F33', '&:hover': { bgcolor: '#142c45' } }}
-                    >
-                      Delete PDF
-                    </Button>
-                  </Stack>
-                )
-              }
-
-              return (
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => handleDocumentAction(asset, 'upload')}
-                  sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#0B1F33', '&:hover': { bgcolor: '#142c45' } }}
-                >
-                  Upload PDF
-                </Button>
-              )
-            },
-          } as GridColDef,
         ]),
+    {
+      field: 'document',
+      headerName: 'Documents',
+      flex: 1.1,
+      minWidth: 220,
+      sortable: false,
+      renderCell: (params: any) => {
+        const asset = params.row.asset as Asset
+        const documentUrl = asset.document?.fileUrl
+
+        if (isAllAssetsPage) {
+          if (!documentUrl) return <span>—</span>
+
+          return (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
+              sx={{ textTransform: 'none', borderRadius: 1 }}
+            >
+              View PDF
+            </Button>
+          )
+        }
+
+        if (isInStockPage) {
+          return documentUrl ? (
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
+                sx={{ textTransform: 'none', borderRadius: 1 }}
+              >
+                View PDF
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={documentUploading}
+                onClick={() => handleDocumentAction(asset, 'replace')}
+                sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#0B1F33', '&:hover': { bgcolor: '#142c45' } }}
+              >
+                Replace PDF
+              </Button>
+            </Stack>
+          ) : (
+            <Button
+              size="small"
+              variant="contained"
+              disabled={documentUploading}
+              onClick={() => handleDocumentAction(asset, 'upload')}
+              sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#0B1F33', '&:hover': { bgcolor: '#142c45' } }}
+            >
+              Upload PDF
+            </Button>
+          )
+        }
+
+        if (documentUrl) {
+          return (
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
+                sx={{ textTransform: 'none', borderRadius: 1 }}
+              >
+                View PDF
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => handleDeleteDocument(asset)}
+                sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#0B1F33', '&:hover': { bgcolor: '#142c45' } }}
+              >
+                Delete PDF
+              </Button>
+            </Stack>
+          )
+        }
+
+        return (
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => handleDocumentAction(asset, 'upload')}
+            sx={{ textTransform: 'none', borderRadius: 1, bgcolor: '#0B1F33', '&:hover': { bgcolor: '#142c45' } }}
+          >
+            Upload PDF
+          </Button>
+        )
+      },
+    } as GridColDef,
     ...(isInStockPage
       ? [
           {
@@ -728,45 +772,6 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
                     handleOpenDelete(a)
                   }}
                 />
-              )
-            },
-          } as GridColDef,
-        ]
-      : []),
-    ...(isAllAssetsPage
-      ? [
-          {
-            field: 'actions',
-            headerName: 'Actions',
-            flex: 1.2,
-            minWidth: 190,
-            sortable: false,
-            align: 'center',
-            headerAlign: 'center',
-            renderCell: (params: any) => {
-              const asset = params.row.asset as Asset
-              return (
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, width: '100%', whiteSpace: 'nowrap' }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<Visibility />}
-                    onClick={() => void handleOpenView(asset)}
-                    sx={{ textTransform: 'none', borderRadius: 1.5, minWidth: 82, px: 1 }}
-                  >
-                    View
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    startIcon={<Delete />}
-                    onClick={() => handleOpenDelete(asset)}
-                    sx={{ textTransform: 'none', borderRadius: 1.5, minWidth: 92, px: 1 }}
-                  >
-                    Delete
-                  </Button>
-                </Box>
               )
             },
           } as GridColDef,
@@ -833,29 +838,9 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
       setSnackbar({ open: true, message: 'Asset deleted successfully.', severity: 'success' })
       setIsDeleteOpen(false)
       setSelectedAsset(null)
-      setSelectedAssetIds([])
-      setRowSelectionModel({ type: 'include', ids: new Set() })
       refreshAssets()
     } catch (err) {
       setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Unable to delete asset.', severity: 'error' })
-    }
-  }
-
-  const handleDeleteSelectedAssets = async () => {
-    if (!selectedAssetIds.length) return
-
-    try {
-      setBulkDeleteLoading(true)
-      const result = await deleteBulkAssets(selectedAssetIds)
-      setSelectedAssetIds([])
-      setRowSelectionModel({ type: 'include', ids: new Set() })
-      setIsBulkDeleteOpen(false)
-      refreshAssets()
-      setSnackbar({ open: true, message: `${result.count} assets deleted successfully.`, severity: 'success' })
-    } catch (err) {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Unable to delete selected assets.', severity: 'error' })
-    } finally {
-      setBulkDeleteLoading(false)
     }
   }
 
@@ -1171,28 +1156,24 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
                 noOptionsText="No types found"
               />
             </Box>
-            <Button
-              variant="text"
-              disabled={!rows.length}
-              onClick={() => {
-                const allSelected = rows.length > 0 && rows.every((row) => selectedAssetIds.includes(String(row.id)))
-                const nextIds = allSelected ? [] : rows.map((row) => String(row.id))
-                setSelectedAssetIds(nextIds)
-                setRowSelectionModel({ type: 'include', ids: new Set(nextIds) })
-              }}
-              sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
-            >
-              {rows.length > 0 && rows.every((row) => selectedAssetIds.includes(String(row.id))) ? 'Clear Selection' : 'Select All'}
-            </Button>
-            <Button
-              variant="outlined"
-              color="error"
-              disabled={!selectedAssetIds.length}
-              onClick={() => setIsBulkDeleteOpen(true)}
-              sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
-            >
-              Delete Selected{selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
-            </Button>
+            <FormControl size="small" sx={{ minWidth: 130, maxWidth: '100%', alignSelf: 'flex-start' }}>
+              <InputLabel id="in-stock-entries-label">Show Entries</InputLabel>
+              <Select
+                labelId="in-stock-entries-label"
+                value={pageSize}
+                label="Show Entries"
+                onChange={(event) => {
+                  const nextSize = Number(event.target.value)
+                  setPageSize(nextSize)
+                  setPaginationModel({ page: 0, pageSize: nextSize })
+                }}
+                sx={{ borderRadius: 2, minWidth: 130 }}
+              >
+                {[10, 20].map((size) => (
+                  <MenuItem key={size} value={size}>{size}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Stack>
         ) : (
           <>
@@ -1434,18 +1415,8 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
                   columns={columns}
                   columnHeaderHeight={48}
                   pagination
-                  checkboxSelection={isInStockPage}
-                  rowSelectionModel={rowSelectionModel}
-                  onRowSelectionModelChange={(selection) => {
-                    setRowSelectionModel(selection)
-                    const selectedIds = selection.type === 'include'
-                      ? Array.from(selection.ids).map(String)
-                      : rows.filter((row) => !selection.ids.has(row.id)).map((row) => String(row.id))
-                    setSelectedAssetIds(selectedIds)
-                  }}
-                  keepNonExistentRowsSelected={false}
                   paginationMode="client"
-                  pageSizeOptions={[10, 25, 50, 100]}
+                  pageSizeOptions={isInStockPage ? [10, 20] : [10, 25, 50, 100]}
                   paginationModel={paginationModel}
                   onPaginationModelChange={(model) => {
                     setPaginationModel(model)
@@ -1663,13 +1634,6 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
         onSubmit={handleSubmitReturn}
       />
       <DeleteConfirmDialog open={isDeleteOpen} asset={selectedAsset} onClose={() => setIsDeleteOpen(false)} onConfirm={handleDeleteAsset} />
-      <BulkDeleteConfirmDialog
-        open={isBulkDeleteOpen}
-        count={selectedAssetIds.length}
-        loading={bulkDeleteLoading}
-        onClose={() => setIsBulkDeleteOpen(false)}
-        onConfirm={handleDeleteSelectedAssets}
-      />
     </Box>
   )
 }
@@ -2408,26 +2372,6 @@ function DeleteConfirmDialog({ open, asset, onClose, onConfirm }: { open: boolea
         <Button onClick={onClose}>Cancel</Button>
         <Button color="error" variant="contained" onClick={onConfirm}>
           Delete
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-function BulkDeleteConfirmDialog({ open, count, loading, onClose, onConfirm }: { open: boolean; count: number; loading: boolean; onClose: () => void; onConfirm: () => void }) {
-  return (
-    <Dialog open={open} onClose={loading ? undefined : onClose}>
-      <DialogTitle>Delete Selected Assets</DialogTitle>
-      <DialogContent>
-        <Stack sx={{ display: 'flex', flexDirection: 'row', gap: 1.5, alignItems: 'center' }}>
-          <WarningAmber color="warning" />
-          <Typography>Are you sure you want to delete {count} selected asset{count === 1 ? '' : 's'}?</Typography>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={loading}>Cancel</Button>
-        <Button color="error" variant="contained" onClick={onConfirm} disabled={loading}>
-          {loading ? 'Deleting...' : 'Delete'}
         </Button>
       </DialogActions>
     </Dialog>

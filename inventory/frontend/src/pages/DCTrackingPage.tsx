@@ -205,6 +205,7 @@ export default function DCTrackingPage() {
   const opfFetchSequence = useRef(0)
   const [opfOptions, setOpfOptions] = useState<SalesOPFRecord[]>([])
   const [opfLoadStatus, setOpfLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [opfLoadError, setOpfLoadError] = useState('')
   const [opfCustomerNameLocked, setOpfCustomerNameLocked] = useState(false)
   const [opfContactPersonLocked, setOpfContactPersonLocked] = useState(false)
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([])
@@ -231,12 +232,11 @@ export default function DCTrackingPage() {
         let totalPages = 1
 
         do {
-          const response = await fetch(`${SALES_API_URL}/opf?page=${page}&limit=100`, {
-            headers: getSalesAuthHeaders(),
-          })
-          const result = await response.json()
+          const response = await fetch(`${SALES_API_URL}/opf/inventory-options?page=${page}&limit=100`)
+          const result = await response.json().catch(() => ({}))
           if (!response.ok || result.success !== true || !Array.isArray(result.data)) {
-            throw new Error(result.message || 'Unable to fetch OPF numbers from Sales')
+            const reason = result.message || result.error || `Sales API returned HTTP ${response.status}`
+            throw new Error(`Unable to load OPF numbers: ${reason}`)
           }
 
           records.push(...result.data.filter(
@@ -247,9 +247,11 @@ export default function DCTrackingPage() {
         } while (page <= totalPages)
 
         setOpfOptions(records)
+        setOpfLoadError('')
         setOpfLoadStatus('loaded')
       } catch (error) {
         console.error('Unable to fetch OPF numbers from Sales:', error)
+        setOpfLoadError(error instanceof Error ? error.message : 'Unable to load OPF numbers from Sales.')
         setOpfLoadStatus('error')
         setToastType('error')
         setToastMessage(error instanceof Error ? error.message : 'Unable to fetch OPF numbers from Sales')
@@ -539,12 +541,11 @@ export default function DCTrackingPage() {
     if (!selectedOpf) return
 
     try {
-      const response = await fetch(`${SALES_API_URL}/opf/${encodeURIComponent(selectedOpf._id)}`, {
-        headers: getSalesAuthHeaders(),
-      })
-      const result = await response.json()
+      const response = await fetch(`${SALES_API_URL}/opf/inventory-options/${encodeURIComponent(selectedOpf._id)}`)
+      const result = await response.json().catch(() => ({}))
       if (!response.ok || result.success !== true || !result.data) {
-        throw new Error(result.message || 'Unable to fetch the selected OPF details from Sales')
+        const reason = result.message || result.error || `Sales API returned HTTP ${response.status}`
+        throw new Error(`Unable to fetch the selected OPF details: ${reason}`)
       }
 
       if (fetchSequence !== opfFetchSequence.current) return
@@ -865,7 +866,7 @@ export default function DCTrackingPage() {
                 {opfLoadStatus === 'loaded' && opfOptions.length === 0 && (
                   <option disabled>No OPF numbers available</option>
                 )}
-                {opfLoadStatus === 'error' && <option disabled>Unable to load OPF numbers</option>}
+                {opfLoadStatus === 'error' && <option disabled>{opfLoadError || 'Unable to load OPF numbers'}</option>}
               </select>
             </div>
             <div>
