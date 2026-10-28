@@ -65,8 +65,14 @@ const OPFSchema = new mongoose.Schema(
 
     // Metadata
     createdBy: { type: String, trim: true, default: 'Admin' },
+    createdById: { type: String, trim: true, default: '', index: true },
+    createdByEmail: { type: String, trim: true, lowercase: true, default: '' },
     createdDate: { type: Date, default: Date.now },
     renewalDate: { type: Date, default: null },
+    renewalReminderDate: { type: Date, default: null },
+    renewalReminderClaimedAt: { type: Date, default: null },
+    renewalReminderRetryAt: { type: Date, default: null },
+    renewalReminderSentAt: { type: Date, default: null },
     approvalStatus: {
       type: String,
       enum: ['Pending', 'Approved', 'Rejected', 'Under Review'],
@@ -78,5 +84,6 @@ const OPFSchema = new mongoose.Schema(
 
 OPFSchema.index({ opfNo: 1, quotationNumber: 1, customerName: 1, approvalStatus: 1, createdDate: -1 });
 OPFSchema.index({ customerName: 1, createdBy: 1, approvalStatus: 1, createdDate: -1 });
+OPFSchema.index({ renewalDate: 1, approvalStatus: 1 });
 
 module.exports = mongoose.model('OPF', OPFSchema);

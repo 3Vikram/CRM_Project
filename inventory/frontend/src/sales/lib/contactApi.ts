@@ -52,6 +52,7 @@ export interface ContactRecord {
 export interface ContactPayload {
   customerId?: string;
   customerName?: string;
+  batchId?: string;
   contactName: string;
   designation: string;
   mail?: string;

@@ -6,6 +6,12 @@
 
 const Customer = require('../models/Customer');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex: escapeQueryRegex } = require('../utils/queryUtils');
+const { ownerScope, creatorFields } = require('../utils/accessScope');
+
+const customerScope = (req) => {
+  const id = String(req.user?.id || '').trim();
+  return ownerScope(req, { extraClauses: id ? [{ 'assignedEmployees.employeeId': id }] : [] });
+};
 
 const getNextCustomerId = async () => {
   const customers = await Customer.find({ customerId: /^CI-\d+$/ }).select({ customerId: 1 }).lean();
@@ -151,6 +157,8 @@ exports.getCustomers = async (req, res) => {
       if (dateRange) query.createdAt = dateRange;
     }
 
+    const scope = customerScope(req);
+    const finalQuery = Object.keys(scope).length ? { $and: [query, scope] } : query;
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
       companyName: 1,
@@ -161,6 +169,7 @@ exports.getCustomers = async (req, res) => {
       status: 1,
       accountType: 1,
       createdBy: 1,
+      createdById: 1,
       createdAt: 1,
       billToAddress: 1,
       state: 1,
@@ -170,18 +179,33 @@ exports.getCustomers = async (req, res) => {
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'companyName', 'customerName', 'status', 'createdBy', 'email']);
 
     const [customers, total] = await Promise.all([
-      Customer.find(query)
+      Customer.find(finalQuery)
         .select(projection)
+        .populate('createdById', 'fullName employeeName')
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
         .lean(),
-      Customer.countDocuments(query),
+      Customer.countDocuments(finalQuery),
     ]);
+
+    const customerData = customers.map((customer) => {
+      const creator = customer.createdById && typeof customer.createdById === 'object'
+        ? customer.createdById
+        : null;
+      const storedCreatorName = String(customer.createdBy || '').trim();
+      const currentCreatorName = String(creator?.fullName || creator?.employeeName || '').trim();
+
+      return {
+        ...customer,
+        createdBy: currentCreatorName || storedCreatorName,
+        createdById: creator?._id ? String(creator._id) : customer.createdById ? String(customer.createdById) : null,
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: customers,
+      data: customerData,
       pagination: {
         total,
         page: pageNum,
@@ -256,7 +280,7 @@ exports.getInventoryCustomerOptions = async (_req, res) => {
 
 exports.getCustomerById = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id).select({ __v: 0 }).lean();
+    const customer = await Customer.findOne({ $and: [{ _id: req.params.id }, customerScope(req)] }).select({ __v: 0 }).lean();
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
@@ -270,6 +294,8 @@ exports.createCustomer = async (req, res) => {
   try {
     await ensureCustomerIds();
     const payload = parsePayload(req.body);
+    Object.assign(payload, creatorFields(req));
+    delete payload.assignedEmployees;
     const duplicate = await findDuplicateCustomer(payload);
     if (duplicate) {
       return res.status(409).json({ success: false, message: 'This customer already exists.' });
@@ -308,6 +334,13 @@ exports.updateCustomer = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
     delete payload.customerId;
+    delete payload.createdBy;
+    delete payload.createdById;
+    delete payload.assignedEmployees;
+    const existingCustomer = await Customer.findOne({ $and: [{ _id: req.params.id }, customerScope(req)] }).select({ _id: 1 }).lean();
+    if (!existingCustomer) {
+      return res.status(404).json({ success: false, message: 'Customer not found' });
+    }
     const duplicate = await findDuplicateCustomer(payload, req.params.id);
     if (duplicate) {
       return res.status(409).json({ success: false, message: 'This customer already exists.' });
@@ -320,7 +353,11 @@ exports.updateCustomer = async (req, res) => {
       }));
     }
 
-    const customer = await Customer.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    const customer = await Customer.findOneAndUpdate(
+      { $and: [{ _id: req.params.id }, customerScope(req)] },
+      payload,
+      { new: true, runValidators: true }
+    );
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
@@ -340,7 +377,7 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findOneAndDelete({ $and: [{ _id: req.params.id }, customerScope(req)] });
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }

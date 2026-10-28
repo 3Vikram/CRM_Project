@@ -32,7 +32,7 @@ const getRenewalStatus = (days: number) => {
   return 'Upcoming'
 }
 
-const statusOptions = ['All', 'Pending', 'Quotation', 'Renewed', 'Under Review', 'Cancelled']
+const statusOptions = ['All', 'Pending', 'Quotation', 'Under Review']
 const dueDateOptions = ['All', 'Today', 'Tomorrow', 'This Week', 'This Month', 'This Quarter', 'This Year', 'Last Year', 'Custom Date Range']
 
 const getRecordStatus = (opf: OPFRecord) => {
@@ -41,6 +41,9 @@ const getRecordStatus = (opf: OPFRecord) => {
   if (opf.approvalStatus === 'Under Review') return 'Under Review'
   return 'Pending'
 }
+
+const isResolvedRenewal = (opf: OPFRecord) =>
+  ['approved', 'rejected', 'renewed', 'cancelled', 'completed'].includes(String(opf.approvalStatus || '').toLowerCase())
 
 const isInDueDateRange = (renewalDate: string, filter: string) => {
   if (filter === 'All' || filter === 'Custom Date Range') return true
@@ -95,6 +98,7 @@ export default function RenewalsPage() {
   const [customerFilter, setCustomerFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [customerOptions, setCustomerOptions] = useState<string[]>([])
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
 
   const loadRenewals = useCallback(async () => {
     setIsLoading(true)
@@ -152,21 +156,28 @@ export default function RenewalsPage() {
     return () => window.clearInterval(timer)
   }, [todayKey])
 
-  const renewalRows = useMemo(() => opfs
-    .filter((opf) => createdByFilter === 'All' || (opf.createdBy || 'Admin') === createdByFilter)
-    .filter((opf) => customerFilter === 'All' || (opf.customerName || '') === customerFilter)
-    .filter((opf) => isInDueDateRange(opf.renewalDate as string, dueDateFilter))
-    .filter((opf) => statusFilter === 'All' || getRecordStatus(opf) === statusFilter)
-    .map((opf) => ({ opf, days: daysUntilRenewal(opf.renewalDate as string) })), [opfs, todayKey, createdByFilter, dueDateFilter, customerFilter, statusFilter])
+  const eligibleRenewals = useMemo(() => opfs
+    .map((opf) => ({ opf, days: daysUntilRenewal(opf.renewalDate as string) }))
+    .filter(({ opf, days }) => !isResolvedRenewal(opf) && days <= 90), [opfs, todayKey])
 
-  const createdByOptions = useMemo(() => ['All', ...Array.from(new Set(opfs.map((opf) => opf.createdBy || 'Admin'))).sort()], [opfs])
+  const renewalRows = useMemo(() => eligibleRenewals
+    .filter(({ opf }) => createdByFilter === 'All' || (opf.createdBy || 'Admin') === createdByFilter)
+    .filter(({ opf }) => customerFilter === 'All' || (opf.customerName || '') === customerFilter)
+    .filter(({ opf }) => isInDueDateRange(opf.renewalDate as string, dueDateFilter))
+    .filter(({ opf }) => statusFilter === 'All' || getRecordStatus(opf) === statusFilter)
+    .sort((left, right) => {
+      const difference = left.days - right.days
+      return (sortOrder === 'asc' ? difference : -difference) || left.opf._id.localeCompare(right.opf._id)
+    }), [eligibleRenewals, createdByFilter, dueDateFilter, customerFilter, statusFilter, sortOrder])
+
+  const createdByOptions = useMemo(() => ['All', ...Array.from(new Set(eligibleRenewals.map(({ opf }) => opf.createdBy || 'Admin'))).sort()], [eligibleRenewals])
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="crm-page-heading">Renewals</h1>
-          {/* <p className="text-sm text-slate-500">Renewal information from saved OPF records</p> */}
+          <p className="mt-1 text-sm text-slate-500">{eligibleRenewals.length} unresolved renewal{eligibleRenewals.length === 1 ? '' : 's'} in the 90-day window, including overdue items</p>
         </div>
         <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
           <RefreshCw className="h-4 w-4" /> Refresh
@@ -194,14 +205,27 @@ export default function RenewalsPage() {
 
       <div className="overflow-x-auto rounded-lg border border-[#EFECE5] bg-white shadow-sm">
         {error ? <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-        <table className="min-w-[1700px] text-sm">
+        <table className="min-w-[1540px] text-sm">
           <thead className="bg-[#F2EFE8] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
             <tr>
-              {['OPF No', 'Created By', 'Customer Name', 'Contact Person', 'Product', 'Revenue', 'Margin', 'Created Date', 'Renewal Date', 'OD Days', 'Remarks', 'Renewal Status', 'History', 'Action'].map((heading) => <th key={heading} className="border-r border-[#D1D5DB] px-4 py-3">{heading}</th>)}
+              {['OPF No', 'Created By', 'Customer Name', 'Contact Person', 'Product', 'Revenue', 'Margin', 'Created Date', 'Renewal Date', 'OD Days', 'Renewal Status', 'History', 'Action'].map((heading) => (
+                <th key={heading} className="border-r border-[#D1D5DB] px-4 py-3">
+                  {heading === 'Renewal Date' || heading === 'OD Days' ? (
+                    <button
+                      type="button"
+                      onClick={() => setSortOrder((current) => current === 'asc' ? 'desc' : 'asc')}
+                      className="inline-flex items-center gap-1"
+                      aria-label={`Sort by ${heading} ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
+                    >
+                      {heading} <span aria-hidden="true">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                    </button>
+                  ) : heading}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading ? <tr><td colSpan={14} className="px-4 py-10 text-center text-sm text-gray-500">Loading renewals...</td></tr> : renewalRows.length === 0 ? <tr><td colSpan={14} className="px-4 py-10 text-center text-sm text-gray-500">No OPF renewals found.</td></tr> : renewalRows.map(({ opf, days }) => (
+            {isLoading ? <tr><td colSpan={13} className="px-4 py-10 text-center text-sm text-gray-500">Loading renewals...</td></tr> : renewalRows.length === 0 ? <tr><td colSpan={13} className="px-4 py-10 text-center text-sm text-gray-500">No OPF renewals found.</td></tr> : renewalRows.map(({ opf, days }) => (
               <tr key={opf._id} className="border-t border-[#EFECE5] bg-white">
                 <td className="border-r border-[#D1D5DB] px-4 py-3 font-medium text-gray-900">{opf.opfNo || '-'}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3">{opf.createdBy || 'Admin'}</td>
@@ -213,7 +237,6 @@ export default function RenewalsPage() {
                 <td className="border-r border-[#D1D5DB] px-4 py-3">{formatDate(opf.createdDate)}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3">{formatDate(opf.renewalDate)}</td>
                 <td className={`border-r border-[#D1D5DB] px-4 py-3 font-semibold ${days < 0 ? 'text-red-600' : 'text-gray-900'}`}>{days}</td>
-                <td className="max-w-[220px] border-r border-[#D1D5DB] px-4 py-3">{opf.notes || '-'}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3">{getRenewalStatus(days)}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3 text-xs text-gray-600">Created {formatDate(opf.createdDate)}<br />Updated {formatDate(opf.updatedAt)}</td>
                 <td className="px-4 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => window.open(`/sales/opf/${opf._id}`, '_blank')} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View OPF"><Eye className="h-4 w-4" /></button><button type="button" onClick={() => navigate(`/sales/opf/edit/${opf._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit OPF"><Pencil className="h-4 w-4" /></button></div></td>

@@ -398,6 +398,14 @@ export default function App() {
           }
         />
         <Route
+          path="/sales/funnels/edit/:id"
+          element={
+            <SalesLayout>
+              <FunnelFormPage />
+            </SalesLayout>
+          }
+        />
+        <Route
           path="/sales/company-profiles"
           element={
             <SalesLayout>

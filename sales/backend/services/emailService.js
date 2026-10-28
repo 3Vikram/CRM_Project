@@ -26,12 +26,59 @@ const getSmtpConfig = () => {
 
 const createTransporter = () => nodemailer.createTransport(getSmtpConfig());
 
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+})[character]);
+
 const normalizeRecipients = (recipients = []) => {
   if (!Array.isArray(recipients)) return [];
   return [...new Set(recipients.map((item) => String(item).trim()).filter((value) => {
     const email = String(value).trim();
     return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }))];
+};
+
+const buildRenewalReminderEmail = ({ employeeName, opf, renewalDate, daysRemaining = 7 }) => {
+  const opfNumber = opf.opfNo || opf.quotationNumber || String(opf._id);
+  const formattedDate = new Date(renewalDate).toLocaleDateString('en-GB', { timeZone: 'UTC' });
+  const subject = `Renewal Reminder – OPF ${opfNumber} – Due in 7 Days`;
+  const text = [
+    `Dear ${employeeName},`,
+    '',
+    'This is a reminder that the following OPF is due for renewal in 7 days.',
+    '',
+    `OPF Number: ${opfNumber}`,
+    `Customer Name: ${opf.customerName || '-'}`,
+    `Product: ${opf.product || '-'}`,
+    `Renewal Date: ${formattedDate}`,
+    `Days Remaining: ${daysRemaining}`,
+    '',
+    'Please review the renewal details and coordinate with the customer to initiate the renewal process before the expiry date.',
+    '',
+    'Kindly update the renewal status once the necessary action has been taken.',
+    '',
+    'Best regards,',
+    'Synov IT Services',
+    'CRM Renewal Management System',
+  ].join('\n');
+  const html = `<p>Dear ${escapeHtml(employeeName)},</p>
+    <p>This is a reminder that the following OPF is due for renewal in 7 days.</p>
+    <ul>
+      <li><strong>OPF Number:</strong> ${escapeHtml(opfNumber)}</li>
+      <li><strong>Customer Name:</strong> ${escapeHtml(opf.customerName || '-')}</li>
+      <li><strong>Product:</strong> ${escapeHtml(opf.product || '-')}</li>
+      <li><strong>Renewal Date:</strong> ${escapeHtml(formattedDate)}</li>
+      <li><strong>Days Remaining:</strong> ${daysRemaining}</li>
+    </ul>
+    <p>Please review the renewal details and coordinate with the customer to initiate the renewal process before the expiry date.</p>
+    <p>Kindly update the renewal status once the necessary action has been taken.</p>
+    <p>Best regards,<br>Synov IT Services<br>CRM Renewal Management System</p>`;
+
+  return { opfNumber, subject, text, html };
 };
 
 const sendCampaignEmails = async ({
@@ -209,6 +256,60 @@ const sendCampaignEmails = async ({
   };
 };
 
+const sendRenewalReminder = async ({ recipient, employeeName, opf, renewalDate, daysRemaining = 7 }) => {
+  const email = String(recipient || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { success: false, errorMessage: 'A valid renewal reminder recipient is required.' };
+  }
+
+  const config = getSmtpConfig();
+  if (!config.auth.user || !config.auth.pass) {
+    const message = 'SMTP credentials are not configured.';
+    logger.error('renewal.reminder.email.config.invalid', { message });
+    return { success: false, retryable: true, errorMessage: message };
+  }
+
+  const { opfNumber, subject, text, html } = buildRenewalReminderEmail({
+    employeeName,
+    opf,
+    renewalDate,
+    daysRemaining,
+  });
+
+  try {
+    const transporter = createTransporter();
+    try {
+      await transporter.verify();
+    } catch (error) {
+      logger.error('renewal.reminder.email.smtp.verify.failed', {
+        opfNo: opfNumber,
+        error: error?.message || 'SMTP verification failed.',
+      });
+      return { success: false, retryable: true, errorMessage: error?.message || 'SMTP verification failed.' };
+    }
+    const info = await transporter.sendMail({
+      from: `Synov IT Services <${config.auth.user}>`,
+      to: email,
+      subject,
+      text,
+      html,
+    });
+    const accepted = Array.isArray(info.accepted) ? info.accepted : [];
+    if (!accepted.some((address) => String(address).toLowerCase() === email)) {
+      return { success: false, errorMessage: 'SMTP did not accept the renewal reminder recipient.' };
+    }
+
+    logger.info('renewal.reminder.email.sent', { opfNo: opfNumber });
+    return { success: true, messageId: info.messageId || '' };
+  } catch (error) {
+    logger.error('renewal.reminder.email.send.failed', {
+      opfNo: opfNumber,
+      error: error?.message || 'Unknown email sending error.',
+    });
+    return { success: false, errorMessage: error?.message || 'Failed to send renewal reminder.' };
+  }
+};
+
 const sendQuotationEmail = async ({
   recipient,
   cc = '',
@@ -333,5 +434,7 @@ const sendQuotationEmail = async ({
 
 module.exports = {
   sendCampaignEmails,
+  sendRenewalReminder,
   sendQuotationEmail,
+  buildRenewalReminderEmail,
 };

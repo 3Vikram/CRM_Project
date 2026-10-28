@@ -10,6 +10,7 @@ import {
   Eye,
   FileText,
   Pencil,
+  Plus,
   Printer,
   Search,
   Trash2,
@@ -17,6 +18,8 @@ import {
 import { Toast } from '@/sales/components/toast'
 import { fetchCustomers } from '@/sales/lib/customerApi'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { toExcelDate } from '@/sales/lib/excelFormat'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -204,38 +207,50 @@ export default function FunnelPage() {
     }
   }
 
-  const downloadReport = () => {
-    const headers = ['SL No', 'Created By', 'Funnel Id', 'Created Date', 'Company', 'Account Type', 'OEM', 'Products', 'SBU', 'Revenue', 'Bottom Line', 'Expected Closure', 'Stage', 'Remark']
-    const rows = filteredFunnels.map((row, index) => [
-      String(index + 1),
-      row.createdBy || 'System',
-      row.quotationId || row.leadId || '-',
-      formatDate(row.createdDate),
-      row.companyName || '-',
-      getAccountTypeByCompany(row.companyName, customerAccountMap),
-      row.products?.[0]?.productName || '-',
-      getProductNames(row.products),
-      row.quotationDetails?.serviceName || '-',
-      calculateGrandTotal(row.products),
-      calculateGrandTotal(row.products),
-      formatDate(row.quotationDetails?.expectedClosure),
-      row.leadStatus || 'New',
-      row.remarks || row.quotationDetails?.note || '-',
-    ])
+  const downloadReport = async () => {
+    const headers = ['SL No.', 'Created By', 'Funnel Id', 'Created Date', 'Company', 'Account Type', 'OEM', 'Products', 'SBU', 'Revenue', 'Bottom Line', 'Expected Closure', 'Stage', 'Remark']
+    const rows = filteredFunnels.map((row, index) => {
+      const total = Number(row.products?.reduce(
+        (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+        0,
+      )) || 0
 
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
-      .join('\n')
+      return [
+        index + 1,
+        row.createdBy || '',
+        String(row.quotationId || row.leadId || ''),
+        toExcelDate(row.createdDate),
+        row.companyName || '',
+        customerAccountMap[row.companyName || ''] || '',
+        row.products?.[0]?.productName || '',
+        row.products?.map((item) => item.productName || '').filter(Boolean).join(', ') || '',
+        row.quotationDetails?.serviceName || '',
+        total,
+        total,
+        toExcelDate(row.quotationDetails?.expectedClosure),
+        row.leadStatus || '',
+        row.remarks || row.quotationDetails?.note || '',
+      ]
+    })
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'funnel-report.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    try {
+      await downloadExcelReport({
+        fileName: 'funnel-report.xlsx',
+        sheetName: 'Funnel',
+        headers,
+        rows,
+        textColumns: [2, 3, 11],
+        centerColumns: [0, 2, 3, 5, 11, 12],
+        leftColumns: [1, 4, 6, 7, 8, 13],
+        rightColumns: [9, 10],
+        currencyColumns: [9, 10],
+        wrapColumns: [4, 6, 7, 8, 13],
+        wideColumns: [4, 7, 13],
+        columnWidths: [8, 22, 18, 14, 32, 16, 30, 40, 22, 18, 18, 14, 16, 44],
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Unable to download funnel report')
+    }
   }
 
   const printReport = () => window.print()
@@ -244,6 +259,14 @@ export default function FunnelPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <h1 className="crm-page-heading">Funnel Dashboard</h1>
+        <button
+          type="button"
+          onClick={() => navigate('/sales/funnels/new')}
+          className="inline-flex items-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f2937]"
+        >
+          <Plus className="h-4 w-4" />
+          Generate New
+        </button>
       </div>
 
       <div className="h-px w-full bg-[#DAD4C7]" />
@@ -348,7 +371,7 @@ export default function FunnelPage() {
             onClick={downloadReport}
             className="rounded-md border border-[#D9D4CA] bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-[#f7f4ef]"
           >
-            CSV
+            Excel
           </button>
           <button
             type="button"
@@ -376,7 +399,7 @@ export default function FunnelPage() {
 
       <div className="overflow-x-auto rounded-md border border-[#D9D4CA] bg-white">
         <table className="min-w-[1500px] w-full border-collapse text-[12px] text-gray-700">
-          <thead className="bg-[#F6F3EE] text-left text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+          <thead className="bg-[#F6F3EE] text-left text-[16px] font-semibold uppercase tracking-wide text-gray-600">
             <tr>
               <th className="border-r border-[#D9D4CA] px-2 py-2.5">SL No.</th>
               <th className="border-r border-[#D9D4CA] px-2 py-2.5">Created By</th>
@@ -436,7 +459,7 @@ export default function FunnelPage() {
                         <button type="button" onClick={() => navigate(`/sales/quotations/view/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View">
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button type="button" onClick={() => navigate(`/sales/quotations/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">
+                        <button type="button" onClick={() => navigate(`/sales/funnels/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button type="button" onClick={() => setPendingDeleteId(row._id)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete">

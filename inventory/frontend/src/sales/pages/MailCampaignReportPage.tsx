@@ -3,17 +3,21 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getCampaignReport, type MailCampaignReportRow } from '@/sales/lib/mailCampaignApi'
+import { getCampaignReport, type MailCampaignReportRow, type MailCampaignReportSummary } from '@/sales/lib/mailCampaignApi'
 
 export default function MailCampaignReportPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const [rows, setRows] = useState<MailCampaignReportRow[]>([])
+  const [summary, setSummary] = useState<MailCampaignReportSummary | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!id) return
-    void getCampaignReport(id).then((response) => setRows(response.data || [])).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign report.'))
+    void getCampaignReport(id).then((response) => {
+      setRows(response.data || [])
+      setSummary(response.summary || null)
+    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign report.'))
   }, [id])
 
   const cell = 'border border-[#E5E7EB] px-3 py-2.5 align-middle'
@@ -23,6 +27,22 @@ export default function MailCampaignReportPage() {
       <div className="rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
         <h1 className="crm-page-heading">Mail Campaign Report</h1>
         {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+        {summary ? (
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              ['Total Recipients', summary.totalRecipients],
+              ['Sent Emails', summary.sentEmails],
+              ['Unique Opens', summary.uniqueOpens],
+              ['Total Opens', summary.totalOpens],
+              ['Open Rate', `${summary.openRate}%`],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-lg border border-[#EFECE5] bg-[#FAF8F2] p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+                <p className="mt-1 text-xl font-semibold text-[#111827]">{value}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
             <thead><tr className="bg-[#F2EFE8] text-left text-xs font-semibold uppercase tracking-wider text-gray-700">

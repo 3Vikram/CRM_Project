@@ -16,6 +16,8 @@ import { Toast } from '@/sales/components/toast'
 import { fetchOPFs, deleteOPF, type OPFRecord } from '@/sales/lib/opfApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { toExcelDate } from '@/sales/lib/excelFormat'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -140,34 +142,42 @@ export default function OPFPage() {
     }
   }
 
-  const downloadReport = () => {
-    const headers = ['OPF No', 'Created By', 'Quotation Number', 'Customer Name', 'Contact Person', 'Product', 'Revenue', 'Margin', 'Created Date', 'Renewal Date', 'Approval Status', 'PO File']
-    const rows = filteredOPFs.map((item) => [
-      item.opfNo || '-',
-      item.createdBy || 'Admin',
-      item.quotationNumber || '-',
-      item.customerName || '-',
-      item.contactPerson || '-',
-      item.product || '-',
-      String(formatCurrency(item.revenue)),
-      String(formatCurrency(item.margin)),
-      formatDate(item.createdDate),
-      formatDate(getRenewalDate(item)),
-      item.approvalStatus || 'Pending',
-      item.poFile?.fileName || '-',
+  const downloadReport = async () => {
+    const headers = ['SL No.', 'OPF No', 'Created By', 'Quotation Number', 'Customer Name', 'Contact Person', 'Product', 'Revenue', 'Margin', 'Created Date', 'Renewal Date', 'Approval Status', 'PO File']
+    const rows = filteredOPFs.map((item, index) => [
+      index + 1,
+      String(item.opfNo || ''),
+      item.createdBy || '',
+      String(item.quotationNumber || ''),
+      item.customerName || '',
+      item.contactPerson || '',
+      item.product || '',
+      Number(item.revenue) || 0,
+      Number(item.margin) || 0,
+      toExcelDate(item.createdDate),
+      toExcelDate(getRenewalDate(item)),
+      item.approvalStatus || '',
+      item.poFile?.fileName || '',
     ])
 
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = 'opf-report.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    try {
+      await downloadExcelReport({
+        fileName: 'opf-report.xlsx',
+        sheetName: 'OPF',
+        headers,
+        rows,
+        textColumns: [1, 3, 9, 10],
+        centerColumns: [0, 1, 3, 9, 10, 11],
+        leftColumns: [2, 4, 5, 6, 12],
+        rightColumns: [7, 8],
+        currencyColumns: [7, 8],
+        wrapColumns: [4, 5, 6, 12],
+        wideColumns: [4, 12],
+        columnWidths: [8, 16, 22, 18, 32, 24, 32, 18, 18, 14, 14, 16, 36],
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Unable to download OPF report')
+    }
   }
 
   return (

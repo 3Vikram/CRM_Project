@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getAuthHeaders } from './apiAuth';
-import { getCachedResponse } from './apiCache';
+import { clearApiCache, getCachedResponse } from './apiCache';
 
 const API_BASE_URL = '/api';
 
@@ -32,6 +32,7 @@ export interface CustomerApiRecord {
   state?: string;
   gstNumber?: string;
   createdBy?: string;
+  createdById?: string | null;
 }
 
 export interface CustomerListResponse {
@@ -49,11 +50,12 @@ export interface CustomerPayload {
   companyName: string;
   customerName: string;
   state?: string;
+  gstNumber?: string;
   email: string;
   phone: string;
   status: 'Active' | 'Inactive';
   notes: string;
-  createdBy: string;
+  createdBy?: string;
   accountType: string;
   contacts: Array<{
     contactType: string;
@@ -159,6 +161,7 @@ export async function createCustomer(payload: CustomerPayload, files: File[] = [
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to create customer');
   }
+  clearApiCache();
   return response.json();
 }
 
@@ -188,6 +191,7 @@ export async function updateCustomer(id: string, payload: CustomerPayload, files
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to update customer');
   }
+  clearApiCache();
   return response.json();
 }
 
@@ -200,6 +204,7 @@ export async function deleteCustomer(id: string) {
     const errorPayload = await response.json().catch(() => ({}));
     throw new Error(errorPayload.message || 'Failed to delete customer');
   }
+  clearApiCache();
   return response.json();
 }
 

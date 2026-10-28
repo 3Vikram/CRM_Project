@@ -20,7 +20,7 @@ if (!MONGO_URI) {
 
 const [
   { default: inventoryRoutes },
-  { default: inventoryAuthRoutes, requireInventoryAuth },
+  { default: inventoryAuthRoutes, requireInventoryAuth, requireInventoryProductReadAuth },
   { default: inventoryEmployeeRoutes },
   { default: assetRoutes },
   { default: productRoutes },
@@ -59,7 +59,7 @@ app.use('/api/inventory', requireInventoryAuth);
 app.use('/api/inventory/employees', inventoryEmployeeRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/assets', requireInventoryAuth);
-app.use('/api/products', requireInventoryAuth);
+app.use('/api/products', requireInventoryProductReadAuth);
 app.use('/api/delivery-challans', requireInventoryAuth);
 app.use('/api/returned-challans', requireInventoryAuth);
 app.use('/api/daily-email', requireInventoryAuth);

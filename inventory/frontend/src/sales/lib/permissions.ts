@@ -3,6 +3,13 @@ import { getStoredAuth, type EmployeePermissions, type PermissionBlock } from '.
 export type PermissionModule = string
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete'
 
+export const canManageCustomerMapping = () => {
+  const user = getStoredAuth()?.user
+  if (!user) return false
+  if (user.role === 'admin') return true
+  return ['admin', 'manager'].includes(String(user.employeeType || '').trim().toLowerCase())
+}
+
 export const hasPermission = (
   moduleName: PermissionModule,
   action: PermissionAction = 'view',
@@ -10,7 +17,7 @@ export const hasPermission = (
 ) => {
   const session = getStoredAuth()
   if (session?.user.role === 'admin') return true
-  if (moduleName === 'employees') return false
+  if (moduleName === 'customerMapping') return canManageCustomerMapping()
   const source = permissions || session?.user.permissions
   if (!source) return false
   if (moduleName === 'dashboard') return action === 'view' && source.dashboard === true

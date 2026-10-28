@@ -197,7 +197,7 @@ export default function SupplierFormPage() {
             <AccordionDetails>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Supplier Name *</span>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Supplier Name <span className="required-asterisk">*</span></span>
                   <input value={form.supplierName} onChange={(event) => handleChange('supplierName', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
                 </label>
                 <label className="block">
@@ -205,32 +205,32 @@ export default function SupplierFormPage() {
                   <input value={form.gstNumber} onChange={(event) => handleChange('gstNumber', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Category *</span>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Category <span className="required-asterisk">*</span></span>
                   <select value={form.category} onChange={(event) => handleChange('category', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]">
                     <option value="">Select category</option>
                     {categoryOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Payment Terms *</span>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Payment Terms <span className="required-asterisk">*</span></span>
                   <select value={form.paymentTerms} onChange={(event) => handleChange('paymentTerms', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]">
                     <option value="">Select payment terms</option>
                     {paymentTermsOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 </label>
                 <label className="block md:col-span-2">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Address Line 1 *</span>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Address Line 1 <span className="required-asterisk">*</span></span>
                   <input value={form.addressLine1} onChange={(event) => handleChange('addressLine1', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Country *</span>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Country <span className="required-asterisk">*</span></span>
                   <select value={form.country} onChange={(event) => handleChange('country', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]">
                     <option value="">Select country</option>
                     {countries.map((country) => <option key={country.name} value={country.name}>{country.name}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">State *</span>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">State <span className="required-asterisk">*</span></span>
                   <select value={form.state} onChange={(event) => handleChange('state', event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" disabled={!form.country}>
                     <option value="">Select state</option>
                     {states.map((state) => <option key={state.name} value={state.name}>{state.name}</option>)}

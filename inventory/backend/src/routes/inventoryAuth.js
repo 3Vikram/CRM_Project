@@ -98,6 +98,50 @@ export async function requireInventoryAuth(req, res, next) {
   return next();
 }
 
+export function requireInventoryProductReadAuth(req, res, next) {
+  const authorization = req.get('authorization') || '';
+  const token = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : '';
+  const [payload, signature, extra] = token.split('.');
+  let claims = null;
+
+  if (payload && signature && !extra) {
+    try {
+      claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    } catch {
+      claims = null;
+    }
+  }
+
+  if (claims?.service === 'sales-quotation-products') {
+    const secret = process.env.INVENTORY_PRODUCTS_SERVICE_SECRET;
+    if (!secret || secret.length < 32) {
+      console.error('[Inventory] Product service authentication is not configured: INVENTORY_PRODUCTS_SERVICE_SECRET is missing or too short.');
+      return res.status(503).json({ error: 'Inventory product service authentication is not configured.' });
+    }
+
+    const expected = Buffer.from(createSignature(payload, secret));
+    const received = Buffer.from(signature || '');
+    const validSignature = expected.length === received.length && timingSafeEqual(expected, received);
+    const validScope = req.method === 'GET' && req.path === '/'
+      && claims.audience === 'inventory-api'
+      && claims.scope === 'products:read'
+      && Number.isFinite(claims.exp)
+      && claims.exp > Date.now();
+
+    if (!validSignature || !validScope) {
+      console.warn('[Inventory] Rejected invalid or out-of-scope product service request.');
+      return res.status(401).json({ error: 'Inventory product service authentication required.' });
+    }
+
+    req.inventoryService = claims.service;
+    return next();
+  }
+
+  return requireInventoryAuth(req, res, next);
+}
+
 router.post('/login', async (req, res) => {
   const config = getAuthConfig();
   if (!configured(config)) {

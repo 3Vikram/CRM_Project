@@ -67,6 +67,16 @@ export interface LeadRecord {
     payment?: string;
     expectedClosure?: string;
     note?: string;
+    value?: string | number;
+    revenue?: string | number;
+    marginPercent?: string | number;
+    sbu?: string;
+    oem?: string;
+    stage?: string;
+    probability?: string;
+    demo?: string;
+    poc?: string;
+    tagResource?: string;
     enterpriseQuot?: string;
     addressRequired?: boolean;
     signatureRequired?: boolean;

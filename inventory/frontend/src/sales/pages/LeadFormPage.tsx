@@ -4,6 +4,7 @@ import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import { Toast } from '@/sales/components/toast';
 import { createLead, fetchLeadById, updateLead } from '@/sales/lib/leadApi';
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi';
+import { PHONE_ERROR_MESSAGE, isValidPhoneNumber, sanitizePhoneInput } from '@/sales/lib/phone';
 
 const initialState = {
   companyName: '',
@@ -25,16 +26,19 @@ export default function LeadFormPage() {
   const [form, setForm] = useState(initialState);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
 
   const validate = useMemo(() => {
     const nextErrors: Record<string, string> = {};
     if (!form.companyName.trim()) nextErrors.companyName = 'Company name is required';
     if (!form.contactPerson.trim()) nextErrors.contactPerson = 'Contact person is required';
+    if (!form.designation.trim()) nextErrors.designation = 'Designation is required';
     if (!form.email.trim()) nextErrors.email = 'Email is required';
-    else if (!/^\S+@\S+\.\S+$/.test(form.email)) nextErrors.email = 'Please enter a valid email';
-    if (!form.mobile.trim()) nextErrors.mobile = 'Mobile is required';
-    else if (!/^\+?[0-9\s-]{7,15}$/.test(form.mobile)) nextErrors.mobile = 'Please enter a valid mobile number';
+    else if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) nextErrors.email = 'Please enter a valid email';
+    if (!form.mobile.trim()) nextErrors.mobile = 'Mobile number is required';
+    else if (!isValidPhoneNumber(form.mobile)) nextErrors.mobile = PHONE_ERROR_MESSAGE;
+    if (!form.followUpDate) nextErrors.followUpDate = 'Follow-up date is required';
     return nextErrors;
   }, [form]);
 
@@ -82,8 +86,9 @@ export default function LeadFormPage() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSubmitted(true);
     if (Object.keys(validate).length > 0) {
-      setToast('Please fix the highlighted validation errors');
+      setToast(validate.mobile || Object.values(validate)[0]);
       return;
     }
 
@@ -124,24 +129,29 @@ export default function LeadFormPage() {
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Company Name</span>
+            <span className="text-sm font-semibold text-gray-700">Company Name<span className="text-red-600"> *</span></span>
             <input name="companyName" value={form.companyName} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            {submitted && errors.companyName ? <p className="mt-1 text-xs text-red-600">{errors.companyName}</p> : null}
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Contact Person</span>
+            <span className="text-sm font-semibold text-gray-700">Contact Person<span className="text-red-600"> *</span></span>
             <input name="contactPerson" value={form.contactPerson} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            {submitted && errors.contactPerson ? <p className="mt-1 text-xs text-red-600">{errors.contactPerson}</p> : null}
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Designation</span>
+            <span className="text-sm font-semibold text-gray-700">Designation<span className="text-red-600"> *</span></span>
             <input name="designation" value={form.designation} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            {submitted && errors.designation ? <p className="mt-1 text-xs text-red-600">{errors.designation}</p> : null}
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Email</span>
+            <span className="text-sm font-semibold text-gray-700">Email<span className="text-red-600"> *</span></span>
             <input name="email" value={form.email} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            {submitted && errors.email ? <p className="mt-1 text-xs text-red-600">{errors.email}</p> : null}
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Mobile Number</span>
-            <input name="mobile" value={form.mobile} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Mobile Number<span className="text-red-600"> *</span></span>
+            <input name="mobile" value={form.mobile} onChange={(event) => setForm((prev) => ({ ...prev, mobile: sanitizePhoneInput(event.target.value) }))} inputMode="numeric" maxLength={10} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            {submitted && errors.mobile ? <p className="mt-1 text-xs text-red-600">{errors.mobile}</p> : null}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Assign To</span>
@@ -154,8 +164,9 @@ export default function LeadFormPage() {
             </select>
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Follow-up Date</span>
+            <span className="text-sm font-semibold text-gray-700">Follow-up Date<span className="text-red-600"> *</span></span>
             <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            {submitted && errors.followUpDate ? <p className="mt-1 text-xs text-red-600">{errors.followUpDate}</p> : null}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Source Of Lead</span>

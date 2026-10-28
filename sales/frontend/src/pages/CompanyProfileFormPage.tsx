@@ -229,15 +229,15 @@ export default function CompanyProfileFormPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Director Name *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Director Name <span className="required-asterisk">*</span></span>
               <input value={form.directorName} onChange={(event) => handleChange('directorName', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Director Designation *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Director Designation <span className="required-asterisk">*</span></span>
               <input value={form.directorDesignation} onChange={(event) => handleChange('directorDesignation', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block md:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Company Name *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Company Name <span className="required-asterisk">*</span></span>
               <input value={form.companyName} onChange={(event) => handleChange('companyName', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
@@ -257,19 +257,19 @@ export default function CompanyProfileFormPage() {
               <textarea value={form.address} onChange={(event) => handleChange('address', event.target.value)} className="crm-input form-control min-h-[88px]" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">City *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">City <span className="required-asterisk">*</span></span>
               <input value={form.city} onChange={(event) => handleChange('city', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">State *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">State <span className="required-asterisk">*</span></span>
               <input value={form.state} onChange={(event) => handleChange('state', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">PIN *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">PIN <span className="required-asterisk">*</span></span>
               <input value={form.pin} onChange={(event) => handleChange('pin', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Country *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Country <span className="required-asterisk">*</span></span>
               <input value={form.country} onChange={(event) => handleChange('country', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
@@ -277,11 +277,11 @@ export default function CompanyProfileFormPage() {
               <input value={form.companyContactNo} onChange={(event) => handleChange('companyContactNo', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Website *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Website <span className="required-asterisk">*</span></span>
               <input value={form.website} onChange={(event) => handleChange('website', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Email *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Email <span className="required-asterisk">*</span></span>
               <input value={form.email} onChange={(event) => handleChange('email', event.target.value)} className="crm-input form-control" />
             </label>
           </div>
@@ -329,78 +329,78 @@ export default function CompanyProfileFormPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">GST No. *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">GST No. <span className="required-asterisk">*</span></span>
               <input value={form.gstNo} onChange={(event) => handleChange('gstNo', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">PAN No. *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">PAN No. <span className="required-asterisk">*</span></span>
               <input value={form.panNo} onChange={(event) => handleChange('panNo', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Bank Name *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Bank Name <span className="required-asterisk">*</span></span>
               <input value={form.bankName} onChange={(event) => handleChange('bankName', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Account Holder Name *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Account Holder Name <span className="required-asterisk">*</span></span>
               <input value={form.accountHolderName} onChange={(event) => handleChange('accountHolderName', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Account No. *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Account No. <span className="required-asterisk">*</span></span>
               <input value={form.accountNo} onChange={(event) => handleChange('accountNo', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">IFSC Code *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">IFSC Code <span className="required-asterisk">*</span></span>
               <input value={form.ifscCode} onChange={(event) => handleChange('ifscCode', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Swift Code *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Swift Code <span className="required-asterisk">*</span></span>
               <input value={form.swiftCode} onChange={(event) => handleChange('swiftCode', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">CIN *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">CIN <span className="required-asterisk">*</span></span>
               <input value={form.cin} onChange={(event) => handleChange('cin', event.target.value)} className="crm-input form-control" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">IEC *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">IEC <span className="required-asterisk">*</span></span>
               <input value={form.iec} onChange={(event) => handleChange('iec', event.target.value)} className="crm-input form-control" />
             </label>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block md:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Quotation Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Quotation Format <span className="required-asterisk">*</span></span>
               <input value={form.quotationFormat} onChange={(event) => handleChange('quotationFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. QTN-2024-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">ID No. Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">ID No. Format <span className="required-asterisk">*</span></span>
               <input value={form.idNoFormat} onChange={(event) => handleChange('idNoFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. IDN-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">OPF Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">OPF Format <span className="required-asterisk">*</span></span>
               <input value={form.opfFormat} onChange={(event) => handleChange('opfFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. OPF-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">PO Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">PO Format <span className="required-asterisk">*</span></span>
               <input value={form.poFormat} onChange={(event) => handleChange('poFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. PO-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">PI Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">PI Format <span className="required-asterisk">*</span></span>
               <input value={form.piFormat} onChange={(event) => handleChange('piFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. PI-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Invoice Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Invoice Format <span className="required-asterisk">*</span></span>
               <input value={form.invoiceFormat} onChange={(event) => handleChange('invoiceFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. INV-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">PR Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">PR Format <span className="required-asterisk">*</span></span>
               <input value={form.prFormat} onChange={(event) => handleChange('prFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. PR-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Enquiry Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Enquiry Format <span className="required-asterisk">*</span></span>
               <input value={form.enquiryFormat} onChange={(event) => handleChange('enquiryFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. ENQ-###" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Challan Format *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Challan Format <span className="required-asterisk">*</span></span>
               <input value={form.challanFormat} onChange={(event) => handleChange('challanFormat', event.target.value)} className="crm-input form-control" placeholder="E.g. CHL-###" />
             </label>
           </div>

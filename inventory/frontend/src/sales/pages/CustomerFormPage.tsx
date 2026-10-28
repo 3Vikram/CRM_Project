@@ -12,6 +12,8 @@ import {
   type CustomerApiRecord,
   type CustomerPayload,
 } from '@/sales/lib/customerApi'
+import { ACCOUNT_TYPE_OPTIONS } from '@/sales/lib/accountTypes'
+import { PHONE_ERROR_MESSAGE, isValidPhoneNumber, sanitizePhoneInput } from '@/sales/lib/phone'
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID()
@@ -51,7 +53,6 @@ interface CustomerFormState {
   billingEmail: string
   status: 'Active' | 'Inactive'
   accountType: string
-  createdBy: string
   notes: string
   contacts: ContactItem[]
   documents: DocumentItem[]
@@ -96,8 +97,8 @@ const selectStyles = {
   menuPortal: (base: Record<string, unknown>) => ({ ...base, zIndex: 9999 }),
   option: (base: Record<string, unknown>, state: { isFocused: boolean; isSelected: boolean }) => ({
     ...base,
-    backgroundColor: state.isSelected ? '#111827' : state.isFocused ? '#F2EFE8' : '#ffffff',
-    color: state.isSelected ? '#ffffff' : '#0f172a',
+    backgroundColor: state.isSelected || state.isFocused ? '#94A3B8' : '#ffffff',
+    color: '#0f172a',
   }),
 }
 
@@ -118,8 +119,7 @@ const emptyForm: CustomerFormState = {
   billingContactNumber: '',
   billingEmail: '',
   status: 'Active',
-  accountType: 'Individual',
-  createdBy: 'Admin',
+  accountType: '',
   notes: '',
   contacts: [
     {
@@ -246,7 +246,6 @@ export default function CustomerFormPage() {
           billingEmail: customer.email || primaryContact?.email || '',
           status: customer.status || 'Active',
           accountType: customer.accountType || 'Individual',
-          createdBy: customer.createdBy || 'Admin',
           notes: customer.notes || '',
           contacts: (customer.contacts?.length ? customer.contacts : [primaryContact]).filter(Boolean).map((contact, index) => ({
             id: `${contact?.name || 'contact'}-${index}`,
@@ -375,10 +374,12 @@ export default function CustomerFormPage() {
     if (!form.billingArea.trim()) return 'Area is required.'
     if (!form.billingPinCode.trim()) return 'Pin Code is required.'
     if (!form.billingContactNumber.trim()) return 'Contact Number is required.'
+    if (!isValidPhoneNumber(form.billingContactNumber)) return PHONE_ERROR_MESSAGE
     if (!form.billingEmail.trim()) return 'Email Address is required.'
 
     const invalidContact = form.contacts.some((contact) => !contact.contactType || !contact.name || !contact.email || !contact.phone)
     if (invalidContact) return 'Each contact must include Contact Type, Name, Email ID, and Contact Number.'
+    if (form.contacts.some((contact) => !isValidPhoneNumber(contact.phone))) return PHONE_ERROR_MESSAGE
 
     return null
   }
@@ -402,8 +403,8 @@ export default function CustomerFormPage() {
       status: form.status,
       notes: form.notes,
       state: form.state,
-      createdBy: form.createdBy,
-      accountType: form.accountType,
+      gstNumber: form.gstNumber.trim(),
+      accountType: form.accountType || 'Individual',
       contacts: form.contacts.map((contact) => ({
         contactType: contact.contactType,
         name: contact.name,
@@ -499,6 +500,21 @@ export default function CustomerFormPage() {
             <Field label="GST Number">
               <input value={form.gstNumber} onChange={(event) => handleFieldChange('gstNumber', event.target.value)} placeholder="GST Number" className="crm-input form-control" />
             </Field>
+            <Field label="Account Type">
+              <select
+                value={form.accountType}
+                onChange={(event) => handleFieldChange('accountType', event.target.value)}
+                className="crm-input form-select"
+              >
+                <option value="">Select account type</option>
+                {form.accountType && !ACCOUNT_TYPE_OPTIONS.includes(form.accountType) ? (
+                  <option value={form.accountType}>{form.accountType}</option>
+                ) : null}
+                {ACCOUNT_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </Field>
           </div>
         </SectionCard>
 
@@ -578,7 +594,7 @@ export default function CustomerFormPage() {
               />
             </Field>
             <Field label="Contact Number" required>
-              <input value={form.billingContactNumber} onChange={(event) => handleFieldChange('billingContactNumber', event.target.value)} placeholder="Contact Number" className="crm-input form-control" />
+              <input value={form.billingContactNumber} onChange={(event) => handleFieldChange('billingContactNumber', sanitizePhoneInput(event.target.value))} inputMode="numeric" maxLength={10} placeholder="Contact Number" className="crm-input form-control" />
             </Field>
             <Field label="Email Address" required>
               <input type="email" value={form.billingEmail} onChange={(event) => handleFieldChange('billingEmail', event.target.value)} placeholder="Email" className="crm-input form-control" />
@@ -616,7 +632,7 @@ export default function CustomerFormPage() {
                     <input type="email" value={contact.email} onChange={(event) => handleContactChange(index, 'email', event.target.value)} placeholder="Email" className="crm-input form-control" />
                   </Field>
                   <Field label="Contact Number" required>
-                    <input value={contact.phone} onChange={(event) => handleContactChange(index, 'phone', event.target.value)} placeholder="Contact Number" className="crm-input form-control" />
+                    <input value={contact.phone} onChange={(event) => handleContactChange(index, 'phone', sanitizePhoneInput(event.target.value))} inputMode="numeric" maxLength={10} placeholder="Contact Number" className="crm-input form-control" />
                   </Field>
                   <Field label="Designation">
                     <input value={contact.designation} onChange={(event) => handleContactChange(index, 'designation', event.target.value)} placeholder="Designation" className="crm-input form-control" />

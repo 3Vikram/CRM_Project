@@ -2,6 +2,7 @@ const OPF = require('../models/OPF');
 const CompanyProfile = require('../models/CompanyProfile');
 const { sendQuotationEmail } = require('../services/emailService');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { ownerScope, creatorFields } = require('../utils/accessScope');
 
 const calculateFinancialYear = (date = new Date()) => {
   const year = date.getFullYear();
@@ -141,13 +142,15 @@ exports.getOPFs = async (req, res) => {
         query.renewalDate = { $gte: start, $lte: end };
       }
     }
+    const scope = ownerScope(req);
+    const finalQuery = Object.keys(scope).length ? { $and: [query, scope] } : query;
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdDate', 'renewalDate', 'customerName', 'quotationNumber', 'approvalStatus']);
 
     const [opfRecords, total] = await Promise.all([
-      OPF.find(query).sort(sortOptions).skip(skip).limit(limitNum).lean(),
-      OPF.countDocuments(query),
+      OPF.find(finalQuery).sort(sortOptions).skip(skip).limit(limitNum).lean(),
+      OPF.countDocuments(finalQuery),
     ]);
 
     const enrichedRecords = opfRecords.map((opf) => enrichOPFFinancials(opf));
@@ -201,7 +204,7 @@ exports.getInventoryOPFOptions = async (req, res) => {
 
 exports.getOPFById = async (req, res) => {
   try {
-    const opf = await OPF.findById(req.params.id).lean();
+    const opf = await OPF.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).lean();
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
     res.status(200).json({ success: true, data: enrichOPFFinancials(opf) });
   } catch (error) {
@@ -248,7 +251,8 @@ exports.createOPF = async (req, res) => {
     }
 
     // Normalize numeric fields
-    payload.createdBy = payload.createdBy || 'Admin';
+    Object.assign(payload, creatorFields(req));
+    payload.createdByEmail = req.user?.email || '';
     payload.quantity = normalizeNumber(payload.quantity);
     payload.unitPrice = normalizeNumber(payload.unitPrice);
     payload.vendorPrice = normalizeNumber(payload.vendorPrice);
@@ -285,10 +289,13 @@ exports.createOPF = async (req, res) => {
 exports.updateOPF = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
-    const existingOPF = await OPF.findById(req.params.id).lean();
+    const existingOPF = await OPF.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).lean();
     if (!existingOPF) {
       return res.status(404).json({ success: false, message: 'OPF not found' });
     }
+    delete payload.createdBy;
+    delete payload.createdById;
+    delete payload.createdByEmail;
     
     // Handle multiple file uploads
     if (req.files) {
@@ -342,8 +349,21 @@ exports.updateOPF = async (req, res) => {
     } else if ('amcRenewalDate' in payload) {
       payload.renewalDate = null;
     }
+    const updatedRenewalDate = payload.renewalDate ?? existingOPF.renewalDate;
+    const renewalDateChanged = (updatedRenewalDate ? new Date(updatedRenewalDate).getTime() : null)
+      !== (existingOPF.renewalDate ? new Date(existingOPF.renewalDate).getTime() : null);
+    if (renewalDateChanged) {
+      payload.renewalReminderDate = null;
+      payload.renewalReminderClaimedAt = null;
+      payload.renewalReminderRetryAt = null;
+      payload.renewalReminderSentAt = null;
+    }
 
-    const opf = await OPF.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    const opf = await OPF.findOneAndUpdate(
+      { $and: [{ _id: req.params.id }, ownerScope(req)] },
+      payload,
+      { new: true, runValidators: true }
+    );
 
     res.status(200).json({ success: true, message: 'OPF updated successfully', data: opf });
   } catch (error) {
@@ -357,7 +377,7 @@ exports.updateOPF = async (req, res) => {
 
 exports.deleteOPF = async (req, res) => {
   try {
-    const opf = await OPF.findByIdAndDelete(req.params.id);
+    const opf = await OPF.findOneAndDelete({ $and: [{ _id: req.params.id }, ownerScope(req)] });
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
     res.status(200).json({ success: true, message: 'OPF deleted successfully' });
   } catch (error) {
@@ -373,7 +393,7 @@ exports.sendOPFPdf = async (req, res) => {
       return res.status(400).json({ success: false, message: 'At least one recipient email is required' });
     }
 
-    const opf = await OPF.findById(req.params.id).lean();
+    const opf = await OPF.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).lean();
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
 
     const encodedPdf = typeof pdfData === 'string' && pdfData.includes(',') ? pdfData.split(',')[1] : pdfData;

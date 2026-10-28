@@ -5,6 +5,8 @@ import { Toast } from '@/sales/components/toast';
 import { deleteActivity, fetchActivities, type ActivityRecord } from '@/sales/lib/activityApi';
 import { PermissionGate } from '@/sales/components/PermissionGate';
 import { fetchCustomers } from '@/sales/lib/customerApi';
+import { downloadExcelReport } from '@/lib/downloadExcelReport';
+import { toExcelDate } from '@/sales/lib/excelFormat';
 
 const createdByOptions = ['Admin', 'Anaya Patel', 'Rahul Sharma', 'Rhea Shah', 'Maya Nair', 'System'];
 const dateOptions = [
@@ -97,16 +99,15 @@ export default function ActivityPage() {
     void loadActivities();
   }, [loadActivities]);
 
-  const handleDownloadReport = useCallback(() => {
-    const csvHeader = [
+  const handleDownloadReport = useCallback(async () => {
+    const headers = [
+      'SL No.',
       'Activity ID',
       'Representative',
       'Company',
       'Activity Type',
       'Activity Date',
-      // 'Activity Time',
       'Follow-up Date',
-      // 'Follow-up Time',
       'Product',
       'Requirements',
       'Remarks',
@@ -116,31 +117,40 @@ export default function ActivityPage() {
       'Activity Status',
     ];
 
-    const csvRows = activities.map((activity) => [
-      activity.activityId || activity._id,
+    const rows = activities.map((activity, index) => [
+      index + 1,
+      activity.activityId || activity._id || '',
       activity.assignedUser || '',
       activity.company || activity.customerName || '',
       activity.activityType || '',
-      activity.activityDate || '',
-      activity.followUpDate || '',
+      toExcelDate(activity.activityDate),
+      toExcelDate(activity.followUpDate),
       activity.product || '',
       activity.customerRequirements || '',
       activity.customerRemarks || '',
       activity.contactPerson || '',
       activity.email || '',
-      activity.mobileNo || '',
+      activity.mobileNo ? String(activity.mobileNo) : '',
       activity.status || '',
     ]);
 
-    const csvContent = [csvHeader, ...csvRows].map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'activity-report.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-    setToast('Activity report downloaded');
+    try {
+      await downloadExcelReport({
+        fileName: 'activity-report.xlsx',
+        sheetName: 'Activities',
+        headers,
+        rows,
+        textColumns: [1, 5, 6, 12],
+        centerColumns: [0, 1, 4, 5, 6, 13],
+        leftColumns: [2, 3, 7, 8, 9, 10, 11, 12],
+        wrapColumns: [3, 7, 8, 9, 10, 11],
+        wideColumns: [3, 8, 9, 11],
+        columnWidths: [8, 18, 24, 32, 16, 14, 14, 28, 40, 40, 24, 32, 18, 16],
+      });
+      setToast('Activity report downloaded');
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Unable to download activity report');
+    }
   }, [activities]);
 
   const handleDelete = useCallback(async () => {

@@ -31,10 +31,10 @@ import { Toast } from '@/sales/components/toast'
 import { fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/sales/lib/leadApi'
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { clearApiCache } from '@/sales/lib/apiCache'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
 
 interface LeadsPageProps {
   pageTitle?: string
-  initialStatusFilter?: string
   addButtonLabel?: string
   onAddButtonClick?: () => void
   showAddButton?: boolean
@@ -58,7 +58,6 @@ const tableCellClass = 'px-4 py-3 border-r border-[#D1D5DB]'
 
 export default function LeadsPage({
   pageTitle = 'Lead Management',
-  initialStatusFilter = 'all',
   addButtonLabel = 'Add Lead',
   onAddButtonClick,
   showAddButton = true,
@@ -76,7 +75,7 @@ export default function LeadsPage({
   const [ownerMenuPosition, setOwnerMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [isAssigningOwner, setIsAssigningOwner] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
+  const [assignedFilter, setAssignedFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(8)
@@ -86,13 +85,15 @@ export default function LeadsPage({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; placement: 'bottom' | 'top' } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   const loadLeads = useCallback(async () => {
     setIsLoading(true)
     try {
-      const params = { page, limit, search: searchQuery, status: statusFilter === 'all' ? '' : statusFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
+      const params = { page, limit, search: searchQuery, assignedTo: assignedFilter === 'all' ? '' : assignedFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
       const response = await fetchLeads(params)
       setLeads(response.data)
       setTotalPages(response.pagination.totalPages)
@@ -102,7 +103,7 @@ export default function LeadsPage({
     } finally {
       setIsLoading(false)
     }
-  }, [limit, page, searchQuery, sourceFilter, statusFilter])
+  }, [assignedFilter, limit, page, searchQuery, sourceFilter])
 
   useEffect(() => { void loadLeads() }, [loadLeads])
 
@@ -115,11 +116,74 @@ export default function LeadsPage({
       })
   }, [])
 
-  useEffect(() => { setPage(1) }, [searchQuery, statusFilter, sourceFilter])
+  useEffect(() => { setPage(1) }, [searchQuery, assignedFilter, sourceFilter])
 
-  useEffect(() => {
-    setStatusFilter(initialStatusFilter)
-  }, [initialStatusFilter])
+  const assignedOptions = useMemo(() => {
+    const employeeNames = employees
+      .map((employee) => employee.employeeName || employee.fullName || employee.email)
+      .filter((name): name is string => Boolean(name?.trim()))
+    const leadNames = leads
+      .map((lead) => lead.assignedTo?.trim())
+      .filter((name): name is string => Boolean(name && name !== 'Unassigned'))
+    return Array.from(new Set([...employeeNames, ...leadNames])).sort((a, b) => a.localeCompare(b))
+  }, [employees, leads])
+
+  const handleDownloadReport = async () => {
+    setIsDownloading(true)
+    setDownloadError(null)
+    try {
+      const allLeads: LeadRecord[] = []
+      let currentPage = 1
+      let totalReportPages = 1
+      do {
+        const response = await fetchLeads({
+          page: currentPage,
+          limit: 100,
+          search: searchQuery,
+          assignedTo: assignedFilter === 'all' ? '' : assignedFilter,
+          source: sourceFilter === 'all' ? '' : sourceFilter,
+        })
+        allLeads.push(...response.data)
+        totalReportPages = response.pagination.totalPages || 1
+        currentPage += 1
+      } while (currentPage <= totalReportPages)
+
+      if (!allLeads.length) {
+        setDownloadError('There are no leads to download.')
+        return
+      }
+
+      const includeStatus = allLeads.some((lead) => Boolean(lead.leadStatus))
+      const headers = ['SL No.', 'Lead ID', 'Company', 'Contact', 'Email', 'Source', 'Assigned To', ...(includeStatus ? ['Status'] : [])]
+      const rows = allLeads.map((lead, index) => [
+        index + 1,
+        String(lead.leadId || lead._id.slice(-6)),
+        lead.companyName || '',
+        lead.contactPerson || '',
+        lead.email || '',
+        lead.sourceOfLead || '',
+        lead.assignedTo || '',
+        ...(includeStatus ? [lead.leadStatus || ''] : []),
+      ])
+
+      await downloadExcelReport({
+        fileName: 'leads-report.xlsx',
+        sheetName: 'Leads',
+        headers,
+        rows,
+        textColumns: [1],
+        centerColumns: includeStatus ? [0, 1, 7] : [0, 1],
+        leftColumns: [2, 3, 4, 5, 6],
+        wrapColumns: [2, 3, 4, 6],
+        wideColumns: [2, 4, 6],
+        columnWidths: includeStatus ? [8, 18, 34, 24, 34, 20, 28, 16] : [8, 18, 34, 24, 34, 20, 28],
+      })
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Unable to download leads report.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   const closeMenu = () => {
     setOpenMenuId(null)
@@ -266,8 +330,8 @@ export default function LeadsPage({
               <Plus className="h-4 w-4" /> {addButtonLabel}
             </button>
           </PermissionGate>}
-          <button className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
-            <Download className="h-4 w-4" /> Download Report
+          <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA] disabled:opacity-60">
+            <Download className="h-4 w-4" /> {isDownloading ? 'Downloading...' : 'Download Report'}
           </button>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -292,10 +356,11 @@ export default function LeadsPage({
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
         <div className="mb-4 flex flex-wrap gap-3">
           <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Status</span>
-            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Assigned To</span>
+            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
               <option value="all">All</option>
-              {Object.keys(statusColors).map((option) => <option key={option} value={option}>{option}</option>)}
+              <option value="Unassigned">Unassigned</option>
+              {assignedOptions.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
           </label>
           <label className="min-w-[180px] flex-1">
@@ -466,6 +531,7 @@ export default function LeadsPage({
       ) : null}
 
       {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
+      {downloadError && <Toast message={downloadError} type="error" onClose={() => setDownloadError(null)} />}
     </div>
   )
 }

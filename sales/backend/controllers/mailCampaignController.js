@@ -16,6 +16,7 @@ const Supplier = require('../models/Supplier');
 const { buildEmployeeGroups } = require('./contactController');
 const { sendCampaignEmails } = require('../services/emailService');
 const logger = require('../utils/logger');
+const { creatorFields } = require('../utils/accessScope');
 
 let Employee = null;
 try {
@@ -553,6 +554,7 @@ exports.getCampaigns = async (req, res) => {
       { $group: {
         _id: '$campaignId',
         totalOpens: { $sum: { $ifNull: ['$openCount', 0] } },
+        uniqueOpens: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, 1, 0] } },
         totalClicks: { $sum: { $ifNull: ['$clickCount', 0] } },
       } },
     ]);
@@ -563,7 +565,7 @@ exports.getCampaigns = async (req, res) => {
       data: campaigns.map((campaign) => normalizeCampaign({
         ...campaign,
         opens: engagementByCampaign.get(campaign.campaignId)?.totalOpens || 0,
-        uniqueOpens: engagementByCampaign.get(campaign.campaignId)?.totalOpens || 0,
+        uniqueOpens: engagementByCampaign.get(campaign.campaignId)?.uniqueOpens || 0,
         clicks: engagementByCampaign.get(campaign.campaignId)?.totalClicks || 0,
       })),
       pagination: {
@@ -633,6 +635,26 @@ const buildPublicTrackingBaseUrl = (req) => {
 };
 
 const getTrackingBaseUrl = (req) => buildPublicTrackingBaseUrl(req);
+
+const checkTrackingUrlReachable = async (req) => {
+  let baseUrl;
+  try {
+    baseUrl = getTrackingBaseUrl(req);
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+  try {
+    const response = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(7000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { ok: true, baseUrl };
+  } catch (error) {
+    logger.error('mail-campaign.tracking-url.unreachable', { baseUrl, message: error?.message });
+    return {
+      ok: false,
+      message: `The tracking address (${baseUrl}) cannot be reached from the internet, so email opens would not be counted. Start the tunnel, update TRACKING_BASE_URL in sales/backend/.env with the new address, restart the backend, and send again.`,
+    };
+  }
+};
 
 const getCompanyProfileWithLogo = () => CompanyProfile.findOne({
   'companyLogo.filePath': { $exists: true, $nin: ['', null] },
@@ -902,8 +924,20 @@ exports.getCampaignReport = async (req, res) => {
     const campaign = await MailCampaign.findOne({ _id: req.params.id, deletedAt: null }).select('campaignId campaignName subject').lean();
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     const logs = await EmailLog.find({ campaignId: campaign.campaignId }).sort({ sentAt: 1 }).lean();
+    const sentLogs = logs.filter((log) => log.status === 'Sent');
+    const totalOpens = logs.reduce((total, log) => total + Number(log.openCount || 0), 0);
+    const uniqueOpens = logs.filter((log) => Number(log.openCount || 0) > 0).length;
+    const totalClicks = logs.reduce((total, log) => total + Number(log.clickCount || 0), 0);
     res.status(200).json({
       success: true,
+      summary: {
+        totalRecipients: logs.length,
+        sentEmails: sentLogs.length,
+        uniqueOpens,
+        totalOpens,
+        openRate: sentLogs.length ? Number(((uniqueOpens / sentLogs.length) * 100).toFixed(2)) : 0,
+        totalClicks,
+      },
       data: logs.map((log, index) => ({
         serialNumber: index + 1,
         campaignId: campaign.campaignId,
@@ -1028,7 +1062,7 @@ exports.createCampaign = async (req, res) => {
       image: req.files?.image?.[0]?.filename ? `/uploads/mail-campaigns/${req.files.image[0].filename}` : req.body.image || '',
       attachments: (req.files?.attachments || []).map((file) => `/uploads/mail-campaigns/${file.filename}`),
       status: campaignStatus,
-      createdBy: req.body.createdBy || process.env.DEFAULT_CREATED_BY || 'Admin',
+      createdBy: creatorFields(req).createdBy,
       createdDate: req.body.createdDate || new Date().toISOString().split('T')[0],
       scheduledDate: req.body.scheduledDate || '',
       scheduledTime: req.body.scheduledTime || '',
@@ -1123,7 +1157,7 @@ exports.updateCampaign = async (req, res) => {
         ? (req.files?.attachments || []).map((file) => `/uploads/mail-campaigns/${file.filename}`)
         : (req.body.attachments ? parseArrayField(req.body.attachments) : existing.attachments || []),
       status: campaignStatus,
-      createdBy: req.body.createdBy || existing.createdBy || process.env.DEFAULT_CREATED_BY || 'Admin',
+      createdBy: existing.createdBy,
       createdDate: req.body.createdDate || existing.createdDate || new Date().toISOString().split('T')[0],
       scheduledDate: req.body.scheduledDate || existing.scheduledDate || '',
       scheduledTime: req.body.scheduledTime || existing.scheduledTime || '',
@@ -1140,6 +1174,9 @@ exports.updateCampaign = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Scheduled date and time are required.' });
     }
 
+    delete payload.createdBy;
+    delete payload.createdById;
+    payload.createdBy = existing.createdBy;
     const campaign = await MailCampaign.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
     res.status(200).json({ success: true, message: 'Campaign updated successfully', data: normalizeCampaign(campaign.toObject()) });
   } catch (error) {
@@ -1181,12 +1218,38 @@ exports.deleteCampaign = async (req, res) => {
 };
 
 exports.sendCampaign = async (req, res) => {
+  let campaignIdForError = '';
   try {
     const { id } = req.params;
-    const campaign = await MailCampaign.findOne({ _id: id, deletedAt: null });
+    campaignIdForError = id;
+    let campaign = await MailCampaign.findOne({ _id: id, deletedAt: null });
 
     if (!campaign) {
       return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    const scheduledSend = req.body?.scheduled === true;
+    if (campaign.status === 'Sent') {
+      return res.status(409).json({ success: false, message: 'This campaign has already been sent. Create a new campaign to send it again.' });
+    }
+    if (campaign.status === 'Sending' && !scheduledSend) {
+      return res.status(409).json({ success: false, message: 'This campaign is already being sent. Please wait for the delivery status to update.' });
+    }
+
+    const trackingCheck = await checkTrackingUrlReachable(req);
+    const trackingAvailable = trackingCheck.ok;
+    const trackingWarning = trackingAvailable ? '' : trackingCheck.message;
+
+    if (!scheduledSend) {
+      const claimedCampaign = await MailCampaign.findOneAndUpdate(
+        { _id: id, deletedAt: null, status: campaign.status },
+        { $set: { status: 'Sending' } },
+        { new: true },
+      );
+      if (!claimedCampaign) {
+        return res.status(409).json({ success: false, message: 'This campaign is already being sent. Please wait for the delivery status to update.' });
+      }
+      campaign = claimedCampaign;
     }
 
     const groupId = req.body?.groupId || req.query?.groupId || '';
@@ -1222,15 +1285,16 @@ exports.sendCampaign = async (req, res) => {
     const normalizedRecipients = [...new Set(recipients.map((item) => String(item).trim()).filter(Boolean))];
 
     if (!normalizedRecipients.length) {
+      await MailCampaign.updateOne({ _id: id, status: 'Sending' }, { $set: { status: 'Failed' } });
       return res.status(400).json({ success: false, message: 'No recipients found for this campaign group.' });
     }
 
-    const trackingBaseUrl = getTrackingBaseUrl(req);
+    const trackingBaseUrl = trackingAvailable ? trackingCheck.baseUrl : '';
     const companyProfile = await getCompanyProfileWithLogo();
     const logoPath = companyProfile?.companyLogo?.filePath || '';
     const localLogoPath = logoPath ? path.join(__dirname, '..', logoPath.replace(/^\/+/, '')) : '';
     const hasLogo = localLogoPath && fs.existsSync(localLogoPath);
-    const logoUrl = getPublicAssetUrl(trackingBaseUrl, logoPath);
+    const logoUrl = trackingBaseUrl ? getPublicAssetUrl(trackingBaseUrl, logoPath) : '';
     const companyWebsiteUrl = normalizeCompanyWebsite(companyProfile?.website) || 'https://www.synov.in';
     const companyLogoCid = 'company-logo@crm';
     console.log(`Company logo stored path: ${logoPath || '(none)'}`);
@@ -1241,7 +1305,7 @@ exports.sendCampaign = async (req, res) => {
     const logoHtml = hasLogo ? `<p style="margin: 0 0 20px; min-height: 1.5em;"><img src="cid:${companyLogoCid}" alt="" style="display: block; width: 120px; max-width: 120px; height: auto;" /></p>` : '';
     const logoBeforeText = ['Image Before Text', 'Image Above Text'].includes(campaign.imageAlignment);
     const imageBeforeText = logoBeforeText;
-    const campaignImageUrl = getPublicAssetUrl(trackingBaseUrl, campaign.image);
+    const campaignImageUrl = trackingBaseUrl ? getPublicAssetUrl(trackingBaseUrl, campaign.image) : '';
     const localCampaignImagePath = campaign.image && !/^https?:\/\//i.test(campaign.image)
       ? path.join(__dirname, '..', campaign.image.replace(/^\/+/, ''))
       : '';
@@ -1252,7 +1316,9 @@ exports.sendCampaign = async (req, res) => {
     if (logoPath && !hasLogo) throw new Error(`Company logo file does not exist: ${localLogoPath}`);
     if (!hasCampaignImage) throw new Error(`Campaign image file does not exist: ${localCampaignImagePath}`);
     const campaignImageHtml = campaign.image ? buildCampaignImageHtml(`cid:${campaignImageCid}`) : '';
-    const rewrittenHtmlBody = rewriteEmailAssetUrls(removeCompanyLogoImages(htmlBody, logoUrl), trackingBaseUrl);
+    const rewrittenHtmlBody = trackingBaseUrl
+      ? rewriteEmailAssetUrls(removeCompanyLogoImages(htmlBody, logoUrl), trackingBaseUrl)
+      : removeCompanyLogoImages(htmlBody, logoUrl);
     const bodyWithCampaignImage = imageBeforeText
       ? `${campaignImageHtml}${rewrittenHtmlBody}`
       : `${rewrittenHtmlBody}${campaignImageHtml}`;
@@ -1264,10 +1330,34 @@ exports.sendCampaign = async (req, res) => {
       ...(campaign.image && hasCampaignImage ? [{ filename: path.basename(localCampaignImagePath), path: localCampaignImagePath, cid: campaignImageCid, contentType: 'image/png' }] : []),
     ];
 
+    const existingLogs = await EmailLog.find({
+      campaignId: campaign.campaignId,
+      recipientEmail: { $in: normalizedRecipients.map((recipient) => recipient.toLowerCase()) },
+    }).select('recipientEmail status trackingId trackingToken').lean();
+    const existingLogByRecipient = new Map(existingLogs.map((log) => [String(log.recipientEmail).toLowerCase(), log]));
+    const recipientsToSend = normalizedRecipients.filter((recipient) => existingLogByRecipient.get(recipient.toLowerCase())?.status !== 'Sent');
+    if (!recipientsToSend.length) {
+      campaign.status = 'Sent';
+      campaign.sentDate = campaign.sentDate || new Date().toISOString();
+      campaign.recipientCount = normalizedRecipients.length;
+      await campaign.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Campaign was already sent successfully.',
+        data: {
+          campaignId: campaign.campaignId,
+          groupId: groupId || null,
+          totalRecipients: normalizedRecipients.length,
+          successfullySent: normalizedRecipients.length,
+          failed: 0,
+          status: campaign.status,
+        },
+      });
+    }
     const trackingIds = new Map(
-      normalizedRecipients.map((recipient) => [
+      recipientsToSend.map((recipient) => [
         String(recipient).trim().toLowerCase(),
-        crypto.randomBytes(24).toString('hex'),
+        existingLogByRecipient.get(String(recipient).trim().toLowerCase())?.trackingId || crypto.randomBytes(24).toString('hex'),
       ])
     );
     const trackingUrlIsLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(trackingBaseUrl);
@@ -1277,7 +1367,7 @@ exports.sendCampaign = async (req, res) => {
       trackingUrlIsLocal,
       warning: trackingUrlIsLocal ? 'External recipients cannot reach a local tracking URL.' : '',
     });
-    const emailLogs = normalizedRecipients.map((recipient) => {
+    const emailLogs = recipientsToSend.filter((recipient) => !existingLogByRecipient.has(recipient.toLowerCase())).map((recipient) => {
       const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
       logger.info('mail-campaign.tracking-id.generated', {
         campaignId: campaign.campaignId,
@@ -1298,18 +1388,28 @@ exports.sendCampaign = async (req, res) => {
       };
     });
 
-    await EmailLog.insertMany(emailLogs);
+    if (emailLogs.length) await EmailLog.insertMany(emailLogs);
 
     const report = await sendCampaignEmails({
       subject,
       html: (recipient) => {
         const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
-        const trackedHtml = addEmailTracking(buildCampaignEmailHtml({ htmlBody: emailBody, footer: rewriteEmailAssetUrls(normalizeFooterWebsiteLinks(removeCompanyLogoImages(campaign.footer, logoUrl), companyWebsiteUrl), trackingBaseUrl), logoHtml: '', showFooterSeparator: logoBeforeText }), campaign.campaignId, trackingId, trackingBaseUrl);
-        const trackingUrl = buildTrackingPixelUrl(trackingBaseUrl, trackingId);
+        const baseHtml = buildCampaignEmailHtml({
+          htmlBody: emailBody,
+          footer: trackingBaseUrl
+            ? rewriteEmailAssetUrls(normalizeFooterWebsiteLinks(removeCompanyLogoImages(campaign.footer, logoUrl), companyWebsiteUrl), trackingBaseUrl)
+            : removeCompanyLogoImages(campaign.footer, logoUrl),
+          logoHtml: '',
+          showFooterSeparator: logoBeforeText,
+        });
+        const trackedHtml = trackingAvailable
+          ? addEmailTracking(baseHtml, campaign.campaignId, trackingId, trackingBaseUrl)
+          : baseHtml;
+        const trackingUrl = trackingAvailable ? buildTrackingPixelUrl(trackingBaseUrl, trackingId) : '';
         const imageSources = [...trackedHtml.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
         const localUrls = [...trackedHtml.matchAll(/(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?::\d+)?[^"'\s<]*/gi)].map((match) => match[0]);
         const validation = {
-          hasTrackingPixel: trackedHtml.includes(trackingUrl),
+          hasTrackingPixel: !trackingAvailable || trackedHtml.includes(trackingUrl),
           hasInlineImages: (!campaign.image || imageSources.includes(`cid:${campaignImageCid}`)) && (!hasLogo || imageSources.includes(`cid:${companyLogoCid}`)),
           hasTrackedLinks: /\/api\/mail-campaigns\/(?:tracking\/)?click\//i.test(trackedHtml),
           containsLocalhost: localUrls.length > 0,
@@ -1334,6 +1434,7 @@ exports.sendCampaign = async (req, res) => {
       },
       tracking: (recipient) => {
         const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
+        if (!trackingAvailable) return null;
         return {
           campaignId: campaign.campaignId,
           trackingId,
@@ -1341,7 +1442,7 @@ exports.sendCampaign = async (req, res) => {
         };
       },
       text: campaign.footer || subject || 'Campaign email',
-      to: normalizedRecipients,
+      to: recipientsToSend,
       attachments: inlineAttachments.concat((campaign.attachments || []).map((attachmentPath) => ({
         path: path.join(__dirname, '..', attachmentPath.replace(/^[\/]+/, '')),
       }))),
@@ -1411,6 +1512,8 @@ exports.sendCampaign = async (req, res) => {
           successfullySent: report.successfullySent,
           failed: report.failed,
           status: groupId ? (targetGroup ? targetGroup.status : campaign.status) : campaign.status,
+          trackingAvailable,
+          trackingWarning,
         },
       });
     }
@@ -1426,10 +1529,21 @@ exports.sendCampaign = async (req, res) => {
         failed: report.failed,
         results: report.results,
         status: groupId ? (targetGroup ? targetGroup.status : campaign.status) : campaign.status,
+        trackingAvailable,
+        trackingWarning,
       },
     });
   } catch (error) {
     console.error('[mail-campaign] sendCampaign failed:', error);
+    if (campaignIdForError) {
+      await MailCampaign.updateOne(
+        { _id: campaignIdForError, status: 'Sending' },
+        { $set: { status: 'Failed' } },
+      ).catch((statusError) => logger.error('mail-campaign.send.status-reset.failed', {
+        campaignId: campaignIdForError,
+        message: statusError?.message,
+      }));
+    }
     if (error?.name === 'CastError') {
       return res.status(400).json({ success: false, message: 'Campaign identifier is invalid.' });
     }
@@ -1466,7 +1580,7 @@ exports.processScheduledCampaigns = async (baseUrl) => {
         const response = await fetch(`${baseUrl}/api/mail-campaigns/${candidate._id}/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ scheduled: true }),
         });
         if (!response.ok && response.status >= 500) {
           const current = await MailCampaign.findById(candidate._id).select('status').lean();

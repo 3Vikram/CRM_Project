@@ -29,6 +29,7 @@ const activitySchema = new mongoose.Schema(
     reminder: { type: String, trim: true, default: '' },
     status: { type: String, enum: ['Open', 'Pending', 'Completed', 'Overdue'], default: 'Open' },
     createdBy: { type: String, trim: true, default: 'Current User' },
+    createdById: { type: String, trim: true, default: '', index: true },
     lastModifiedBy: { type: String, trim: true, default: 'Current User' },
     deletedAt: { type: Date, default: null },
   },

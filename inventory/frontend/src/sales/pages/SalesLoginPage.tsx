@@ -37,7 +37,7 @@ const firstAccessiblePath = (permissions?: Record<string, unknown>) => {
   return modulePaths.find(([moduleName]) => {
     const permission = permissions?.[moduleName]
     return Boolean(permission && typeof permission === 'object' && (permission as { view?: boolean }).view)
-  })?.[1] || '/sales/dashboard'
+  })?.[1] || '/sales/access-denied'
 }
 
 export default function SalesLoginPage() {
@@ -72,7 +72,10 @@ export default function SalesLoginPage() {
       }
       setStoredAuth({ token: response.data.token, user: response.data.user }, false)
       localStorage.setItem(SALES_AUTH_KEY, 'true')
-      navigate(firstAccessiblePath(response.data.user?.permissions), { replace: true })
+      const destination = response.data.user.role === 'admin'
+        ? '/sales/dashboard'
+        : firstAccessiblePath(response.data.user.permissions as Record<string, unknown> | undefined)
+      navigate(destination, { replace: true })
     } catch (loginError) {
       if (axios.isAxiosError(loginError)) {
         setError(loginError.response?.data?.message || 'Unable to connect to the server.')

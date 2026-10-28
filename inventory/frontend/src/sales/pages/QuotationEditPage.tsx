@@ -485,7 +485,7 @@ export default function QuotationEditPage() {
           {/* Customer Details */}
           <div className="grid gap-4 md:grid-cols-3 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Customer Name *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Customer Name <span className="required-asterisk">*</span></span>
               <select
                 name="customerId"
                 value={form.customerId}
@@ -524,7 +524,7 @@ export default function QuotationEditPage() {
           {/* Product 1 Section - Row 1 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Product *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Product <span className="required-asterisk">*</span></span>
               <input
                 name="productName"
                 value={form.productName}
@@ -536,7 +536,7 @@ export default function QuotationEditPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Description *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Description <span className="required-asterisk">*</span></span>
               <input
                 name="productDescription"
                 value={form.productDescription}
@@ -559,7 +559,7 @@ export default function QuotationEditPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Quantity *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Quantity <span className="required-asterisk">*</span></span>
               <input
                 name="quantity"
                 value={form.quantity}
@@ -576,7 +576,7 @@ export default function QuotationEditPage() {
           {/* Product 1 Section - Row 2 (Prices and Tax) */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price <span className="required-asterisk">*</span></span>
               <input
                 name="expectedVendorPrice"
                 value={form.expectedVendorPrice}
@@ -590,7 +590,7 @@ export default function QuotationEditPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Unit Price *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Unit Price <span className="required-asterisk">*</span></span>
               <input
                 name="unitPrice"
                 value={form.unitPrice}
@@ -605,7 +605,7 @@ export default function QuotationEditPage() {
             </label>
 
             <div ref={taxDropdownRef} className="relative space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Tax *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Tax <span className="required-asterisk">*</span></span>
               <input
                 readOnly
                 value={form.tax}
@@ -666,7 +666,7 @@ export default function QuotationEditPage() {
             <>
               <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Product 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Product 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2Name"
                     value={form.product2Name}
@@ -678,7 +678,7 @@ export default function QuotationEditPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Description 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Description 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2Description"
                     value={form.product2Description}
@@ -701,7 +701,7 @@ export default function QuotationEditPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Quantity 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Quantity 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2Quantity"
                     value={form.product2Quantity}
@@ -717,7 +717,7 @@ export default function QuotationEditPage() {
 
               <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4 border-b border-[#D1D5DB]">
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2ExpectedVendorPrice"
                     value={form.product2ExpectedVendorPrice}
@@ -731,7 +731,7 @@ export default function QuotationEditPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Unit Price 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Unit Price 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2UnitPrice"
                     value={form.product2UnitPrice}
@@ -746,7 +746,7 @@ export default function QuotationEditPage() {
                 </label>
 
                 <div ref={tax2DropdownRef} className="relative space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Tax 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Tax 2 <span className="required-asterisk">*</span></span>
                   <input
                     readOnly
                     value={form.product2Tax}
@@ -923,9 +923,7 @@ export default function QuotationEditPage() {
           {/* Commercial Section Row 4 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">
-  Currency *
-</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Currency <span className="required-asterisk">*</span></span>
 
 <select
   name="currency"
@@ -947,7 +945,7 @@ export default function QuotationEditPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Validity (Days) *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Validity (Days) <span className="required-asterisk">*</span></span>
               <input
                 name="validity"
                 value={form.validity}
@@ -961,7 +959,7 @@ export default function QuotationEditPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Delivery *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Delivery <span className="required-asterisk">*</span></span>
               <input
                 name="delivery"
                 value={form.delivery}
@@ -973,7 +971,7 @@ export default function QuotationEditPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Payment *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Payment <span className="required-asterisk">*</span></span>
               <select
   name="payment"
   value={form.payment}

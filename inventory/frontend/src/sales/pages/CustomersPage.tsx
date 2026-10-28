@@ -6,6 +6,9 @@ import { Modal } from '@/sales/components/modal'
 import { Toast } from '@/sales/components/toast'
 import { deleteCustomer, fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { toExcelDate } from '@/sales/lib/excelFormat'
+import { ACCOUNT_TYPE_OPTIONS } from '@/sales/lib/accountTypes'
 import {
   Search,
   Plus,
@@ -147,7 +150,7 @@ export default function CustomersPage() {
   }, [page, pageSize, searchQuery, createdByFilter, createdDateFilter, statusFilter, accountTypeFilter, loadCustomers])
 
   const createdByOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.createdBy).filter(Boolean))).sort(), [customers])
-  const accountTypeOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.accountType).filter(Boolean))).sort(), [customers])
+  const accountTypeOptions = ACCOUNT_TYPE_OPTIONS
   const summaryText = useMemo(() => {
     if (totalCount === 0) return 'Showing 0 to 0 of 0 entries'
     return `Showing ${(page - 1) * pageSize + 1} to ${Math.min(page * pageSize, totalCount)} of ${totalCount} entries`
@@ -179,32 +182,38 @@ export default function CustomersPage() {
     }
   }, [accountTypeFilter, createdByFilter, createdDateFilter, loadCustomers, page, pageSize, pendingDeleteCustomer, searchQuery, statusFilter, notify])
 
-  const handleDownloadReport = useCallback(() => {
-    const rows = customers.map((customer) => [
-      customer.companyName,
-      customer.customerName,
-      customer.email,
-      customer.phone,
-      customer.status,
-      customer.accountType,
-      customer.createdBy,
-      customer.createdAt,
+  const handleDownloadReport = useCallback(async () => {
+    const headers = ['SL No.', 'Customer Name', 'Contact Name', 'Email', 'Phone', 'Status', 'Account Type', 'Created By', 'Created Date']
+    const rows = customers.map((customer, index) => [
+      index + 1,
+      customer.companyName || '',
+      customer.customerName || '',
+      customer.email || '',
+      customer.phone ? String(customer.phone) : '',
+      customer.status || '',
+      customer.accountType || '',
+      customer.createdBy || '',
+      toExcelDate(customer.createdAt),
     ])
 
-    const csv = [
-      ['Customer Name', 'Contact Name', 'Email', 'Phone', 'Status', 'Account Type', 'Created By', 'Created Date'],
-      ...rows,
-    ]
-      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'customer-report.csv'
-    link.click()
-    URL.revokeObjectURL(url)
+    try {
+      await downloadExcelReport({
+        fileName: 'customer-report.xlsx',
+        sheetName: 'Customers',
+        headers,
+        rows,
+        textColumns: [4, 8],
+        centerColumns: [0, 5, 6, 8],
+        leftColumns: [1, 2, 3, 7],
+        wrapColumns: [1, 2, 3, 7],
+        wideColumns: [1, 3],
+        columnWidths: [8, 34, 28, 34, 18, 14, 16, 22, 14],
+      })
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Unable to download customer report')
+      setToastType('error')
+      setShowToast(true)
+    }
   }, [customers])
 
   return (
@@ -437,7 +446,7 @@ function mapApiCustomer(customer: CustomerApiRecord): Customer {
     phone: primaryContact?.phone || customer.phone || '',
     status: customer.status || 'Active',
     accountType: customer.accountType || 'Individual',
-    createdBy: customer.createdBy || 'Admin',
+    createdBy: customer.createdBy || '—',
     createdAt: customer.createdAt ? new Date(customer.createdAt).toISOString().slice(0, 10) : '',
     notes: customer.notes || '',
     address: customer.billToAddress?.addressLine1 || '',
@@ -492,7 +501,7 @@ const CustomerTableRow = memo(function CustomerTableRow({
   return (
     <tr className="border-b border-[#F2EFE8] transition-colors hover:bg-[#F2EFE8]">
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm font-semibold text-gray-900`}>{customer.customerId}</td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.createdBy || 'Admin'}</td>
+      <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.createdBy}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.companyName}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.contactName}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.email}</td>

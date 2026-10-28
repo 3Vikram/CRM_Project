@@ -105,7 +105,7 @@ export default function ContactFormPage() {
           {submitError ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div> : null}
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Customer Name *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Customer Name <span className="required-asterisk">*</span></span>
               <input
                 value={form.customerName || ''}
                 onChange={(event) => handleChange('customerName', event.target.value)}
@@ -115,22 +115,22 @@ export default function ContactFormPage() {
               {fieldErrors.customerName ? <span className="mt-1 block text-xs text-red-500">{fieldErrors.customerName}</span> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Contact Name *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Contact Name <span className="required-asterisk">*</span></span>
               <input value={form.contactName} onChange={(event) => handleChange('contactName', event.target.value)} placeholder="Contact Name" className={`w-full rounded-lg border ${fieldErrors.contactName ? 'border-red-500' : 'border-[#EFECE5]'} bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]`} />
               {fieldErrors.contactName ? <span className="mt-1 block text-xs text-red-500">{fieldErrors.contactName}</span> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Designation *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Designation <span className="required-asterisk">*</span></span>
               <input value={form.designation} onChange={(event) => handleChange('designation', event.target.value)} placeholder="Designation" className={`w-full rounded-lg border ${fieldErrors.designation ? 'border-red-500' : 'border-[#EFECE5]'} bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]`} />
               {fieldErrors.designation ? <span className="mt-1 block text-xs text-red-500">{fieldErrors.designation}</span> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Phone Number *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Phone Number <span className="required-asterisk">*</span></span>
               <input value={form.contactNumber} onChange={(event) => handleChange('contactNumber', event.target.value)} placeholder="Phone Number" className={`w-full rounded-lg border ${fieldErrors.contactNumber ? 'border-red-500' : 'border-[#EFECE5]'} bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]`} />
               {fieldErrors.contactNumber ? <span className="mt-1 block text-xs text-red-500">{fieldErrors.contactNumber}</span> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Email Address *</span>
+              <span className="mb-1 block text-sm font-medium text-slate-700">Email Address <span className="required-asterisk">*</span></span>
               <input type="email" value={form.email} onChange={(event) => handleChange('email', event.target.value)} placeholder="Email Address" className={`w-full rounded-lg border ${fieldErrors.email ? 'border-red-500' : 'border-[#EFECE5]'} bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]`} />
               {fieldErrors.email ? <span className="mt-1 block text-xs text-red-500">{fieldErrors.email}</span> : null}
             </label>

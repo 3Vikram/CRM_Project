@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { SearchableSelect } from "@/sales/components/SearchableSelect";
 import { fetchCompanyProfiles } from "@/sales/lib/companyProfileApi";
 import { createEmployee, fetchEmployeeById, fetchEmployees, updateEmployee, type EmployeePayload } from "@/sales/lib/employeeApi";
+import { PHONE_ERROR_MESSAGE, isValidPhoneNumber, sanitizePhoneInput } from '@/sales/lib/phone'
 const defaultCrudOptions = ['Create', 'View', 'Edit', 'Delete']
 const defaultModuleOptions = [
   'Dashboard',
@@ -263,6 +264,10 @@ export default function EmployeeFormPage() {
       setSubmitError('Email is required.')
       return
     }
+    if (form.contactNo?.trim() && !isValidPhoneNumber(form.contactNo)) {
+      setSubmitError(PHONE_ERROR_MESSAGE)
+      return
+    }
 
     if (!isEditing && !form.password?.trim()) {
       setSubmitError('Password is required.')
@@ -346,54 +351,54 @@ export default function EmployeeFormPage() {
 
           <div className="grid gap-4 md:grid-cols-4">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Official Employee Id</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Official Employee Id</span>
               <input value={form.officialEmployeeId || ''} onChange={(event) => handleChange('officialEmployeeId', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Full Name *</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Full Name <span className="required-asterisk">*</span></span>
               <input value={form.employeeName || ''} onChange={(event) => handleChange('employeeName', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Email *</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Email <span className="required-asterisk">*</span></span>
               <input type="email" value={form.email || ''} onChange={(event) => handleChange('email', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">{isEditing ? 'New Password (optional)' : 'Password *'}</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">{isEditing ? 'New Password (optional)' : <>Password <span className="required-asterisk">*</span></>}</span>
               <input type="password" value={form.password || ''} onChange={(event) => handleChange('password', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Contact No</span>
-              <input value={form.contactNo || form.phone || ''} onChange={(event) => handleChange('contactNo', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Contact No</span>
+              <input value={form.contactNo || form.phone || ''} onChange={(event) => handleChange('contactNo', sanitizePhoneInput(event.target.value))} inputMode="numeric" maxLength={10} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Designation</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Designation</span>
               <input value={form.designation || ''} onChange={(event) => handleChange('designation', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Department</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Department</span>
               <select value={form.department || 'Sales'} onChange={(event) => handleChange('department', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200">
                 {departmentOptions.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Date of Join</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Date of Join</span>
               <input type="date" value={form.dateOfJoin || form.joiningDate || ''} onChange={(event) => { handleChange('dateOfJoin', event.target.value); handleChange('joiningDate', event.target.value) }} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Date of Birth</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Date of Birth</span>
               <input type="date" value={form.dateOfBirth || ''} onChange={(event) => handleChange('dateOfBirth', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Employee Type *</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Employee Type <span className="required-asterisk">*</span></span>
               <SearchableSelect
                 value={form.employeeType || ''}
                 onChange={(value) => handleChange('employeeType', value === 'Select' ? '' : value)}
@@ -403,7 +408,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Reporting To *</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Reporting To <span className="required-asterisk">*</span></span>
               <SearchableSelect
                 value={form.reportingTo || ''}
                 onChange={(value) => handleChange('reportingTo', value === 'Select' ? '' : value)}
@@ -413,7 +418,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Order Approval To</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Order Approval To</span>
               <SearchableSelect
                 value={form.orderApprovalTo || ''}
                 onChange={(value) => handleChange('orderApprovalTo', value === 'Select' ? '' : value)}
@@ -423,7 +428,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Branch Code *</span>
+              <span className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-slate-600">Branch Code <span className="required-asterisk">*</span></span>
               <SearchableSelect
                 value={branchLabelValue}
                 onChange={(value) => {
@@ -436,7 +441,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <div className="rounded border border-[#E5E7EB] bg-[#F8FAFC] p-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">CRUD Option *</div>
+              <div className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-slate-600">CRUD Option *</div>
               <MultiSelectDropdown
                 value={formatArrayValues(form.crudOption)}
                 options={defaultCrudOptions}
@@ -446,7 +451,7 @@ export default function EmployeeFormPage() {
             </div>
 
             <div className="rounded border border-[#E5E7EB] bg-[#F8FAFC] p-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">Modules Option *</div>
+              <div className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-slate-600">Modules Option *</div>
               <MultiSelectDropdown
                 value={formatArrayValues(form.modulesOption)}
                 options={defaultModuleOptions}

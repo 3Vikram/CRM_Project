@@ -92,15 +92,15 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
 
   const formFields = useMemo(
     () => [
-      { key: 'customerName' as const, label: 'Customer Name *', required: true, md: 6 },
+      { key: 'customerName' as const, label: 'Customer Name', required: true, md: 6 },
       { key: 'documentNumber' as const, label: 'Document Number', required: false, md: 6 },
-      { key: 'productName' as const, label: 'Product Name *', required: true, md: 6 },
+      { key: 'productName' as const, label: 'Product Name', required: true, md: 6 },
       { key: 'productDescription' as const, label: 'Product Description', md: 6 },
-      { key: 'productSerialNumber' as const, label: 'Product Serial Number *', required: true, md: 6 },
-      { key: 'outwardType' as const, label: 'Outward Type *', required: true, md: 6 },
+      { key: 'productSerialNumber' as const, label: 'Product Serial Number', required: true, md: 6 },
+      { key: 'outwardType' as const, label: 'Outward Type', required: true, md: 6 },
       { key: 'productModel' as const, label: 'Product Model', md: 6 },
       { key: 'quantity' as const, label: 'Quantity', md: 6 },
-      { key: 'ratePerMonth' as const, label: 'Rate Per Month / Price *', required: true, md: 6 },
+      { key: 'ratePerMonth' as const, label: 'Rate Per Month / Price', required: true, md: 6 },
       { key: 'rentStartDate' as const, label: 'Rent Start Date', md: 6 },
       { key: 'rentEndDate' as const, label: 'Rent End Date', md: 6 },
       { key: 'invoiceNumber' as const, label: 'Invoice Number', md: 6 },
@@ -129,11 +129,11 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
             if (field.key === 'outwardType') {
               return (
                 <Grid key={field.key} size={{ xs: 12, md: field.md }}>
-                  <FormControl fullWidth>
-                    <InputLabel>Outward Type *</InputLabel>
+                  <FormControl fullWidth required={field.required}>
+                    <InputLabel>Outward Type</InputLabel>
                     <Select
                       value={values.outwardType}
-                      label="Outward Type *"
+                      label="Outward Type"
                       onChange={(event) => handleChange('outwardType', event.target.value as RentOutFormValues['outwardType'])}
                     >
                       <MenuItem value="Rent">Rent</MenuItem>
@@ -218,6 +218,7 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
                     name={String(field.key)}
                     type="number"
                     label={field.label}
+                    required={field.required}
                     value={values[field.key] as any}
                     onChange={(event) => {
                       const raw = event.target.value

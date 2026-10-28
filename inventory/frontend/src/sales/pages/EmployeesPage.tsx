@@ -7,6 +7,8 @@ import { Modal } from '@/sales/components/modal'
 import { Toast } from '@/sales/components/toast'
 import { deleteEmployee, fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { toExcelDate } from '@/sales/lib/excelFormat'
 import {
   clearInventorySession,
   getInventorySessionToken,
@@ -347,37 +349,41 @@ export default function EmployeesPage() {
     }
   }
 
-  const handleDownload = () => {
-    const rows = employees.map((employee) => [
-      employee.officialEmployeeId || employee.employeeCode || '',
-      employee.createdBy || '',
+  const handleDownload = async () => {
+    const headers = ['SL No.', 'Official Employee Id', 'Employee Type', 'Full Name', 'Email Id', 'Contact No', 'Designation', 'Department', 'Date of Join', 'Date of Birth', 'Reporting To', 'Branch Code', 'CRUD Option', 'Modules Option']
+    const rows = employees.map((employee, index) => [
+      index + 1,
+      String(employee.officialEmployeeId || employee.employeeCode || ''),
+      employee.employeeType || '',
       employee.employeeName || '',
       employee.email || '',
-      employee.contactNo || employee.phone || '',
+      (employee.contactNo || employee.phone) ? String(employee.contactNo || employee.phone) : '',
       employee.designation || '',
       employee.department || '',
-      formatDate(employee.dateOfJoin || employee.joiningDate),
-      formatDate(employee.dateOfBirth),
+      toExcelDate(employee.dateOfJoin || employee.joiningDate),
+      toExcelDate(employee.dateOfBirth),
       employee.reportingTo || '',
       employee.branchCode || '',
-      formatList(employee.crudOption),
-      formatList(employee.modulesOption),
+      employee.crudOption?.join(', ') || '',
+      employee.modulesOption?.join(', ') || '',
     ])
 
-    const csv = [
-      ['Official Employee Id', 'Created By', 'Full Name', 'Email Id', 'Contact No', 'Designation', 'Department', 'Date of Join', 'Date of Birth', 'Reporting To', 'Branch Code', 'CRUD Option', 'Modules Option'],
-      ...rows,
-    ]
-      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'employee-report.csv'
-    link.click()
-    URL.revokeObjectURL(url)
+    try {
+      await downloadExcelReport({
+        fileName: 'employee-report.xlsx',
+        sheetName: 'Employees',
+        headers,
+        rows,
+        textColumns: [1, 4, 5, 8, 9, 11],
+        centerColumns: [0, 1, 5, 8, 9, 11],
+        leftColumns: [2, 3, 4, 6, 7, 10, 12, 13],
+        wrapColumns: [3, 4, 6, 7, 10, 12, 13],
+        wideColumns: [3, 4, 10, 12, 13],
+        columnWidths: [8, 18, 22, 32, 34, 18, 24, 24, 14, 14, 28, 16, 36, 36],
+      })
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Unable to download employee report', 'error')
+    }
   }
 
   return (
@@ -413,7 +419,7 @@ export default function EmployeesPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">Copy</button>
-          <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">CSV</button>
+          <button type="button" onClick={() => void handleDownload()} className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">CSV</button>
           <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">Print</button>
         </div>
 
@@ -442,23 +448,23 @@ export default function EmployeesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[1500px] w-full border-collapse text-left text-sm">
+            <table className="employee-list-table min-w-[1500px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="bg-[#F8FAFC] text-slate-700">
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Official Employee Id</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Created By</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Full Name</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Email Id</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Contact No</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Designation</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Department</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Date of Join</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Date of Birth</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Reporting To</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Branch Code</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>CRUD Option</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Modules Option</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Action</th>
+                  <th className={tableCellClass}>Official Employee Id</th>
+                  <th className={tableCellClass}>Employee Type</th>
+                  <th className={tableCellClass}>Full Name</th>
+                  <th className={tableCellClass}>Email Id</th>
+                  <th className={tableCellClass}>Contact No</th>
+                  <th className={tableCellClass}>Designation</th>
+                  <th className={tableCellClass}>Department</th>
+                  <th className={tableCellClass}>Date of Join</th>
+                  <th className={tableCellClass}>Date of Birth</th>
+                  <th className={tableCellClass}>Reporting To</th>
+                  <th className={tableCellClass}>Branch Code</th>
+                  <th className={tableCellClass}>CRUD Option</th>
+                  <th className={tableCellClass}>Modules Option</th>
+                  <th className={tableCellClass}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -466,7 +472,7 @@ export default function EmployeesPage() {
                   employees.map((employee) => (
                     <tr key={employee._id} className="border-b border-[#EEF2F7] hover:bg-slate-50">
                       <td className={tableCellClass}>{employee.officialEmployeeId || employee.employeeCode || '—'}</td>
-                      <td className={tableCellClass}>{employee.createdBy || 'Admin'}</td>
+                      <td className={tableCellClass}>{employee.employeeType || '—'}</td>
                       <td className={tableCellClass}>
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-100 text-[10px] font-bold text-sky-700">
@@ -545,7 +551,7 @@ export default function EmployeesPage() {
           <div className="space-y-4">
             <div className="grid gap-3 text-sm text-slate-700">
               <div><span className="font-semibold text-slate-600">Official Employee Id:</span> {selectedEmployee.officialEmployeeId || selectedEmployee.employeeCode || '—'}</div>
-              <div><span className="font-semibold text-slate-600">Created By:</span> {selectedEmployee.createdBy || 'Admin'}</div>
+              <div><span className="font-semibold text-slate-600">Employee Type:</span> {selectedEmployee.employeeType || '—'}</div>
               <div><span className="font-semibold text-slate-600">Full Name:</span> {selectedEmployee.employeeName || selectedEmployee.fullName || '—'}</div>
               <div><span className="font-semibold text-slate-600">Email Id:</span> {selectedEmployee.email || '—'}</div>
               <div><span className="font-semibold text-slate-600">Contact No:</span> {selectedEmployee.contactNo || selectedEmployee.phone || '—'}</div>

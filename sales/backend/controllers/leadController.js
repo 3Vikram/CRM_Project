@@ -3,6 +3,7 @@ const Lead = require('../models/Lead');
 const CompanyProfile = require('../models/CompanyProfile');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 const { sendQuotationEmail } = require('../services/emailService');
+const { ownerScope, creatorFields } = require('../utils/accessScope');
 
 const PRIORITY_BY_SCORE = (score) => {
   if (score > 80) return 'High';
@@ -162,12 +163,22 @@ exports.getLeads = async (req, res) => {
     }
     if (status) query.leadStatus = status;
     if (priority) query.priority = priority;
-    if (source) query.$or = [{ source: source }, { sourceOfLead: source }];
+    if (source) {
+      const sourceFilter = { $or: [{ source }, { sourceOfLead: source }] };
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, sourceFilter];
+        delete query.$or;
+      } else {
+        query.$or = sourceFilter.$or;
+      }
+    }
     if (assignedTo) query.assignedTo = assignedTo;
     if (campaign) query.campaignName = new RegExp(`^${escapeRegex(campaign)}$`, 'i');
     if (quotationType && ['rent', 'sold'].includes(String(quotationType).toLowerCase())) {
       query.quotationType = String(quotationType).toLowerCase();
     }
+    const scope = ownerScope(req);
+    const finalQuery = Object.keys(scope).length ? { $and: [query, scope] } : query;
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
@@ -188,9 +199,12 @@ exports.getLeads = async (req, res) => {
       leadStatus: 1,
       assignedTo: 1,
       createdBy: 1,
+      createdById: 1,
       createdDate: 1,
       followUpDate: 1,
       followUpTime: 1,
+      customerRequirements: 1,
+      remarks: 1,
       isConverted: 1,
       isScrapped: 1,
       reason: 1,
@@ -203,8 +217,8 @@ exports.getLeads = async (req, res) => {
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdDate', 'companyName', 'leadStatus', 'priority', 'assignedTo', 'leadScore']);
 
     const [leads, total] = await Promise.all([
-      Lead.find(query, projection).sort(sortOptions).skip(skip).limit(limitNum).lean(),
-      Lead.countDocuments(query),
+      Lead.find(finalQuery, projection).sort(sortOptions).skip(skip).limit(limitNum).lean(),
+      Lead.countDocuments(finalQuery),
     ]);
 
     res.status(200).json({
@@ -224,7 +238,7 @@ exports.getLeads = async (req, res) => {
 
 exports.getLeadById = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id).select({ __v: 0 }).lean();
+    const lead = await Lead.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).select({ __v: 0 }).lean();
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
     res.status(200).json({ success: true, data: lead });
   } catch (error) {
@@ -235,7 +249,8 @@ exports.getLeadById = async (req, res) => {
 exports.createLead = async (req, res) => {
   try {
     const payload = normalizeLeadPayload(req.body);
-    const leadPayload = setLeadMetadata({ ...payload, createdBy: payload.createdBy || 'System' });
+    Object.assign(payload, creatorFields(req));
+    const leadPayload = setLeadMetadata(payload);
     let lead;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
@@ -263,7 +278,9 @@ exports.createLead = async (req, res) => {
 exports.updateLead = async (req, res) => {
   try {
     const payload = normalizeLeadPayload(req.body);
-    const existing = await Lead.findById(req.params.id);
+    delete payload.createdBy;
+    delete payload.createdById;
+    const existing = await Lead.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] });
     if (!existing) return res.status(404).json({ success: false, message: 'Lead not found' });
     const updated = setLeadMetadata({ ...existing.toObject(), ...payload });
     updated.timeline = existing.timeline || [];
@@ -276,7 +293,11 @@ exports.updateLead = async (req, res) => {
       updated.quotationId = await createQuotationId();
     }
     
-    const lead = await Lead.findByIdAndUpdate(req.params.id, updated, { new: true, runValidators: true });
+    const lead = await Lead.findOneAndUpdate(
+      { $and: [{ _id: req.params.id }, ownerScope(req)] },
+      updated,
+      { new: true, runValidators: true }
+    );
     res.status(200).json({ success: true, message: 'Lead updated successfully', data: lead });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -290,7 +311,7 @@ exports.deleteLead = async (req, res) => {
       ? { $or: [{ _id: identifier }, { leadId: identifier }] }
       : { leadId: identifier };
     console.log('DELETE LEAD REQUEST:', { identifier, query });
-    const lead = await Lead.findOneAndDelete(query);
+    const lead = await Lead.findOneAndDelete({ $and: [query, ownerScope(req)] });
     if (!lead) {
       console.error('DELETE LEAD NOT FOUND:', { identifier });
       return res.status(404).json({ success: false, message: `Lead not found for identifier: ${identifier}` });
@@ -400,7 +421,7 @@ exports.handleMailOpenEvent = async (req, res) => {
 
 exports.moveToActivity = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.body.id);
+    const lead = await Lead.findOne({ $and: [{ _id: req.body.id }, ownerScope(req)] });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
     lead.leadStatus = 'Follow-up';
     lead.timeline.unshift(buildTimeline('Moved to activity', 'Lead was moved to activity tracking', 'info'));
@@ -413,7 +434,7 @@ exports.moveToActivity = async (req, res) => {
 
 exports.moveToFunnel = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.body.id);
+    const lead = await Lead.findOne({ $and: [{ _id: req.body.id }, ownerScope(req)] });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
     lead.leadStatus = 'Qualified';
     lead.timeline.unshift(buildTimeline('Moved to funnel', 'Lead was moved to the sales funnel', 'info'));
@@ -426,7 +447,7 @@ exports.moveToFunnel = async (req, res) => {
 
 exports.generateQuotation = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.body.id);
+    const lead = await Lead.findOne({ $and: [{ _id: req.body.id }, ownerScope(req)] });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
     lead.leadStatus = 'Proposal Sent';
     lead.timeline.unshift(buildTimeline('Quotation generated', 'Quotation was generated for this lead', 'info'));
@@ -439,7 +460,7 @@ exports.generateQuotation = async (req, res) => {
 
 exports.convertToCustomer = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.body.id);
+    const lead = await Lead.findOne({ $and: [{ _id: req.body.id }, ownerScope(req)] });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
 
     // Lazy-load Customer model to avoid circular requires at module load time
@@ -462,7 +483,7 @@ exports.convertToCustomer = async (req, res) => {
         customerName: contact.name,
         email: contact.email,
         phone: contact.phone,
-        createdBy: lead.createdBy || 'System',
+        ...creatorFields(req),
         notes: `Converted from Lead ${lead.leadId || lead._id}`,
       };
 
@@ -484,7 +505,7 @@ exports.convertToCustomer = async (req, res) => {
 exports.scrapLead = async (req, res) => {
   try {
     const { id, reason } = req.body;
-    const lead = await Lead.findById(id);
+    const lead = await Lead.findOne({ $and: [{ _id: id }, ownerScope(req)] });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
     lead.isScrapped = true;
     lead.reason = reason || 'No reason provided';
@@ -516,7 +537,7 @@ exports.sendQuotationPdf = async (req, res) => {
     }
 
     // Fetch quotation
-    const lead = await Lead.findById(id);
+    const lead = await Lead.findOne({ $and: [{ _id: id }, ownerScope(req)] });
     if (!lead) {
       return res.status(404).json({ success: false, message: 'Quotation not found' });
     }

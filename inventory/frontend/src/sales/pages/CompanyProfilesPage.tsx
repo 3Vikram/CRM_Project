@@ -17,6 +17,7 @@ export default function CompanyProfilesPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
 
   useEffect(() => {
     const loadProfiles = async () => {
@@ -35,14 +36,15 @@ export default function CompanyProfilesPage() {
     }
 
     void loadProfiles()
-  }, [page, searchQuery])
+  }, [page, searchQuery, retryToken])
 
   const summaryText = useMemo(() => {
+    if (error) return 'Unable to load profiles.'
     if (totalCount === 0) return 'No profiles found.'
     const start = (page - 1) * PAGE_SIZE + 1
     const end = Math.min(page * PAGE_SIZE, totalCount)
     return `Showing ${start} to ${end} of ${totalCount} profiles`
-  }, [page, totalCount])
+  }, [error, page, totalCount])
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this company profile?')) return
@@ -85,7 +87,18 @@ export default function CompanyProfilesPage() {
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-4">{error}</div> : null}
+        {error ? (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setRetryToken((value) => value + 1)}
+              className="rounded-md border border-red-300 bg-white px-3 py-1.5 font-semibold text-red-700 hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
 
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-gray-600">{summaryText}</div>

@@ -5,6 +5,7 @@ import { Toast } from '@/sales/components/toast';
 import { createActivity, fetchActivityById, updateActivity } from '@/sales/lib/activityApi';
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi';
 import { fetchProductsForSuppliers } from '@/sales/lib/supplierApi';
+import { PHONE_ERROR_MESSAGE, isValidPhoneNumber, sanitizePhoneInput } from '@/sales/lib/phone';
 
 const activityTypeOptions = ['Meeting', 'Call', 'Email', 'Demo', 'Site Visit', 'Follow-up', 'Support', 'Other'];
 const responseOptions = ['Positive', 'Negative', 'Pending', 'No Response'];
@@ -185,6 +186,10 @@ export default function ActivityFormPage() {
       setToast('Customer / Partner Name, Activity Type, Activity Date, and Product are required.');
       return;
     }
+    if (form.mobileNo.trim() && !isValidPhoneNumber(form.mobileNo)) {
+      setToast(PHONE_ERROR_MESSAGE);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -235,7 +240,7 @@ export default function ActivityFormPage() {
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Customer / Partner Name *</span>
+            <span className="text-sm font-semibold text-gray-700">Customer / Partner Name <span className="required-asterisk">*</span></span>
             <input list="customer-options" value={form.customerName} onChange={handleCustomerSelect} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
             <datalist id="customer-options">
               {customerOptions.map((name) => <option key={name} value={name} />)}
@@ -259,11 +264,11 @@ export default function ActivityFormPage() {
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Mobile No</span>
-            <input name="mobileNo" value={form.mobileNo} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <input name="mobileNo" value={form.mobileNo} onChange={(event) => setForm((prev) => ({ ...prev, mobileNo: sanitizePhoneInput(event.target.value) }))} inputMode="numeric" maxLength={10} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Activity Type *</span>
+            <span className="text-sm font-semibold text-gray-700">Activity Type <span className="required-asterisk">*</span></span>
             <select name="activityType" value={form.activityType} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
               <option value="">Select</option>
               {activityTypeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -271,7 +276,7 @@ export default function ActivityFormPage() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Activity Date *</span>
+            <span className="text-sm font-semibold text-gray-700">Activity Date <span className="required-asterisk">*</span></span>
             <input type="date" name="activityDate" value={form.activityDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
           </label>
 
@@ -315,7 +320,7 @@ export default function ActivityFormPage() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Product *</span>
+            <span className="text-sm font-semibold text-gray-700">Product <span className="required-asterisk">*</span></span>
             <select name="product" value={form.product} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
               <option value="">Select</option>
               {products.map((option) => <option key={option} value={option}>{option}</option>)}

@@ -8,6 +8,7 @@ import { Toast } from '@/sales/components/toast'
 import { deleteSupplier, fetchSuppliers, type SupplierRecord } from '@/sales/lib/supplierApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { clearApiCache } from '@/sales/lib/apiCache'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
 
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
 
@@ -97,30 +98,34 @@ export default function SuppliersPage() {
     }
   }
 
-  const handleDownloadReport = () => {
-    const rows = suppliers.map((supplier) => [
-      supplier.supplierName,
-      supplier.contactName,
-      supplier.emailId,
-      supplier.contactNumber,
-      supplier.product,
-      supplier.createdBy || 'Admin',
+  const handleDownloadReport = async () => {
+    const headers = ['SL No.', 'Supplier Name', 'Contact Name', 'Email', 'Contact Number', 'Product', 'Created By']
+    const rows = suppliers.map((supplier, index) => [
+      index + 1,
+      supplier.supplierName || '',
+      supplier.contactName || '',
+      supplier.emailId || '',
+      supplier.contactNumber ? String(supplier.contactNumber) : '',
+      supplier.product || '',
+      supplier.createdBy || '',
     ])
 
-    const csv = [
-      ['Supplier Name', 'Contact Name', 'Email', 'Contact Number', 'Product', 'Created By'],
-      ...rows,
-    ]
-      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'supplier-report.csv'
-    link.click()
-    URL.revokeObjectURL(url)
+    try {
+      await downloadExcelReport({
+        fileName: 'supplier-report.xlsx',
+        sheetName: 'Suppliers',
+        headers,
+        rows,
+        textColumns: [4],
+        centerColumns: [0, 4],
+        leftColumns: [1, 2, 3, 5, 6],
+        wrapColumns: [1, 2, 3, 5, 6],
+        wideColumns: [1, 3, 5],
+        columnWidths: [8, 32, 24, 32, 18, 28, 22],
+      })
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Unable to download supplier report', 'error')
+    }
   }
 
   return (

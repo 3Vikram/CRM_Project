@@ -4,6 +4,7 @@ const Contact = require('../models/Contact');
 const MailCampaign = require('../models/MailCampaign');
 const Supplier = require('../models/Supplier');
 const Activity = require('../models/Activity');
+const { ownerScope } = require('../utils/accessScope');
 
 const priorityOrder = { High: 3, Medium: 2, Low: 1 };
 
@@ -371,15 +372,15 @@ const collectSupplierEvents = (supplier) => {
     .filter(Boolean);
 };
 
-exports.getCalendarEvents = async (_req, res) => {
+exports.getCalendarEvents = async (req, res) => {
   try {
     const [leads, customers, contacts, campaigns, suppliers, activities] = await Promise.all([
-      Lead.find({}).lean(),
-      Customer.find({}).lean(),
+      Lead.find({ $and: [{}, ownerScope(req)] }).lean(),
+      Customer.find({ $and: [{}, ownerScope(req)] }).lean(),
       Contact.find({}).lean(),
-      MailCampaign.find({ deletedAt: null }).lean(),
-      Supplier.find({}).lean(),
-      Activity.find({ deletedAt: null }).lean(),
+      MailCampaign.find({ $and: [{ deletedAt: null }, ownerScope(req, { idField: 'employeeId', nameField: 'createdBy' })] }).lean(),
+      Supplier.find({ $and: [{}, ownerScope(req)] }).lean(),
+      Activity.find({ $and: [{ deletedAt: null }, ownerScope(req)] }).lean(),
     ]);
 
     const mergedEvents = [

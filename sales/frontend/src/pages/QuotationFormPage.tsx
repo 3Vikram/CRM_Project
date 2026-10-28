@@ -7,6 +7,21 @@ import { Toast } from '@/components/toast'
 import { createLead } from '@/lib/leadApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
 import { clearApiCache } from '@/lib/apiCache'
+import { getAuthHeaders } from '@/lib/apiAuth'
+
+interface InventoryProduct {
+  id?: string
+  _id?: string
+  productName: string
+  description?: string
+  defaultPrice?: number
+  price?: number
+  hsnSac?: string
+  gst?: string
+  isActive?: boolean
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
 
 const taxOptions = [
   '--Select--',
@@ -72,12 +87,21 @@ export default function QuotationFormPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
+  const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+  const [productLoadError, setProductLoadError] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [product2Search, setProduct2Search] = useState('')
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false)
+  const [product2DropdownOpen, setProduct2DropdownOpen] = useState(false)
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false)
   const [taxSearch, setTaxSearch] = useState('')
   const [tax2DropdownOpen, setTax2DropdownOpen] = useState(false)
   const [tax2Search, setTax2Search] = useState('')
   const taxDropdownRef = useRef<HTMLDivElement | null>(null)
   const tax2DropdownRef = useRef<HTMLDivElement | null>(null)
+  const productDropdownRef = useRef<HTMLDivElement | null>(null)
+  const product2DropdownRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -90,6 +114,35 @@ export default function QuotationFormPage() {
       }
     }
     void loadCustomers()
+  }, [])
+
+  useEffect(() => {
+    const loadInventoryProducts = async () => {
+      setIsLoadingProducts(true)
+      setProductLoadError('')
+      try {
+        const response = await fetch(`${API_BASE_URL}/quotations/inventory-products`, { headers: getAuthHeaders() })
+        const result: unknown = await response.json().catch(() => null)
+        if (!response.ok) {
+          const errorBody = result as { error?: unknown; message?: unknown } | null
+          const message = typeof errorBody?.message === 'string'
+            ? errorBody.message
+            : typeof errorBody?.error === 'string'
+              ? errorBody.error
+              : `Unable to fetch Inventory products (${response.status}).`
+          throw new Error(message)
+        }
+        if (!Array.isArray(result)) throw new Error('Inventory returned an invalid product list.')
+        setInventoryProducts((result as InventoryProduct[]).filter((product) => product.isActive !== false && product.productName))
+      } catch (error) {
+        console.error('Unable to load Inventory quotation products:', error)
+        setProductLoadError(error instanceof Error ? error.message : 'Unable to fetch Inventory products.')
+        setInventoryProducts([])
+      } finally {
+        setIsLoadingProducts(false)
+      }
+    }
+    void loadInventoryProducts()
   }, [])
 
   const getTaxRate = (taxValue: string) => {
@@ -109,6 +162,24 @@ export default function QuotationFormPage() {
     return taxOptions.filter((option) => option.toLowerCase().includes(normalized))
   }, [tax2Search])
 
+  const filteredProducts = useMemo(() => {
+    const normalized = productSearch.trim().toLowerCase()
+    if (!normalized) return inventoryProducts
+    return inventoryProducts.filter((product) =>
+      [product.productName, product.description || '', product.hsnSac || '']
+        .some((value) => value.toLowerCase().includes(normalized))
+    )
+  }, [inventoryProducts, productSearch])
+
+  const filteredProducts2 = useMemo(() => {
+    const normalized = product2Search.trim().toLowerCase()
+    if (!normalized) return inventoryProducts
+    return inventoryProducts.filter((product) =>
+      [product.productName, product.description || '', product.hsnSac || '']
+        .some((value) => value.toLowerCase().includes(normalized))
+    )
+  }, [inventoryProducts, product2Search])
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (taxDropdownRef.current && !taxDropdownRef.current.contains(event.target as Node)) {
@@ -116,6 +187,14 @@ export default function QuotationFormPage() {
       }
       if (tax2DropdownRef.current && !tax2DropdownRef.current.contains(event.target as Node)) {
         setTax2DropdownOpen(false)
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
+        setProductDropdownOpen(false)
+        setProductSearch('')
+      }
+      if (product2DropdownRef.current && !product2DropdownRef.current.contains(event.target as Node)) {
+        setProduct2DropdownOpen(false)
+        setProduct2Search('')
       }
     }
 
@@ -233,6 +312,37 @@ export default function QuotationFormPage() {
       email: contact?.email || customer?.email || '',
       mobile: contact?.phone || customer?.phone || '',
     }))
+  }
+
+  const handleProductSelect = (product: InventoryProduct, productNumber: 1 | 2) => {
+    const vendorPrice = Number(product.defaultPrice)
+    const unitPrice = Number(product.price)
+    if (productNumber === 1) {
+      setForm((previous) => ({
+        ...previous,
+        productName: product.productName,
+        productDescription: product.description || '',
+        hsnSac: product.hsnSac || '',
+        expectedVendorPrice: Number.isFinite(vendorPrice) && vendorPrice > 0 ? String(vendorPrice) : '',
+        unitPrice: Number.isFinite(unitPrice) && unitPrice > 0 ? String(unitPrice) : '',
+        tax: product.gst || '',
+      }))
+      setProductDropdownOpen(false)
+      setProductSearch('')
+      return
+    }
+
+    setForm((previous) => ({
+      ...previous,
+      product2Name: product.productName,
+      product2Description: product.description || '',
+      product2HsnSac: product.hsnSac || '',
+      product2ExpectedVendorPrice: Number.isFinite(vendorPrice) && vendorPrice > 0 ? String(vendorPrice) : '',
+      product2UnitPrice: Number.isFinite(unitPrice) && unitPrice > 0 ? String(unitPrice) : '',
+      product2Tax: product.gst || '',
+    }))
+    setProduct2DropdownOpen(false)
+    setProduct2Search('')
   }
 
   const handleTaxSelect = (option: string) => {
@@ -364,7 +474,7 @@ export default function QuotationFormPage() {
           {/* Customer Details Row 1 */}
           <div className="grid gap-4 md:grid-cols-3 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Customer Name *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Customer Name <span className="required-asterisk">*</span></span>
               <select
                 name="customerId"
                 value={form.customerId}
@@ -408,20 +518,40 @@ export default function QuotationFormPage() {
 
           {/* Product Row 1 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Product *</span>
+            <div ref={productDropdownRef} className="relative space-y-1">
+              <span className="text-xs font-semibold uppercase text-gray-500">Product <span className="required-asterisk">*</span></span>
               <input
-                name="productName"
-                value={form.productName}
-                onChange={handleChange}
+                value={productDropdownOpen ? productSearch : form.productName}
+                onFocus={() => {
+                  setProductSearch(form.productName)
+                  setProductDropdownOpen(true)
+                }}
+                onChange={(event) => {
+                  setProductSearch(event.target.value)
+                  setProductDropdownOpen(true)
+                }}
                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.productName ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                placeholder="Product name"
+                placeholder={isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
+                aria-label="Search Inventory products"
+                autoComplete="off"
               />
+              {productDropdownOpen && (
+                <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                  {isLoadingProducts ? <p className="px-3 py-2 text-sm text-gray-500">Loading Inventory products...</p>
+                    : filteredProducts.length ? filteredProducts.map((product) => (
+                      <button key={product.id || product._id || product.productName} type="button" onClick={() => handleProductSelect(product, 1)} className="block w-full px-3 py-2 text-left text-sm hover:bg-[#F7F5F2]">
+                        <span className="block font-medium text-gray-800">{product.productName}</span>
+                        {product.description ? <span className="block truncate text-xs text-gray-500">{product.description}</span> : null}
+                      </button>
+                    )) : <p className="px-3 py-2 text-sm text-gray-500">{productLoadError || 'No Inventory products found.'}</p>}
+                </div>
+              )}
+              {productLoadError && !productDropdownOpen ? <p className="text-xs text-red-600">{productLoadError}</p> : null}
               {errors.productName && <p className="text-xs text-red-600">{errors.productName}</p>}
-            </label>
+            </div>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Description *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Description <span className="required-asterisk">*</span></span>
               <textarea
                 name="productDescription"
                 value={form.productDescription}
@@ -445,7 +575,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Quantity *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Quantity <span className="required-asterisk">*</span></span>
               <input
                 name="quantity"
                 value={form.quantity}
@@ -462,7 +592,7 @@ export default function QuotationFormPage() {
           {/* Product Row 2 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price <span className="required-asterisk">*</span></span>
               <input
                 name="expectedVendorPrice"
                 value={form.expectedVendorPrice}
@@ -477,7 +607,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Unit Price *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Unit Price <span className="required-asterisk">*</span></span>
               <input
                 name="unitPrice"
                 value={form.unitPrice}
@@ -492,7 +622,7 @@ export default function QuotationFormPage() {
             </label>
 
             <div ref={taxDropdownRef} className="relative space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Tax *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Tax <span className="required-asterisk">*</span></span>
               <input
                 readOnly
                 value={form.tax}
@@ -552,20 +682,40 @@ export default function QuotationFormPage() {
           {form.orOption === 'Yes' && (
             <>
               <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Product 2 *</span>
+                <div ref={product2DropdownRef} className="relative space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Product 2 <span className="required-asterisk">*</span></span>
                   <input
-                    name="product2Name"
-                    value={form.product2Name}
-                    onChange={handleChange}
+                    value={product2DropdownOpen ? product2Search : form.product2Name}
+                    onFocus={() => {
+                      setProduct2Search(form.product2Name)
+                      setProduct2DropdownOpen(true)
+                    }}
+                    onChange={(event) => {
+                      setProduct2Search(event.target.value)
+                      setProduct2DropdownOpen(true)
+                    }}
                     className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.product2Name ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                    placeholder="Product name"
+                    placeholder={isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
+                    aria-label="Search Inventory products for product 2"
+                    autoComplete="off"
                   />
+                  {product2DropdownOpen && (
+                    <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                      {isLoadingProducts ? <p className="px-3 py-2 text-sm text-gray-500">Loading Inventory products...</p>
+                        : filteredProducts2.length ? filteredProducts2.map((product) => (
+                          <button key={product.id || product._id || product.productName} type="button" onClick={() => handleProductSelect(product, 2)} className="block w-full px-3 py-2 text-left text-sm hover:bg-[#F7F5F2]">
+                            <span className="block font-medium text-gray-800">{product.productName}</span>
+                            {product.description ? <span className="block truncate text-xs text-gray-500">{product.description}</span> : null}
+                          </button>
+                        )) : <p className="px-3 py-2 text-sm text-gray-500">{productLoadError || 'No Inventory products found.'}</p>}
+                    </div>
+                  )}
+                  {productLoadError && !product2DropdownOpen ? <p className="text-xs text-red-600">{productLoadError}</p> : null}
                   {errors.product2Name && <p className="text-xs text-red-600">{errors.product2Name}</p>}
-                </label>
+                </div>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Description 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Description 2 <span className="required-asterisk">*</span></span>
                   <textarea
                     name="product2Description"
                     value={form.product2Description}
@@ -589,7 +739,7 @@ export default function QuotationFormPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Quantity 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Quantity 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2Quantity"
                     value={form.product2Quantity}
@@ -605,7 +755,7 @@ export default function QuotationFormPage() {
 
               <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4 border-b border-[#D1D5DB]">
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2ExpectedVendorPrice"
                     value={form.product2ExpectedVendorPrice}
@@ -620,7 +770,7 @@ export default function QuotationFormPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Unit Price 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Unit Price 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2UnitPrice"
                     value={form.product2UnitPrice}
@@ -635,7 +785,7 @@ export default function QuotationFormPage() {
                 </label>
 
                 <div ref={tax2DropdownRef} className="relative space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Tax 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Tax 2 <span className="required-asterisk">*</span></span>
                   <input
                     readOnly
                     value={form.product2Tax}
@@ -812,7 +962,7 @@ export default function QuotationFormPage() {
           {/* Commercial Section Row 4 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
             <label className="space-y-1">
-              {/* <span className="text-xs font-semibold uppercase text-gray-500">Currency *</span>
+              {/* <span className="text-xs font-semibold uppercase text-gray-500">Currency <span className="required-asterisk">*</span></span>
               <input
                 name="currency"
                 value={form.currency}
@@ -820,9 +970,7 @@ export default function QuotationFormPage() {
                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.currency ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
                 placeholder="Currency"
               /> */}
-              <span className="text-xs font-semibold uppercase text-gray-500">
-  Currency *
-</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Currency <span className="required-asterisk">*</span></span>
 
 <select
   name="currency"
@@ -844,7 +992,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Validity (Days) *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Validity (Days) <span className="required-asterisk">*</span></span>
               <input
                 name="validity"
                 value={form.validity}
@@ -858,7 +1006,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Delivery *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Delivery <span className="required-asterisk">*</span></span>
               <input
                 name="delivery"
                 value={form.delivery}
@@ -870,7 +1018,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Payment *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Payment <span className="required-asterisk">*</span></span>
               {/* <input
                 name="payment"
                 value={form.payment}

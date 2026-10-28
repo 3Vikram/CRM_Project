@@ -2,18 +2,39 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Plus, X } from 'lucide-react'
+import { ArrowLeft, Minus, Plus, X } from 'lucide-react'
 import { Toast } from '@/sales/components/toast'
 import { SearchableSelect } from '@/sales/components/SearchableSelect'
 import { createOPF, fetchOPFById, updateOPF, type OPFRecord } from '@/sales/lib/opfApi'
 import { fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { fetchSuppliers, type SupplierRecord } from '@/sales/lib/supplierApi'
+import { PHONE_ERROR_MESSAGE, isValidPhoneNumber, sanitizePhoneInput } from '@/sales/lib/phone'
 
 const taxOptions = ['--Select--', 'CGST + SGST 5%', 'IGST 5%', 'CGST + SGST 12%', 'IGST 12%', 'CGST + SGST 18%', 'IGST 18%', 'CGST + SGST 28%', 'IGST 28%', 'EGST 0%']
 const currencyOptions = ['Rupee ₹', 'Dollar $', 'Euro €', 'Pound £']
 const amcOptions = ['Yes', 'No']
 const paymentTermsOptions = ['--Select--', 'As per MSA', '100% Advance', '50% Advance and 50% After Delivery', '30 Days', '45 Days', '60 Days', '90 Days', 'Custom']
+
+const generateDocumentRowId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+interface DocumentUploadRow {
+  id: string
+  file: File | null
+  error: string
+}
+
+const createDocumentUploadRow = (): DocumentUploadRow => ({
+  id: generateDocumentRowId(),
+  file: null,
+  error: '',
+})
 
 const FormField = ({ label, required, error, children, className }: any) => (
   <div className={className || ''}>
@@ -56,7 +77,6 @@ export default function OPFGenerateFormPage() {
   const [unitPrice, setUnitPrice] = useState('')
   const [vendorPrice, setVendorPrice] = useState('')
   const [tax, setTax] = useState('')
-  const [partNo, setPartNo] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -89,7 +109,7 @@ export default function OPFGenerateFormPage() {
   const [existingUploadedDocuments, setExistingUploadedDocuments] = useState<NonNullable<OPFRecord['uploadedDocuments']>>([])
 
   // Section 4: Documents (array of files)
-  const [uploadedDocuments, setUploadedDocuments] = useState<(File | null)[]>([null])
+  const [uploadedDocuments, setUploadedDocuments] = useState<DocumentUploadRow[]>([createDocumentUploadRow()])
 
   // Load data on mount
   useEffect(() => {
@@ -133,7 +153,6 @@ export default function OPFGenerateFormPage() {
         setUnitPrice(opf.unitPrice === undefined ? '' : String(opf.unitPrice))
         setVendorPrice(opf.vendorPrice === undefined ? '' : String(opf.vendorPrice))
         setTax(opf.tax || '')
-        setPartNo(opf.partNo || '')
         setStartDate(dateValue(opf.startDate))
         setEndDate(dateValue(opf.endDate))
         setServiceName(opf.serviceName || '')
@@ -161,7 +180,7 @@ export default function OPFGenerateFormPage() {
         setShipToAddress(opf.shipToAddress || '')
         setExistingCustomerPOFile(opf.customerPOFile || null)
         setExistingUploadedDocuments(opf.uploadedDocuments || [])
-        setUploadedDocuments([null])
+        setUploadedDocuments([createDocumentUploadRow()])
       } catch (error) {
         setToast(error instanceof Error ? error.message : 'Failed to load OPF')
       } finally {
@@ -263,9 +282,17 @@ export default function OPFGenerateFormPage() {
     if (!endDate) newErrors.endDate = 'End Date is required'
     if (!customerPONo.trim()) newErrors.customerPONo = 'Customer PO No is required'
     if (!customerPODate) newErrors.customerPODate = 'Customer PO Date is required'
-    const hasNewDocument = uploadedDocuments.some((doc) => doc !== null)
-    if (!hasNewDocument && existingUploadedDocuments.length === 0) newErrors.uploadedDocuments = 'At least one document is required'
+    const hasNewDocument = uploadedDocuments.some((document) => document.file !== null)
+    if (!hasNewDocument && existingUploadedDocuments.length === 0) {
+      setUploadedDocuments((rows) => rows.map((row, index) => ({
+        ...row,
+        error: index === 0 ? 'At least one document is required' : '',
+      })))
+    } else {
+      setUploadedDocuments((rows) => rows.map((row) => ({ ...row, error: '' })))
+    }
     if (amc === 'Yes' && !amcRenewalDate) newErrors.amcRenewalDate = 'AMC Renewal Date is required'
+    if (enduserContact.trim() && !isValidPhoneNumber(enduserContact)) newErrors.enduserContact = PHONE_ERROR_MESSAGE
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -275,7 +302,7 @@ export default function OPFGenerateFormPage() {
     e.preventDefault()
     
     if (!validate()) {
-      setToast('Please fill in all required fields')
+      setToast(enduserContact.trim() && !isValidPhoneNumber(enduserContact) ? PHONE_ERROR_MESSAGE : 'Please fill in all required fields')
       return
     }
 
@@ -301,7 +328,6 @@ export default function OPFGenerateFormPage() {
       formData.append('unitPrice', unitPrice)
       formData.append('vendorPrice', vendorPrice)
       formData.append('tax', tax)
-      formData.append('partNo', partNo)
       formData.append('startDate', startDate)
       formData.append('endDate', endDate)
       formData.append('serviceName', serviceName)
@@ -331,9 +357,9 @@ export default function OPFGenerateFormPage() {
       if (customerPOFile) formData.append('customerPOFile', customerPOFile)
 
       // Append all uploaded documents
-      uploadedDocuments.forEach((doc, index) => {
-        if (doc) {
-          formData.append(`uploadedDocuments`, doc)
+      uploadedDocuments.forEach((document) => {
+        if (document.file) {
+          formData.append('uploadedDocuments', document.file)
         }
       })
 
@@ -365,7 +391,6 @@ export default function OPFGenerateFormPage() {
     setUnitPrice('')
     setVendorPrice('')
     setTax('')
-    setPartNo('')
     setStartDate('')
     setEndDate('')
     setServiceName('')
@@ -392,19 +417,26 @@ export default function OPFGenerateFormPage() {
     setBillToAddress('')
     setShipToAddress('')
     setCustomerPOFile(null)
-    setUploadedDocuments([null])
+    setUploadedDocuments([createDocumentUploadRow()])
     setErrors({})
   }
 
   const handleAddDocumentRow = () => {
-    setUploadedDocuments([...uploadedDocuments, null])
+    setUploadedDocuments((rows) => [...rows, createDocumentUploadRow()])
   }
 
-  const handleDocumentChange = (index: number, file: File | null) => {
-    const newDocuments = [...uploadedDocuments]
-    newDocuments[index] = file
-    setUploadedDocuments(newDocuments)
-    setErrors((prev) => ({ ...prev, uploadedDocuments: '' }))
+  const handleRemoveDocumentRow = (id: string) => {
+    setUploadedDocuments((rows) => (
+      rows.length > 1 ? rows.filter((row) => row.id !== id) : rows
+    ))
+  }
+
+  const handleDocumentChange = (id: string, file: File | null) => {
+    setUploadedDocuments((rows) => rows.map((row) => ({
+      ...row,
+      file: row.id === id ? file : row.file,
+      error: file ? '' : row.error,
+    })))
   }
 
   if (isEditLoading) return <div className="py-8 text-center text-gray-500">Loading OPF form...</div>
@@ -426,7 +458,7 @@ export default function OPFGenerateFormPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* SECTION 1: QUOTATION DETAILS */}
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Quotation No" required error={errors.quotationNumber}>
               <SearchableSelect
                 value={quotationNumber}
@@ -463,7 +495,7 @@ export default function OPFGenerateFormPage() {
 
         {/* SECTION 2: SUPPLIER/PRODUCT DETAILS */}
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Supplier Name" required error={errors.supplierName}>
               <SearchableSelect
                 value={supplierName}
@@ -552,15 +584,6 @@ export default function OPFGenerateFormPage() {
               />
             </FormField>
 
-            <FormField label="Part No">
-              <input
-                type="text"
-                value={partNo}
-                onChange={(e) => setPartNo(e.target.value)}
-                className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-              />
-            </FormField>
-
             <FormField label="Start Date" required error={errors.startDate}>
               <input
                 type="date"
@@ -589,7 +612,7 @@ export default function OPFGenerateFormPage() {
 
         {/* SECTION 3: SERVICE/PURCHASE/END USER DETAILS */}
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Service Name">
               <input
                 type="text"
@@ -813,7 +836,9 @@ export default function OPFGenerateFormPage() {
               <input
                 type="text"
                 value={enduserContact}
-                onChange={(e) => setEnduserContact(e.target.value)}
+                onChange={(e) => setEnduserContact(sanitizePhoneInput(e.target.value))}
+                inputMode="numeric"
+                maxLength={10}
                 className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
               />
             </FormField>
@@ -857,16 +882,17 @@ export default function OPFGenerateFormPage() {
                 Saved documents: {existingUploadedDocuments.map((document) => document.fileName).filter(Boolean).join(', ')}
               </p>
             )}
-            {uploadedDocuments.map((doc, index) => (
-              <div key={index} className="flex items-end gap-3">
+            {uploadedDocuments.map((document) => (
+              <div key={document.id} className="flex items-end gap-3">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Upload Document <span className="text-red-500">*</span></label>
                   <input
                     type="file"
-                    onChange={(e) => handleDocumentChange(index, e.target.files?.[0] || null)}
+                    onChange={(e) => handleDocumentChange(document.id, e.target.files?.[0] || null)}
                     accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                     className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm"
                   />
+                  {document.error && <p className="mt-1 text-xs text-red-600">{document.error}</p>}
                 </div>
                 <button
                   type="button"
@@ -876,9 +902,18 @@ export default function OPFGenerateFormPage() {
                 >
                   <Plus className="h-5 w-5" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveDocumentRow(document.id)}
+                  disabled={uploadedDocuments.length === 1}
+                  className="inline-flex items-center justify-center rounded-lg bg-red-600 p-2.5 text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  title="Remove Document"
+                  aria-label="Remove document upload field"
+                >
+                  <Minus className="h-5 w-5" />
+                </button>
               </div>
             ))}
-            {errors.uploadedDocuments && <p className="text-xs text-red-600">{errors.uploadedDocuments}</p>}
           </div>
         </div>
 

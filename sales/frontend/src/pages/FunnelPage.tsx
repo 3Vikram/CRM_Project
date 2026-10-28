@@ -245,7 +245,7 @@ export default function FunnelPage() {
           className="inline-flex items-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f2937]"
         >
           <Plus className="h-4 w-4" />
-          GENERATE NEW +
+          Generate New
         </button>
       </div>
 
@@ -439,7 +439,7 @@ export default function FunnelPage() {
                         <button type="button" onClick={() => navigate(`/sales/quotations/view/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View">
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button type="button" onClick={() => navigate(`/sales/quotations/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">
+                        <button type="button" onClick={() => navigate(`/sales/funnels/edit/${row._id}`)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit">
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button type="button" onClick={() => handleDelete(row._id)} className="rounded-md p-1.5 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Delete">

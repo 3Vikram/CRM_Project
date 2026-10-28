@@ -7,6 +7,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogContentText, Dialog
 import { StatCard } from '@/sales/components/stat-card'
 import { deleteCampaign, getCampaigns, MailCampaignRecord } from '@/sales/lib/mailCampaignApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
 
 type CampaignStatus = 'Draft' | 'Scheduled' | 'Sent'
 
@@ -24,6 +25,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [stats, setStats] = useState({ total: 0, drafts: 0, scheduled: 0, sent: 0 })
+  const [isDownloading, setIsDownloading] = useState(false)
 
   const loadCampaigns = async (nextPage = page, nextLimit = pageSize) => {
     const data = await getCampaigns({ search, page: nextPage, limit: nextLimit, ...(statusFilter ? { status: statusFilter } : {}) })
@@ -84,6 +86,65 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
     }
   }
 
+  const handleDownloadReport = async () => {
+    setIsDownloading(true)
+    setError('')
+    try {
+      const allCampaigns: MailCampaignRecord[] = []
+      let currentPage = 1
+      let totalReportPages = 1
+      do {
+        const data = await getCampaigns({ search, page: currentPage, limit: 100, ...(statusFilter ? { status: statusFilter } : {}) })
+        allCampaigns.push(...(data.data || []))
+        totalReportPages = data.pagination?.totalPages || 1
+        currentPage += 1
+      } while (currentPage <= totalReportPages)
+
+      if (!allCampaigns.length) {
+        setError('There are no campaigns to download.')
+        return
+      }
+
+      const toExcelDate = (value?: string) => {
+        if (!value) return ''
+        const date = new Date(value)
+        if (Number.isNaN(date.getTime())) return ''
+        const day = String(date.getDate()).padStart(2, '0')
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        return `${day}-${month}-${date.getFullYear()}`
+      }
+
+      await downloadExcelReport({
+        fileName: `${statusFilter ? statusFilter.toLowerCase() : 'mail'}-campaigns-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        sheetName: 'Mail Campaigns',
+        headers: ['SL No.', 'Campaign ID', 'Campaign Name', 'Subject', 'Status', 'Created By', 'Date', 'Recipients', 'Opens (Total)', 'Unique Opens', 'Clicks (Total)'],
+        rows: allCampaigns.map((campaign, index) => [
+          index + 1,
+          campaign.campaignId || '',
+          campaign.campaignName || '',
+          campaign.subject || '',
+          campaign.status || '',
+          campaign.createdBy || '',
+          toExcelDate(campaign.createdDate),
+          Number(campaign.recipientCount) || 0,
+          Number(campaign.opens) || 0,
+          Number(campaign.uniqueOpens) || 0,
+          Number(campaign.clicks) || 0,
+        ]),
+        textColumns: [1, 2, 3, 4, 5, 6],
+        centerColumns: [0, 1, 4, 6, 7, 8, 9, 10],
+        leftColumns: [2, 3, 5],
+        wrapColumns: [2, 3],
+        wideColumns: [2, 3],
+        columnWidths: [8, 14, 36, 40, 14, 18, 14, 12, 14, 14, 14],
+      })
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Unable to download the report.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {statusFilter === 'Draft' || statusFilter === 'Scheduled' ? (
@@ -94,9 +155,9 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
           <h1 className="crm-page-heading">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaigns'}</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm">
+          <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm disabled:opacity-60">
             <Download className="h-4 w-4" />
-            Download Report
+            {isDownloading ? 'Downloading...' : 'Download Report'}
           </button>
           <PermissionGate moduleName="mailCampaign" action="create">
             <button onClick={() => navigate('/sales/mail-campaign/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> Campaign</button>

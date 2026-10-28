@@ -22,6 +22,7 @@ export default function MailCampaignFormPage() {
   const [image, setImage] = useState<File | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [batchId, setBatchId] = useState('')
+  const [savedCampaignId, setSavedCampaignId] = useState('')
   const [batchName, setBatchName] = useState('')
   const [batchNumber, setBatchNumber] = useState<number | ''>('')
   const [employeeId, setEmployeeId] = useState('')
@@ -30,6 +31,7 @@ export default function MailCampaignFormPage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
   const resolveImageUrl = (filePath?: string) => {
@@ -112,6 +114,7 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
     }
     setIsSaving(true)
     setError('')
+    setWarning('')
     const formData = new FormData()
     formData.append('campaignName', campaignName.trim())
     formData.append('subject', subject.trim())
@@ -119,7 +122,7 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
     formData.append('imageAlignment', imageAlignment)
     formData.append('campaignBody', campaignBody)
     formData.append('footer', footer)
-    formData.append('status', action)
+    formData.append('status', action === 'Sent' ? 'Draft' : action)
     formData.append('createdBy', typeof window !== 'undefined' ? (window.localStorage.getItem('userName') || window.localStorage.getItem('name') || 'Admin') : 'Admin')
     formData.append('createdDate', new Date().toISOString().split('T')[0])
     formData.append('batchName', batchName)
@@ -130,10 +133,19 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
     if (image) formData.append('image', image)
 
     try {
-      const savedCampaign = id ? await updateCampaign(id, formData) : await createCampaign(formData)
-      const savedId = id || savedCampaign.data?._id
+      const currentId = id || savedCampaignId
+      const savedCampaign = currentId ? await updateCampaign(currentId, formData) : await createCampaign(formData)
+      const savedId = currentId || savedCampaign.data?._id
       if (!savedId) throw new Error('Campaign was saved without an ID.')
-      if (action === 'Sent') await sendCampaign(savedId)
+      setSavedCampaignId(savedId)
+      if (action === 'Sent') {
+        const sendResult = await sendCampaign(savedId)
+        const trackingWarning = String(sendResult?.data?.trackingWarning || '').trim()
+        if (trackingWarning) {
+          setWarning(`Email provider accepted the send request, but open tracking is temporarily unavailable. ${trackingWarning}`)
+          return
+        }
+      }
       navigate('/sales/mail-campaign')
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save campaign.')
@@ -168,6 +180,7 @@ const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
       <div className="rounded-xl border border-[#EFECE5] bg-white p-8 shadow-sm">
         <h1 className="crm-page-heading">{id ? 'Edit Campaign' : 'Create Campaign'}</h1>
         {error ? <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+        {warning ? <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{warning}</div> : null}
         <form onSubmit={(event) => void saveCampaign(event, 'Sent')} className="space-y-8">
           <div className="grid gap-6 md:grid-cols-2">
             <label className="block">

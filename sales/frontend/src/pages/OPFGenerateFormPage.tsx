@@ -56,7 +56,6 @@ export default function OPFGenerateFormPage() {
   const [unitPrice, setUnitPrice] = useState('')
   const [vendorPrice, setVendorPrice] = useState('')
   const [tax, setTax] = useState('')
-  const [partNo, setPartNo] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -133,7 +132,6 @@ export default function OPFGenerateFormPage() {
         setUnitPrice(opf.unitPrice === undefined ? '' : String(opf.unitPrice))
         setVendorPrice(opf.vendorPrice === undefined ? '' : String(opf.vendorPrice))
         setTax(opf.tax || '')
-        setPartNo(opf.partNo || '')
         setStartDate(dateValue(opf.startDate))
         setEndDate(dateValue(opf.endDate))
         setServiceName(opf.serviceName || '')
@@ -296,7 +294,6 @@ export default function OPFGenerateFormPage() {
       formData.append('unitPrice', unitPrice)
       formData.append('vendorPrice', vendorPrice)
       formData.append('tax', tax)
-      formData.append('partNo', partNo)
       formData.append('startDate', startDate)
       formData.append('endDate', endDate)
       formData.append('serviceName', serviceName)
@@ -360,7 +357,6 @@ export default function OPFGenerateFormPage() {
     setUnitPrice('')
     setVendorPrice('')
     setTax('')
-    setPartNo('')
     setStartDate('')
     setEndDate('')
     setServiceName('')
@@ -420,7 +416,7 @@ export default function OPFGenerateFormPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* SECTION 1: QUOTATION DETAILS */}
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Quotation No" required error={errors.quotationNumber}>
               <SearchableSelect
                 value={quotationNumber}
@@ -457,7 +453,7 @@ export default function OPFGenerateFormPage() {
 
         {/* SECTION 2: SUPPLIER/PRODUCT DETAILS */}
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Supplier Name" required error={errors.supplierName}>
               <SearchableSelect
                 value={supplierName}
@@ -546,15 +542,6 @@ export default function OPFGenerateFormPage() {
               />
             </FormField>
 
-            <FormField label="Part No">
-              <input
-                type="text"
-                value={partNo}
-                onChange={(e) => setPartNo(e.target.value)}
-                className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-              />
-            </FormField>
-
             <FormField label="Start Date" required error={errors.startDate}>
               <input
                 type="date"
@@ -583,7 +570,7 @@ export default function OPFGenerateFormPage() {
 
         {/* SECTION 3: SERVICE/PURCHASE/END USER DETAILS */}
         <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-          <div className="grid gap-4 grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Service Name">
               <input
                 type="text"

@@ -9,6 +9,7 @@ import SalesLoginPage from '@/sales/pages/SalesLoginPage'
 import SalesProfilePage from '@/sales/pages/SalesProfilePage'
 import DashboardPage from '@/sales/pages/DashboardPage'
 import CustomersPage from '@/sales/pages/CustomersPage'
+import CustomerMappingPage from '@/sales/pages/CustomerMappingPage'
 import CustomerFormPage from '@/sales/pages/CustomerFormPage'
 import ContactsPage from '@/sales/pages/ContactsPage'
 import ContactFormPage from '@/sales/pages/ContactFormPage'
@@ -52,6 +53,7 @@ const getRoutePermission = (pathname: string) => {
   if (pathname.startsWith('/sales/profile')) return null
   if (pathname.startsWith('/sales/dashboard')) return 'dashboard'
   if (pathname.startsWith('/sales/customers') || pathname === '/customers') return 'customers'
+  if (pathname.startsWith('/sales/customer-mapping')) return 'customerMapping'
   if (pathname.startsWith('/sales/contacts')) return 'contacts'
   if (pathname.startsWith('/sales/suppliers')) return 'suppliers'
   if (pathname.startsWith('/sales/leads')) return 'leads'
@@ -137,6 +139,14 @@ export default function App() {
           element={
             <SalesLayout>
               <CustomersPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/customer-mapping"
+          element={
+            <SalesLayout>
+              <CustomerMappingPage />
             </SalesLayout>
           }
         />
@@ -391,6 +401,14 @@ export default function App() {
         />
         <Route
           path="/sales/funnels/new"
+          element={
+            <SalesLayout>
+              <FunnelFormPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/funnels/edit/:id"
           element={
             <SalesLayout>
               <FunnelFormPage />

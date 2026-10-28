@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Edit2, Loader, Mail, Printer } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
-import { fetchLeadById, type LeadRecord, sendQuotationPdf } from '@/lib/leadApi'
+import { fetchLeadById, type LeadRecord } from '@/lib/leadApi'
 import { fetchCompanyProfiles, type CompanyProfileRecord } from '@/lib/companyProfileApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
+import { getStoredAuth } from '@/lib/auth'
 import { Toast } from '@/components/toast'
 
 const safeNumber = (value: unknown): number => {
@@ -270,10 +271,24 @@ export default function QuotationViewPage() {
       return
     }
 
+    const senderEmail = getStoredAuth()?.user?.email?.trim()
+    if (!senderEmail) {
+      setToast('Your signed-in account does not have an email address. Please update your CRM profile and try again.')
+      return
+    }
+
+    const matchingContact = customer?.contacts?.find(
+      (contact) => contact.name?.trim().toLowerCase() === quotation.contactPerson?.trim().toLowerCase()
+    )
+    const recipientEmail = quotation.email?.trim() || matchingContact?.email?.trim() || customer?.email?.trim()
+    if (!recipientEmail) {
+      setToast('The customer recipient email is missing. Add an email to the quotation customer before composing the message.')
+      return
+    }
+
     setIsSendingEmail(true)
     try {
-      // Generate PDF as data URL (base64)
-      const pdfDataUrl = await new Promise<string>((resolve, reject) => {
+      const pdfBlob = await new Promise<Blob>((resolve, reject) => {
         html2pdf()
           .set({
             margin: [0, 0, 0, 0],
@@ -295,36 +310,37 @@ export default function QuotationViewPage() {
           .toPdf()
           .get('pdf')
           .then((pdf: any) => {
-            // Get PDF as data URL string (includes "data:application/pdf;base64," prefix)
-            const dataUrl = pdf.output('dataurlstring')
-            resolve(dataUrl)
+            resolve(pdf.output('blob'))
           })
           .catch((err: any) => {
             reject(err)
           })
       })
 
-      // Get recipient email from localStorage
-      const recipientEmail = window.localStorage.getItem('userEmail') || ''
+      const fileName = `quotation-${referenceNo || 'document'}.pdf`
+      const pdfUrl = URL.createObjectURL(pdfBlob)
+      const downloadLink = document.createElement('a')
+      downloadLink.href = pdfUrl
+      downloadLink.download = fileName
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000)
 
-      if (!recipientEmail) {
-        setToast('User email not found. Please set your email in profile settings.')
-        setIsSendingEmail(false)
-        return
-      }
-
-      // Send PDF to backend
-      const response = await sendQuotationPdf(id, pdfDataUrl, recipientEmail)
-
-      if (response.success) {
-        setToast('Quotation PDF sent successfully to ' + recipientEmail)
-      } else {
-        setToast(response.message || 'Failed to send quotation PDF')
-      }
+      const subjectLine = `Quotation ${referenceNo}${subject !== '—' ? ` - ${subject}` : ''}`
+      const body = [
+        `Dear ${quotation.contactPerson || 'Sir/Madam'},`,
+        '',
+        `Please find attached quotation ${referenceNo} for ${quotation.companyName || 'your company'}.`,
+        '',
+        'Best regards,',
+      ].join('\n')
+      window.location.href = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(body)}`
+      setToast(`Email draft opened for ${recipientEmail}. Attach the downloaded PDF and select ${senderEmail} as the sending account.`)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to generate or send PDF'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate the quotation PDF.'
       setToast(errorMessage)
-      console.error('PDF send error:', err)
+      console.error('Quotation PDF composition error:', err)
     } finally {
       setIsSendingEmail(false)
     }
@@ -531,6 +547,23 @@ export default function QuotationViewPage() {
         .quotation-view-shell .quotation-frame .quotation-grand-total td * {
           font-weight: bold !important;
         }
+        .quotation-note {
+          margin-top: 12px;
+          padding: 0 6px;
+          page-break-inside: auto;
+          break-inside: auto;
+        }
+        .quotation-view-shell .quotation-frame .quotation-note-heading {
+          font-weight: bold !important;
+          page-break-after: avoid;
+          break-after: avoid;
+        }
+        .quotation-note-content {
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          orphans: 2;
+          widows: 2;
+        }
         .quotation-terms {
           margin-top: 21px;
           padding: 0 6px;
@@ -726,18 +759,7 @@ export default function QuotationViewPage() {
               <div>To,</div>
               <div>{quotation.contactPerson || '—'}</div>
               <div>{quotation.companyName || '—'}</div>
-              {(() => {
-                const addressParts = [
-                  customer?.billToAddress?.addressLine1,
-                  customer?.billToAddress?.area,
-                  customer?.billToAddress?.city,
-                  customer?.billToAddress?.state,
-                  customer?.billToAddress?.pincode,
-                  customer?.billToAddress?.country,
-                ].filter(Boolean)
-
-                return addressParts.length > 0 ? <div>{addressParts.join(', ')}</div> : null
-              })()}
+              {customer?.billToAddress?.city ? <div>{customer.billToAddress.city}</div> : null}
             </div>
 
             <div className="quotation-section quotation-introduction">
@@ -824,6 +846,13 @@ export default function QuotationViewPage() {
                 </tbody>
               </table>
             </div>
+
+            {quotation.quotationDetails?.note?.trim() ? (
+              <div className="quotation-note">
+                <span className="quotation-note-heading">NOTE: </span>
+                <span className="quotation-note-content">{quotation.quotationDetails.note}</span>
+              </div>
+            ) : null}
 
             <div className="quotation-terms">
               <div className="quotation-terms-heading">Terms &amp; Conditions:</div>

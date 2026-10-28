@@ -8,6 +8,7 @@ const SupplierSchema = new mongoose.Schema(
       trim: true,
       default: 'Admin',
     },
+    createdById: { type: String, trim: true, default: '', index: true },
     supplierName: {
       type: String,
       trim: true,

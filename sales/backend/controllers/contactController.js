@@ -3,6 +3,7 @@ const Customer = require('../models/Customer');
 const CustomerBatch = require('../models/CustomerBatch');
 const Employee = require('../models/Employee');
 const Counter = require('../models/Counter');
+const { resolveCustomerCreator } = require('../services/customerCreator');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = require('../utils/queryUtils');
@@ -319,12 +320,13 @@ exports.moveContactToCustomer = async (req, res) => {
     };
 
     if (!customer) {
+      const creator = await resolveCustomerCreator(req.user);
       customer = await Customer.create({
         companyName: customerName || contact.contactName,
         contacts: [contactData],
         status: 'Active',
         accountType: 'Individual',
-        createdBy: 'Admin',
+        ...creator,
       });
     } else {
       const normalizedEmail = contact.email.toLowerCase();
@@ -379,6 +381,17 @@ exports.createContact = async (req, res) => {
     }
 
     const identity = await getEmployeeIdentity(req);
+    const requestedBatchId = String(req.body?.batchId || '').trim();
+    let selectedBatch = null;
+    if (requestedBatchId) {
+      if (!/^[a-f\d]{24}$/i.test(requestedBatchId)) {
+        return res.status(400).json({ success: false, message: 'Selected batch is not valid.' });
+      }
+      selectedBatch = await CustomerBatch.findOne({ _id: requestedBatchId, employeeId: identity.employeeId });
+      if (!selectedBatch) {
+        return res.status(400).json({ success: false, message: 'Selected batch was not found for your account.' });
+      }
+    }
     const contact = await Contact.create({
       customerId: resolvedCustomerId || undefined,
       customerName,
@@ -388,7 +401,12 @@ exports.createContact = async (req, res) => {
       contactNumber,
       email,
       ...identity,
+      ...(selectedBatch ? { batchId: selectedBatch._id, batchNumber: selectedBatch.batchNumber, batchName: `Batch ${selectedBatch.batchNumber}` } : {}),
     });
+
+    if (selectedBatch) {
+      await CustomerBatch.updateOne({ _id: selectedBatch._id }, { $inc: { customerCount: 1 }, $addToSet: { customers: contact._id } });
+    }
 
     res.status(201).json({ success: true, message: 'Contact created successfully', data: normalizeContactRecord(contact.toObject ? contact.toObject() : contact) });
   } catch (error) {

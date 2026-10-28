@@ -1,5 +1,6 @@
 const Supplier = require('../models/Supplier');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { ownerScope, creatorFields } = require('../utils/accessScope');
 
 const getNextSupplierId = async () => {
   const suppliers = await Supplier.find({ supplierId: /^SL-\d+$/ }).select({ supplierId: 1 }).lean();
@@ -117,6 +118,8 @@ exports.getSuppliers = async (req, res) => {
     if (createdBy) {
       query.createdBy = new RegExp(`^${escapeRegex(createdBy)}$`, 'i');
     }
+    const scope = ownerScope(req);
+    const finalQuery = Object.keys(scope).length ? { $and: [query, scope] } : query;
 
     const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
     const projection = {
@@ -134,8 +137,8 @@ exports.getSuppliers = async (req, res) => {
     const sortOptions = normalizeSort(sortBy, sortOrder, ['createdAt', 'supplierName', 'contactName', 'product', 'createdBy']);
 
     const [suppliers, total] = await Promise.all([
-      Supplier.find(query, projection).sort(sortOptions).skip(skip).limit(limitNum).lean(),
-      Supplier.countDocuments(query),
+      Supplier.find(finalQuery, projection).sort(sortOptions).skip(skip).limit(limitNum).lean(),
+      Supplier.countDocuments(finalQuery),
     ]);
 
     res.status(200).json({
@@ -153,7 +156,7 @@ exports.getSuppliers = async (req, res) => {
   }
 };
 
-exports.getInventorySupplierOptions = async (_req, res) => {
+exports.getInventorySupplierOptions = async (req, res) => {
   try {
     const suppliers = await Supplier.find({
       supplierName: { $type: 'string', $regex: /\S/ },
@@ -180,7 +183,7 @@ exports.getInventorySupplierOptions = async (_req, res) => {
 
 exports.getSupplierById = async (req, res) => {
   try {
-    const supplier = await Supplier.findById(req.params.id).lean();
+    const supplier = await Supplier.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).lean();
     if (!supplier) {
       return res.status(404).json({ success: false, message: 'Supplier not found' });
     }
@@ -194,6 +197,7 @@ exports.createSupplier = async (req, res) => {
   try {
     await ensureSupplierIds();
     const payload = normalizeSupplierPayload(req.body);
+    Object.assign(payload, creatorFields(req));
     const { supplierName, category, paymentTerms, addressLine1, country, state } = payload;
 
     if (!supplierName || !category || !paymentTerms || !addressLine1 || !country || !state) {
@@ -222,13 +226,19 @@ exports.createSupplier = async (req, res) => {
 exports.updateSupplier = async (req, res) => {
   try {
     const payload = normalizeSupplierPayload(req.body);
+    delete payload.createdBy;
+    delete payload.createdById;
     const { supplierName, category, paymentTerms, addressLine1, country, state } = payload;
 
     if (!supplierName || !category || !paymentTerms || !addressLine1 || !country || !state) {
       return res.status(400).json({ success: false, message: 'Supplier Name, Category, Payment Terms, Address, Country, and State are required.' });
     }
 
-    const supplier = await Supplier.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
+    const supplier = await Supplier.findOneAndUpdate(
+      { $and: [{ _id: req.params.id }, ownerScope(req)] },
+      payload,
+      { new: true, runValidators: true }
+    );
     if (!supplier) {
       return res.status(404).json({ success: false, message: 'Supplier not found' });
     }
@@ -244,7 +254,7 @@ exports.updateSupplier = async (req, res) => {
 
 exports.deleteSupplier = async (req, res) => {
   try {
-    const supplier = await Supplier.findByIdAndDelete(req.params.id);
+    const supplier = await Supplier.findOneAndDelete({ $and: [{ _id: req.params.id }, ownerScope(req)] });
     if (!supplier) {
       return res.status(404).json({ success: false, message: 'Supplier not found' });
     }

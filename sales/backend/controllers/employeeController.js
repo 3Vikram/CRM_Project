@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const Employee = require('../models/Employee');
 const Counter = require('../models/Counter');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { creatorFields } = require('../utils/accessScope');
 
 const permissionModules = [
   'customers', 'contacts', 'leads', 'activities', 'mailCampaign', 'suppliers',
@@ -131,6 +132,10 @@ const serializeEmployee = (employee) => {
     joiningDate: source.joiningDate || null,
     dateOfJoin: source.dateOfJoin || null,
     dateOfBirth: source.dateOfBirth || null,
+    employeeType: source.employeeType || '',
+    reportingTo: source.reportingTo || '',
+    orderApprovalTo: source.orderApprovalTo || '',
+    branchCode: source.branchCode || '',
     address: source.address || '',
     notes: source.notes || '',
     createdBy: source.createdBy || 'Admin',
@@ -209,7 +214,11 @@ exports.getEmployeeById = async (req, res) => {
 
 exports.createEmployee = async (req, res) => {
   try {
-    const payload = normaliseEmployeePayload(req.body);
+    const employeeInput = req.user?.role === 'admin'
+      ? req.body
+      : { ...req.body, crudOption: [], modulesOption: [], permissions: defaultPermissions() };
+    const payload = normaliseEmployeePayload(employeeInput);
+    payload.createdBy = creatorFields(req).createdBy;
     if (!payload.employeeName || !payload.email) {
       return res.status(400).json({ success: false, message: 'Employee name and email are required.' });
     }
@@ -241,7 +250,28 @@ exports.createEmployee = async (req, res) => {
 
 exports.updateEmployee = async (req, res) => {
   try {
-    const payload = normaliseEmployeePayload(req.body);
+    let employeeInput = req.body;
+    if (req.user?.role !== 'admin') {
+      const currentEmployee = await Employee.findById(req.params.id)
+        .select('crudOption modulesOption permissions role status')
+        .lean();
+      if (!currentEmployee) {
+        return res.status(404).json({ success: false, message: 'Employee not found.' });
+      }
+
+      employeeInput = {
+        ...req.body,
+        crudOption: currentEmployee.crudOption,
+        modulesOption: currentEmployee.modulesOption,
+        permissions: currentEmployee.permissions,
+        role: currentEmployee.role,
+        status: currentEmployee.status,
+      };
+    }
+
+    const payload = normaliseEmployeePayload(employeeInput);
+    delete payload.createdBy;
+    delete payload.createdById;
     if (!payload.employeeName || !payload.email) {
       return res.status(400).json({ success: false, message: 'Employee name and email are required.' });
     }

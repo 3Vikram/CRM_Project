@@ -73,14 +73,19 @@ const CustomerSchema = new mongoose.Schema(
     calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
     accountType: {
       type: String,
-      enum: ['Individual', 'Business', 'Enterprise'],
+      enum: ['Individual', 'Business', 'Enterprise', 'Corporate', 'Private', 'Government', 'Named', 'Non-Named'],
       default: 'Individual',
+    },
+    assignedEmployees: {
+      type: [{ _id: false, employeeId: { type: String, trim: true }, employeeName: { type: String, trim: true } }],
+      default: [],
     },
     createdBy: {
       type: String,
       required: [true, 'Created By is required'],
       trim: true,
     },
+    createdById: { type: String, trim: true, default: '', index: true },
     notes: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
@@ -102,6 +107,7 @@ CustomerSchema.index({ email: 1, status: 1, createdAt: -1 });
 CustomerSchema.index({ phone: 1, status: 1, createdAt: -1 });
 CustomerSchema.index({ status: 1, createdAt: -1 });
 CustomerSchema.index({ createdBy: 1, status: 1, accountType: 1, createdAt: -1 });
+CustomerSchema.index({ 'assignedEmployees.employeeId': 1 });
 CustomerSchema.index({ email: 1, phone: 1, companyName: 1 });
 CustomerSchema.index({ companyName: 1, email: 1, status: 1 });
 CustomerSchema.index({ customerId: 1 }, { unique: true, sparse: true });

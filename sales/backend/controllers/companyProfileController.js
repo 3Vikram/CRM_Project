@@ -1,5 +1,6 @@
 const CompanyProfile = require('../models/CompanyProfile');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
+const { creatorFields } = require('../utils/accessScope');
 
 const parsePayload = (body = {}) => {
   const payload = {};
@@ -127,6 +128,7 @@ exports.createCompanyProfile = async (req, res) => {
       if (req.files.documentHeader?.[0]) payload.documentHeader = mapFile(req.files.documentHeader[0]);
       if (req.files.documentFooter?.[0]) payload.documentFooter = mapFile(req.files.documentFooter[0]);
     }
+    payload.createdBy = creatorFields(req).createdBy;
 
     const companyProfile = await CompanyProfile.create(payload);
     res.status(201).json({ success: true, message: 'Company profile created successfully', data: companyProfile });

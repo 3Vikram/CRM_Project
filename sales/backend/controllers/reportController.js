@@ -5,6 +5,7 @@ const Lead = require('../models/Lead');
 const Contact = require('../models/Contact');
 const Activity = require('../models/Activity');
 const { DEFAULT_PAGE_SIZE, parsePagination, escapeRegex } = require('../utils/queryUtils');
+const { ownerScope } = require('../utils/accessScope');
 
 const normalizeNumber = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
@@ -86,13 +87,17 @@ const aggregateBy = (records, key, label) => {
   }));
 };
 
-const reportOptions = async (opfRecords) => {
+const reportOptions = async (opfRecords, req) => {
+  const scope = ownerScope(req);
   const [employees, customers] = await Promise.all([
     Employee.find({}).select('employeeName fullName').sort({ employeeName: 1 }).lean(),
-    Customer.find({}).select('companyName customerName').sort({ companyName: 1 }).lean(),
+    Customer.find({ $and: [{}, scope] }).select('companyName customerName').sort({ companyName: 1 }).lean(),
   ]);
+  const employeeNames = Object.keys(scope).length
+    ? [String(req.user?.name || '').trim()]
+    : employees.flatMap((employee) => [employee.employeeName, employee.fullName]);
   return {
-    createdBy: uniqueValues(employees.flatMap((employee) => [employee.employeeName, employee.fullName]).concat(opfRecords.map((record) => record.createdBy))),
+    createdBy: uniqueValues(employeeNames.concat(opfRecords.map((record) => record.createdBy))),
     createdDates: uniqueValues(opfRecords.map((record) => record.createdDate ? new Date(record.createdDate).toISOString().slice(0, 10) : '')),
     customerNames: uniqueValues(customers.flatMap((customer) => [customer.companyName, customer.customerName]).concat(opfRecords.map((record) => record.customerName))),
     products: uniqueValues(opfRecords.map((record) => record.product)),
@@ -115,16 +120,17 @@ exports.getReport = async (req, res) => {
       return res.status(200).json({ success: true, data: [], unavailable: true, message: 'Team-level data is not available because this CRM has no Team entity.' });
     }
 
+    const scope = ownerScope(req);
     const opfQuery = buildOpfQuery({ createdBy, createdDate, customerName, product });
-    const opfRecords = (await OPF.find(opfQuery).select('createdBy createdDate customerName product quantity unitPrice vendorPrice revenue margin').sort({ createdDate: -1 }).lean()).map(enrichOpfRecord);
-    const options = await reportOptions(opfRecords);
+    const opfRecords = (await OPF.find({ $and: [opfQuery, scope] }).select('createdBy createdDate customerName product quantity unitPrice vendorPrice revenue margin').sort({ createdDate: -1 }).lean()).map(enrichOpfRecord);
+    const options = await reportOptions(opfRecords, req);
     let rows;
 
     if (reportKey === 'top-customers') rows = aggregateBy(opfRecords, 'customerName', 'customer');
     else if (reportKey === 'top-employees') rows = aggregateBy(opfRecords, 'createdBy', 'employee');
     else if (reportKey === 'top-products' || reportKey === 'product-analysis') rows = aggregateBy(opfRecords, 'product', 'product');
     else if (reportKey === 'funnel-analysis') {
-      const leads = await Lead.find(buildLeadQuery({ createdBy, createdDate, customerName, product })).select('leadStatus products createdDate').lean();
+      const leads = await Lead.find({ $and: [buildLeadQuery({ createdBy, createdDate, customerName, product }), scope] }).select('leadStatus products createdDate').lean();
       const stages = new Map();
       leads.forEach((lead) => {
         const stage = lead.leadStatus || 'Unknown';
@@ -140,12 +146,15 @@ exports.getReport = async (req, res) => {
       const usageCreatedBy = createdBy && createdBy !== 'all' ? new RegExp(`^${escapeRegex(createdBy)}$`, 'i') : undefined;
       const [employees, customers, contacts, leads, activities] = await Promise.all([
         Employee.find({}).select('employeeName fullName').lean(),
-        Customer.find({ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }).select('createdBy').lean(),
+        Customer.find({ $and: [{ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }, scope] }).select('createdBy').lean(),
         Contact.find(usageDate ? { createdAt: usageDate } : {}).select('createdAt').lean(),
-        Lead.find({ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdDate: usageDate } : {}) }).select('createdBy').lean(),
-        Activity.find({ deletedAt: null, ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }).select('createdBy').lean(),
+        Lead.find({ $and: [{ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdDate: usageDate } : {}) }, scope] }).select('createdBy').lean(),
+        Activity.find({ $and: [{ deletedAt: null, ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }, scope] }).select('createdBy').lean(),
       ]);
-      const names = uniqueValues(employees.flatMap((employee) => [employee.employeeName, employee.fullName]).concat(opfRecords.map((record) => record.createdBy)));
+      const names = uniqueValues(
+        (Object.keys(scope).length ? [String(req.user?.name || '').trim()] : employees.flatMap((employee) => [employee.employeeName, employee.fullName]))
+          .concat(opfRecords.map((record) => record.createdBy))
+      );
       rows = names.map((employee) => ({ employee, customersCreated: customers.filter((item) => item.createdBy === employee).length, quotations: leads.filter((item) => item.createdBy === employee).length, sales: opfRecords.filter((item) => item.createdBy === employee).length, activities: activities.filter((item) => item.createdBy === employee).length }));
     } else {
       return res.status(400).json({ success: false, message: `Unknown report: ${reportKey}` });
@@ -182,17 +191,18 @@ exports.getRevenueMarginReport = async (req, res) => {
     if (createdDateRange) query.createdDate = createdDateRange;
     if (search) query.createdBy = new RegExp(escapeRegex(search), 'i');
 
+    const scope = ownerScope(req);
     const [records, optionRecords, employees, customers] = await Promise.all([
-      OPF.find(query)
+      OPF.find({ $and: [query, scope] })
         .select('createdBy createdDate customerName product revenue margin quantity unitPrice vendorPrice')
         .sort({ createdBy: 1, createdDate: -1 })
         .lean(),
-      OPF.find({})
+      OPF.find({ $and: [{}, scope] })
         .select('createdBy createdDate customerName product')
         .sort({ createdBy: 1 })
         .lean(),
       Employee.find({}).select('employeeName fullName').sort({ employeeName: 1 }).lean(),
-      Customer.find({}).select('companyName customerName').sort({ companyName: 1 }).lean(),
+      Customer.find({ $and: [{}, scope] }).select('companyName customerName').sort({ companyName: 1 }).lean(),
     ]);
 
     const rows = records.map((record) => {
@@ -226,7 +236,7 @@ exports.getRevenueMarginReport = async (req, res) => {
       success: true,
       data: pagedRows,
       options: {
-        createdBy: unique(employees.flatMap((employee) => [employee.employeeName, employee.fullName]).concat(optionRecords.map((record) => record.createdBy))),
+        createdBy: unique((Object.keys(scope).length ? [String(req.user?.name || '').trim()] : employees.flatMap((employee) => [employee.employeeName, employee.fullName])).concat(optionRecords.map((record) => record.createdBy))),
         createdDates,
         customerNames: unique(customers.flatMap((customer) => [customer.companyName, customer.customerName]).concat(optionRecords.map((record) => record.customerName))),
         products: unique(optionRecords.map((record) => record.product)),

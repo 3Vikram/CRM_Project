@@ -7,6 +7,7 @@ import { Toast } from '@/sales/components/toast'
 import { createLead } from '@/sales/lib/leadApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { clearApiCache } from '@/sales/lib/apiCache'
+import { getAuthHeaders } from '@/sales/lib/apiAuth'
 
 const taxOptions = [
   '--Select--',
@@ -21,13 +22,24 @@ const taxOptions = [
   'EGT 0%',
 ]
 
+interface InventoryProduct {
+  id?: string
+  _id?: string
+  productName: string
+  description?: string
+  defaultPrice?: number
+  price?: number
+  hsnSac?: string
+  gst?: string
+  isActive?: boolean
+}
+
 const initialForm = {
   customerId: '',
   customerName: '',
   contactPerson: '',
   email: '',
   mobile: '',
-  subject: '',
   productName: '',
   productDescription: '',
   hsnSac: '',
@@ -72,12 +84,23 @@ export default function QuotationFormPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
+  const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+  const [productLoadError, setProductLoadError] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [product2Search, setProduct2Search] = useState('')
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false)
+  const [product2DropdownOpen, setProduct2DropdownOpen] = useState(false)
+  const [selectedProductId, setSelectedProductId] = useState('')
+  const [selectedProduct2Id, setSelectedProduct2Id] = useState('')
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false)
   const [taxSearch, setTaxSearch] = useState('')
   const [tax2DropdownOpen, setTax2DropdownOpen] = useState(false)
   const [tax2Search, setTax2Search] = useState('')
   const taxDropdownRef = useRef<HTMLDivElement | null>(null)
   const tax2DropdownRef = useRef<HTMLDivElement | null>(null)
+  const productDropdownRef = useRef<HTMLDivElement | null>(null)
+  const product2DropdownRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -90,6 +113,36 @@ export default function QuotationFormPage() {
       }
     }
     void loadCustomers()
+  }, [])
+
+  useEffect(() => {
+    const loadInventoryProducts = async () => {
+      setIsLoadingProducts(true)
+      setProductLoadError('')
+      try {
+        const response = await fetch('/api/quotations/inventory-products', { headers: getAuthHeaders() })
+        const result: unknown = await response.json().catch(() => null)
+        if (!response.ok) {
+          const errorBody = result as { error?: unknown; message?: unknown } | null
+          const message = typeof errorBody?.message === 'string'
+            ? errorBody.message
+            : typeof errorBody?.error === 'string'
+              ? errorBody.error
+              : `Unable to fetch Inventory products (${response.status}).`
+          throw new Error(message)
+        }
+        if (!Array.isArray(result)) {
+          throw new Error('Inventory returned an invalid product list.')
+        }
+        setInventoryProducts((result as InventoryProduct[]).filter((product) => product.isActive !== false && product.productName))
+      } catch (error) {
+        setProductLoadError(error instanceof Error ? error.message : 'Unable to fetch Inventory products.')
+        setInventoryProducts([])
+      } finally {
+        setIsLoadingProducts(false)
+      }
+    }
+    void loadInventoryProducts()
   }, [])
 
   const getTaxRate = (taxValue: string) => {
@@ -109,6 +162,24 @@ export default function QuotationFormPage() {
     return taxOptions.filter((option) => option.toLowerCase().includes(normalized))
   }, [tax2Search])
 
+  const filteredProducts = useMemo(() => {
+    const normalized = productSearch.trim().toLowerCase()
+    if (!normalized) return inventoryProducts
+    return inventoryProducts.filter((product) =>
+      [product.productName, product.description || '', product.hsnSac || '']
+        .some((value) => value.toLowerCase().includes(normalized))
+    )
+  }, [inventoryProducts, productSearch])
+
+  const filteredProducts2 = useMemo(() => {
+    const normalized = product2Search.trim().toLowerCase()
+    if (!normalized) return inventoryProducts
+    return inventoryProducts.filter((product) =>
+      [product.productName, product.description || '', product.hsnSac || '']
+        .some((value) => value.toLowerCase().includes(normalized))
+    )
+  }, [inventoryProducts, product2Search])
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (taxDropdownRef.current && !taxDropdownRef.current.contains(event.target as Node)) {
@@ -116,6 +187,14 @@ export default function QuotationFormPage() {
       }
       if (tax2DropdownRef.current && !tax2DropdownRef.current.contains(event.target as Node)) {
         setTax2DropdownOpen(false)
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
+        setProductDropdownOpen(false)
+        setProductSearch('')
+      }
+      if (product2DropdownRef.current && !product2DropdownRef.current.contains(event.target as Node)) {
+        setProduct2DropdownOpen(false)
+        setProduct2Search('')
       }
     }
 
@@ -136,6 +215,9 @@ export default function QuotationFormPage() {
     // Product 1 Section
     if (!form.productName.trim()) {
       nextErrors.productName = 'Product is required'
+    }
+    if (!selectedProductId) {
+      nextErrors.productName = 'Select a product from Inventory'
     }
 
     if (!form.productDescription.trim()) {
@@ -166,6 +248,9 @@ export default function QuotationFormPage() {
     if (form.orOption === 'Yes') {
       if (!form.product2Name.trim()) {
         nextErrors.product2Name = 'Product is required'
+      }
+      if (!selectedProduct2Id) {
+        nextErrors.product2Name = 'Select a product from Inventory'
       }
 
       if (!form.product2Description.trim()) {
@@ -212,7 +297,7 @@ export default function QuotationFormPage() {
     }
 
     return nextErrors
-  }, [form])
+  }, [form, selectedProductId, selectedProduct2Id])
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, type, value, checked } = event.target as HTMLInputElement
@@ -233,6 +318,40 @@ export default function QuotationFormPage() {
       email: contact?.email || customer?.email || '',
       mobile: contact?.phone || customer?.phone || '',
     }))
+  }
+
+  const handleProductSelect = (product: InventoryProduct, productNumber: 1 | 2) => {
+    const selectedId = product.id || product._id || product.productName
+    const defaultPrice = Number(product.defaultPrice)
+    const unitPrice = Number(product.price)
+    const productValues = {
+      productName: product.productName,
+      productDescription: product.description || '',
+      hsnSac: product.hsnSac || '',
+      expectedVendorPrice: Number.isFinite(defaultPrice) && defaultPrice > 0 ? String(defaultPrice) : '',
+      unitPrice: Number.isFinite(unitPrice) && unitPrice > 0 ? String(unitPrice) : '',
+      tax: product.gst || '',
+    }
+
+    if (productNumber === 1) {
+      setSelectedProductId(selectedId)
+      setProductSearch('')
+      setProductDropdownOpen(false)
+      setForm((prev) => ({ ...prev, ...productValues }))
+    } else {
+      setSelectedProduct2Id(selectedId)
+      setProduct2Search('')
+      setProduct2DropdownOpen(false)
+      setForm((prev) => ({
+        ...prev,
+        product2Name: productValues.productName,
+        product2Description: productValues.productDescription,
+        product2HsnSac: productValues.hsnSac,
+        product2ExpectedVendorPrice: productValues.expectedVendorPrice,
+        product2UnitPrice: productValues.unitPrice,
+        product2Tax: productValues.tax,
+      }))
+    }
   }
 
   const handleTaxSelect = (option: string) => {
@@ -297,7 +416,6 @@ export default function QuotationFormPage() {
         leadStatus: 'Proposal Sent',
         products,
         quotationDetails: {
-          subject: form.subject || '',
           serviceName: form.serviceName || '',
           serviceCost: form.serviceCost || '',
           serviceTax: form.serviceTax || '',
@@ -344,6 +462,10 @@ export default function QuotationFormPage() {
     setForm(initialForm)
     setErrors({})
     setToast(null)
+    setSelectedProductId('')
+    setSelectedProduct2Id('')
+    setProductSearch('')
+    setProduct2Search('')
   }
 
   return (
@@ -362,9 +484,9 @@ export default function QuotationFormPage() {
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
         <div className="space-y-0">
           {/* Customer Details Row 1 */}
-          <div className="grid gap-4 md:grid-cols-3 pb-4 mb-4 border-b border-[#D1D5DB]">
+          <div className="grid gap-4 md:grid-cols-2 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Customer Name *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Customer Name <span className="required-asterisk">*</span></span>
               <select
                 name="customerId"
                 value={form.customerId}
@@ -392,36 +514,59 @@ export default function QuotationFormPage() {
                 placeholder="Contact person"
               />
             </label>
-
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Subject</span>
-              <input
-                name="subject"
-                value={form.subject}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-                placeholder="Quotation subject"
-              />
-            </label>
           </div>
 
           {/* Product Row 1 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Product *</span>
+            <div ref={productDropdownRef} className="relative space-y-1">
+              <span className="text-xs font-semibold uppercase text-gray-500">Product <span className="required-asterisk">*</span></span>
               <input
-                name="productName"
-                value={form.productName}
-                onChange={handleChange}
+                role="combobox"
+                aria-expanded={productDropdownOpen}
+                aria-autocomplete="list"
+                autoComplete="off"
+                value={productSearch || form.productName}
+                onFocus={(event) => {
+                  setProductSearch('')
+                  setProductDropdownOpen(true)
+                  event.currentTarget.select()
+                }}
+                onChange={(event) => {
+                  setProductSearch(event.target.value)
+                  setSelectedProductId('')
+                  setForm((prev) => ({ ...prev, productName: '', productDescription: '', hsnSac: '', expectedVendorPrice: '', unitPrice: '', tax: '' }))
+                  setProductDropdownOpen(true)
+                }}
                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.productName ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                placeholder="Product name"
+                placeholder={isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
               />
+              {productDropdownOpen && (
+                <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                  {isLoadingProducts ? (
+                    <div className="px-3 py-2 text-sm text-gray-500">Loading Inventory products...</div>
+                  ) : filteredProducts.length ? filteredProducts.map((product) => (
+                    <button
+                      key={product.id || product._id || product.productName}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleProductSelect(product, 1)}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"
+                    >
+                      {product.productName}
+                    </button>
+                  )) : (
+                    <div className="px-3 py-2 text-sm text-gray-500">
+                      {productLoadError || (inventoryProducts.length ? 'No matching products found.' : 'No active Inventory products found.')}
+                    </div>
+                  )}
+                </div>
+              )}
               {errors.productName && <p className="text-xs text-red-600">{errors.productName}</p>}
-            </label>
+              {productLoadError ? <p className="text-xs text-red-600">{productLoadError}</p> : null}
+            </div>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Description *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Description <span className="required-asterisk">*</span></span>
               <textarea
                 name="productDescription"
                 value={form.productDescription}
@@ -445,7 +590,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Quantity *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Quantity <span className="required-asterisk">*</span></span>
               <input
                 name="quantity"
                 value={form.quantity}
@@ -462,7 +607,7 @@ export default function QuotationFormPage() {
           {/* Product Row 2 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4 border-b border-[#D1D5DB]">
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price <span className="required-asterisk">*</span></span>
               <input
                 name="expectedVendorPrice"
                 value={form.expectedVendorPrice}
@@ -477,7 +622,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Unit Price *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Unit Price <span className="required-asterisk">*</span></span>
               <input
                 name="unitPrice"
                 value={form.unitPrice}
@@ -492,7 +637,7 @@ export default function QuotationFormPage() {
             </label>
 
             <div ref={taxDropdownRef} className="relative space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Tax *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Tax <span className="required-asterisk">*</span></span>
               <input
                 readOnly
                 value={form.tax}
@@ -552,20 +697,55 @@ export default function QuotationFormPage() {
           {form.orOption === 'Yes' && (
             <>
               <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Product 2 *</span>
+                <div ref={product2DropdownRef} className="relative space-y-1">
+                  <span className="text-xs font-semibold uppercase text-gray-500">Product 2 <span className="required-asterisk">*</span></span>
                   <input
-                    name="product2Name"
-                    value={form.product2Name}
-                    onChange={handleChange}
+                    role="combobox"
+                    aria-expanded={product2DropdownOpen}
+                    aria-autocomplete="list"
+                    autoComplete="off"
+                    value={product2Search || form.product2Name}
+                    onFocus={(event) => {
+                      setProduct2Search('')
+                      setProduct2DropdownOpen(true)
+                      event.currentTarget.select()
+                    }}
+                    onChange={(event) => {
+                      setProduct2Search(event.target.value)
+                      setSelectedProduct2Id('')
+                      setForm((prev) => ({ ...prev, product2Name: '', product2Description: '', product2HsnSac: '', product2ExpectedVendorPrice: '', product2UnitPrice: '', product2Tax: '' }))
+                      setProduct2DropdownOpen(true)
+                    }}
                     className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.product2Name ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                    placeholder="Product name"
+                    placeholder={isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
                   />
+                  {product2DropdownOpen && (
+                    <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                      {isLoadingProducts ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">Loading Inventory products...</div>
+                      ) : filteredProducts2.length ? filteredProducts2.map((product) => (
+                        <button
+                          key={product.id || product._id || product.productName}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => handleProductSelect(product, 2)}
+                          className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"
+                        >
+                          {product.productName}
+                        </button>
+                      )) : (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          {productLoadError || (inventoryProducts.length ? 'No matching products found.' : 'No active Inventory products found.')}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {errors.product2Name && <p className="text-xs text-red-600">{errors.product2Name}</p>}
-                </label>
+                  {productLoadError ? <p className="text-xs text-red-600">{productLoadError}</p> : null}
+                </div>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Description 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Description 2 <span className="required-asterisk">*</span></span>
                   <textarea
                     name="product2Description"
                     value={form.product2Description}
@@ -589,7 +769,7 @@ export default function QuotationFormPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Quantity 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Quantity 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2Quantity"
                     value={form.product2Quantity}
@@ -605,7 +785,7 @@ export default function QuotationFormPage() {
 
               <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4 border-b border-[#D1D5DB]">
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Expected Vendor Price 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2ExpectedVendorPrice"
                     value={form.product2ExpectedVendorPrice}
@@ -620,7 +800,7 @@ export default function QuotationFormPage() {
                 </label>
 
                 <label className="space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Unit Price 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Unit Price 2 <span className="required-asterisk">*</span></span>
                   <input
                     name="product2UnitPrice"
                     value={form.product2UnitPrice}
@@ -635,7 +815,7 @@ export default function QuotationFormPage() {
                 </label>
 
                 <div ref={tax2DropdownRef} className="relative space-y-1">
-                  <span className="text-xs font-semibold uppercase text-gray-500">Tax 2 *</span>
+                  <span className="text-xs font-semibold uppercase text-gray-500">Tax 2 <span className="required-asterisk">*</span></span>
                   <input
                     readOnly
                     value={form.product2Tax}
@@ -812,7 +992,7 @@ export default function QuotationFormPage() {
           {/* Commercial Section Row 4 */}
           <div className="grid gap-4 md:grid-cols-4 pb-4 mb-4">
             <label className="space-y-1">
-              {/* <span className="text-xs font-semibold uppercase text-gray-500">Currency *</span>
+              {/* <span className="text-xs font-semibold uppercase text-gray-500">Currency <span className="required-asterisk">*</span></span>
               <input
                 name="currency"
                 value={form.currency}
@@ -820,9 +1000,7 @@ export default function QuotationFormPage() {
                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.currency ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
                 placeholder="Currency"
               /> */}
-              <span className="text-xs font-semibold uppercase text-gray-500">
-  Currency *
-</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Currency <span className="required-asterisk">*</span></span>
 
 <select
   name="currency"
@@ -844,7 +1022,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Validity (Days) *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Validity (Days) <span className="required-asterisk">*</span></span>
               <input
                 name="validity"
                 value={form.validity}
@@ -858,7 +1036,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Delivery *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Delivery <span className="required-asterisk">*</span></span>
               <input
                 name="delivery"
                 value={form.delivery}
@@ -870,7 +1048,7 @@ export default function QuotationFormPage() {
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold uppercase text-gray-500">Payment *</span>
+              <span className="text-xs font-semibold uppercase text-gray-500">Payment <span className="required-asterisk">*</span></span>
               {/* <input
                 name="payment"
                 value={form.payment}

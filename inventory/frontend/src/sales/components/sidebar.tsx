@@ -15,6 +15,7 @@ import {
   Truck,
   FileText,
   Building2,
+  UserCheck,
 } from 'lucide-react'
 import { hasPermission } from '@/sales/lib/permissions'
 
@@ -30,6 +31,7 @@ export function Sidebar() {
     { href: '/sales/activities', label: 'Activity', icon: Activity, permission: 'activities' },
     { href: '/sales/calendar', label: 'Calendar', icon: Package2, permission: 'calendar' },
     { href: '/sales/customers', label: 'Customer', icon: Users, permission: 'customers' },
+    { href: '/sales/customer-mapping', label: 'Customer Mapping', icon: UserCheck, permission: 'customerMapping' },
     { href: '/sales/quotations', label: 'Quotation', icon: FileText, permission: 'quotations' },
     { href: '/sales/suppliers', label: 'Supplier', icon: Package2, permission: 'suppliers' },
     { href: '/sales/funnels', label: 'Funnel', icon: Users, permission: 'funnels' },
@@ -54,7 +56,7 @@ export function Sidebar() {
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Navigation */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:#CEC9BD_transparent] [scrollbar-gutter:stable]">
         <div className="px-2 py-6">
           <div className={`mb-4 px-3 text-xs font-semibold uppercase tracking-wider text-[#6B6657] transition-all duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
             SALES

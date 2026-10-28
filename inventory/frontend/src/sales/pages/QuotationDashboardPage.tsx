@@ -15,6 +15,8 @@ import {
 import { Toast } from '@/sales/components/toast'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { toExcelDate } from '@/sales/lib/excelFormat'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -145,29 +147,39 @@ export default function QuotationDashboardPage() {
     window.open(pdfRoute.toString(), '_blank')
   }
 
-  const downloadReport = () => {
-    const headers = ['Quotation ID', 'Created By', 'Customer Name', 'Contact Person', 'Products', 'Grand Total', 'Created Date', 'Expected Closure', 'Delivery']
-    const rows = filteredQuotations.map((quote) => [
-      quote.quotationId || quote.leadId,
-      quote.createdBy || 'System',
-      quote.companyName || '-',
-      quote.contactPerson || '-',
-      getProductNames(quote.products),
-      calculateGrandTotal(quote.products),
-      formatDate(quote.createdDate),
-      formatDate(quote.quotationDetails?.expectedClosure),
-      quote.quotationDetails?.delivery || '-',
+  const downloadReport = async () => {
+    const headers = ['SL No.', 'Quotation ID', 'Created By', 'Customer Name', 'Contact Person', 'Products', 'Grand Total', 'Created Date', 'Expected Closure', 'Delivery']
+    const rows = filteredQuotations.map((quote, index) => [
+      index + 1,
+      String(quote.quotationId || quote.leadId || ''),
+      quote.createdBy || '',
+      quote.companyName || '',
+      quote.contactPerson || '',
+      quote.products?.map((product) => product.productName || '').filter(Boolean).join(', ') || '',
+      Number(quote.products?.reduce((total, product) => total + (Number(product.quantity) || 0) * (Number(product.unitPrice) || 0), 0)) || 0,
+      toExcelDate(quote.createdDate),
+      toExcelDate(quote.quotationDetails?.expectedClosure),
+      quote.quotationDetails?.delivery || '',
     ])
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = 'quotations.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+
+    try {
+      await downloadExcelReport({
+        fileName: 'quotations-report.xlsx',
+        sheetName: 'Quotations',
+        headers,
+        rows,
+        textColumns: [1, 7, 8],
+        centerColumns: [0, 1, 7, 8],
+        leftColumns: [2, 3, 4, 5, 9],
+        rightColumns: [6],
+        currencyColumns: [6],
+        wrapColumns: [3, 4, 5, 9],
+        wideColumns: [3, 5, 9],
+        columnWidths: [8, 18, 24, 32, 24, 40, 18, 14, 14, 24],
+      })
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Unable to download quotation report')
+    }
   }
 
   return (

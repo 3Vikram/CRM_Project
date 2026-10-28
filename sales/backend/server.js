@@ -15,6 +15,7 @@ if (!MONGO_URI) {
 }
 
 const customerRoutes = require('./routes/customerRoutes');
+const customerMappingRoutes = require('./routes/customerMappingRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const supplierRoutes = require('./routes/supplierRoutes');
 const mailCampaignRoutes = require('./routes/mailCampaignRoutes');
@@ -30,9 +31,11 @@ const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
-const { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAdmin } = require('./middleware/authMiddleware');
+const { processScheduledRenewalReminders } = require('./services/renewalReminderService');
+const { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireFullAccess } = require('./middleware/authMiddleware');
 const { getInventorySupplierOptions } = require('./controllers/supplierController');
 const { getInventoryCustomerOptions } = require('./controllers/customerController');
+const { getInventoryProductOptions } = require('./controllers/inventoryProductController');
 
 const app = express();
 
@@ -42,7 +45,17 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/api/customers/inventory-options', inventoryAuthMiddleware, getInventoryCustomerOptions);
+app.get(
+  '/api/quotations/inventory-products',
+  authMiddleware,
+  requireAnyPermission([
+    { moduleName: 'quotations', action: 'view' },
+    { moduleName: 'quotations', action: 'create' },
+  ]),
+  getInventoryProductOptions
+);
 app.use('/api/customers', authMiddleware, requirePermission('customers'), customerRoutes);
+app.use('/api/customer-mapping', authMiddleware, requireFullAccess, customerMappingRoutes);
 app.use('/api/contacts', authMiddleware, requirePermission('contacts'), contactRoutes);
 app.get('/api/suppliers/inventory-options', inventoryAuthMiddleware, getInventorySupplierOptions);
 console.info('Registered GET /api/suppliers/inventory-options with Inventory authentication.');
@@ -55,7 +68,7 @@ app.use('/api/company-profiles', authMiddleware, requirePermission('companyProfi
 app.get('/api/opf/inventory-options', inventoryAuthMiddleware, getInventoryOPFOptions);
 app.get('/api/opf/inventory-options/:id', inventoryAuthMiddleware, getInventoryOPFOptions);
 app.use('/api/opf', authMiddleware, requirePermission('opf'), opfRoutes);
-app.use('/api/employees', authMiddleware, requireAdmin, employeeRoutes);
+app.use('/api/employees', authMiddleware, employeeRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/reports', authMiddleware, requirePermission('reports'), reportRoutes);
 app.use('/api/locations', authMiddleware, locationRoutes);
@@ -142,6 +155,12 @@ const runScheduledCampaigns = (publicApiUrl) => {
   });
 };
 
+const runScheduledRenewalReminders = () => {
+  void processScheduledRenewalReminders().catch((error) => {
+    console.error('[Sales] Scheduled renewal reminder processing failed:', sanitizeMongoError(error));
+  });
+};
+
 const shutdown = async (reason, exitCode = 0) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -190,7 +209,11 @@ const start = async () => {
     const serverUrl = `http://0.0.0.0:${PORT}`;
     const publicApiUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
     runScheduledCampaigns(publicApiUrl);
-    campaignProcessingInterval = setInterval(() => runScheduledCampaigns(publicApiUrl), 60 * 1000);
+    runScheduledRenewalReminders();
+    campaignProcessingInterval = setInterval(() => {
+      runScheduledCampaigns(publicApiUrl);
+      runScheduledRenewalReminders();
+    }, 60 * 1000);
   });
   httpServer.on('error', (error) => {
     console.error('[Sales] HTTP server error:', error.message);

@@ -352,17 +352,17 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Full Name *</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Full Name <span className="required-asterisk">*</span></span>
               <input value={form.employeeName || ''} onChange={(event) => handleChange('employeeName', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Email *</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Email <span className="required-asterisk">*</span></span>
               <input type="email" value={form.email || ''} onChange={(event) => handleChange('email', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">{isEditing ? 'New Password (optional)' : 'Password *'}</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">{isEditing ? 'New Password (optional)' : <>Password <span className="required-asterisk">*</span></>}</span>
               <input type="password" value={form.password || ''} onChange={(event) => handleChange('password', event.target.value)} className="w-full rounded border border-[#D1D5DB] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200" />
             </label>
 
@@ -394,7 +394,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Employee Type *</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Employee Type <span className="required-asterisk">*</span></span>
               <SearchableSelect
                 value={form.employeeType || ''}
                 onChange={(value) => handleChange('employeeType', value === 'Select' ? '' : value)}
@@ -404,7 +404,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Reporting To *</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Reporting To <span className="required-asterisk">*</span></span>
               <SearchableSelect
                 value={form.reportingTo || ''}
                 onChange={(value) => handleChange('reportingTo', value === 'Select' ? '' : value)}
@@ -424,7 +424,7 @@ export default function EmployeeFormPage() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Branch Code *</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">Branch Code <span className="required-asterisk">*</span></span>
               <SearchableSelect
                 value={branchLabelValue}
                 onChange={(value) => {

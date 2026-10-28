@@ -83,6 +83,11 @@
   --sidebar-ring: #CEC9BD;
 }
 
+.required-asterisk,
+.MuiFormLabel-asterisk {
+  color: #dc2626 !important;
+}
+
 .dark {
   color-scheme: dark;
   --background: oklch(0.145 0 0);

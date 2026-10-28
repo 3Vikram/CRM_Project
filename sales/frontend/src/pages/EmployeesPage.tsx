@@ -179,20 +179,20 @@ export default function EmployeesPage() {
             <table className="min-w-[1500px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="bg-[#F8FAFC] text-slate-700">
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Official Employee Id</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Created By</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Full Name</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Email Id</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Contact No</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Designation</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Department</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Date of Join</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Date of Birth</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Reporting To</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Branch Code</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>CRUD Option</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Modules Option</th>
-                  <th className={`${tableCellClass} font-semibold uppercase text-[11px] tracking-wide`}>Action</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Official Employee Id</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Created By</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Full Name</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Email Id</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Contact No</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Designation</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Department</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Date of Join</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Date of Birth</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Reporting To</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Branch Code</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>CRUD Option</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Modules Option</th>
+                  <th className={`${tableCellClass} font-semibold uppercase text-[13px] tracking-wide`}>Action</th>
                 </tr>
               </thead>
               <tbody>

@@ -69,6 +69,7 @@ const LeadSchema = new mongoose.Schema(
     calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
     assignedTo: { type: String, trim: true, default: 'Unassigned' },
     createdBy: { type: String, trim: true, default: 'System' },
+    createdById: { type: String, trim: true, default: '', index: true },
     createdDate: { type: Date, default: Date.now },
     followUpDate: { type: String, trim: true, default: '' },
     followUpTime: { type: String, trim: true, default: '' },

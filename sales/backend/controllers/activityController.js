@@ -1,5 +1,6 @@
 const Activity = require('../models/Activity');
 const Lead = require('../models/Lead');
+const { ownerScope, creatorFields } = require('../utils/accessScope');
 
 const buildTimeline = (title, description, type = 'info') => ({
   title,
@@ -154,6 +155,8 @@ exports.getActivities = async (req, res) => {
         { mobileNo: regex },
       ];
     }
+    const scope = ownerScope(req);
+    const finalQuery = Object.keys(scope).length ? { $and: [query, scope] } : query;
 
     const pageNum = Math.max(safeParseInt(page, 1), 1);
     const limitNum = Math.min(Math.max(safeParseInt(limit, 10), 1), 100);
@@ -162,8 +165,8 @@ exports.getActivities = async (req, res) => {
     const sortField = sortBy || 'createdAt';
 
     const [activities, total] = await Promise.all([
-      Activity.find(query).sort({ [sortField]: sortDirection }).skip(skip).limit(limitNum).lean(),
-      Activity.countDocuments(query),
+      Activity.find(finalQuery).sort({ [sortField]: sortDirection }).skip(skip).limit(limitNum).lean(),
+      Activity.countDocuments(finalQuery),
     ]);
 
     res.status(200).json({
@@ -183,7 +186,7 @@ exports.getActivities = async (req, res) => {
 
 exports.getActivityById = async (req, res) => {
   try {
-    const activity = await Activity.findOne({ _id: req.params.id, deletedAt: null }).lean();
+    const activity = await Activity.findOne({ $and: [{ _id: req.params.id, deletedAt: null }, ownerScope(req)] }).lean();
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
     res.status(200).json({ success: true, data: normalizeActivity(activity) });
   } catch (error) {
@@ -221,9 +224,10 @@ exports.createActivity = async (req, res) => {
       
       reminder: req.body.reminder || '',
       status: req.body.status || 'Open',
-      createdBy: req.body.createdBy || 'Current User',
+      createdBy: creatorFields(req).createdBy,
       lastModifiedBy: req.body.lastModifiedBy || 'Current User',
     };
+    Object.assign(payload, creatorFields(req));
 
     if (!payload.customerName || !payload.activityType || !payload.activityDate || !payload.product) {
       return res.status(400).json({ success: false, message: 'Customer / Partner Name, Activity Type, Activity Date, and Product are required.' });
@@ -270,10 +274,13 @@ exports.createActivity = async (req, res) => {
 
 exports.updateActivity = async (req, res) => {
   try {
-    const activity = await Activity.findOne({ _id: req.params.id, deletedAt: null });
+    const activity = await Activity.findOne({ $and: [{ _id: req.params.id, deletedAt: null }, ownerScope(req)] });
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
 
-    Object.assign(activity, req.body);
+    const payload = { ...req.body };
+    delete payload.createdBy;
+    delete payload.createdById;
+    Object.assign(activity, payload);
     activity.lastModifiedBy = req.body.lastModifiedBy || 'Current User';
     await activity.save();
 
@@ -285,7 +292,7 @@ exports.updateActivity = async (req, res) => {
 
 exports.deleteActivity = async (req, res) => {
   try {
-    const activity = await Activity.findOne({ _id: req.params.id, deletedAt: null });
+    const activity = await Activity.findOne({ $and: [{ _id: req.params.id, deletedAt: null }, ownerScope(req)] });
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
     activity.deletedAt = new Date();
     await activity.save();

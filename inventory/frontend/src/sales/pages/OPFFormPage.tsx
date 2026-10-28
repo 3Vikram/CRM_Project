@@ -167,7 +167,7 @@ export default function OPFFormPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-700">Quotation Number *</span>
+              <span className="text-sm font-medium text-slate-700">Quotation Number <span className="required-asterisk">*</span></span>
               <input
                 type="text"
                 name="quotationNumber"
@@ -180,7 +180,7 @@ export default function OPFFormPage() {
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-700">Customer Name *</span>
+              <span className="text-sm font-medium text-slate-700">Customer Name <span className="required-asterisk">*</span></span>
               <select
                 value={form.customerId}
                 onChange={handleCustomerChange}
@@ -209,7 +209,7 @@ export default function OPFFormPage() {
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-700">Product *</span>
+              <span className="text-sm font-medium text-slate-700">Product <span className="required-asterisk">*</span></span>
               <input
                 type="text"
                 name="product"
@@ -248,7 +248,7 @@ export default function OPFFormPage() {
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-slate-700">Renewal Date *</span>
+              <span className="text-sm font-medium text-slate-700">Renewal Date <span className="required-asterisk">*</span></span>
               <input
                 type="date"
                 name="renewalDate"

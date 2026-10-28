@@ -30,6 +30,7 @@ import SalesLoginPage from '@/sales/pages/SalesLoginPage'
 import SalesProfilePage from '@/sales/pages/SalesProfilePage'
 import DashboardPage from '@/sales/pages/DashboardPage'
 import CustomersPage from '@/sales/pages/CustomersPage'
+import CustomerMappingPage from '@/sales/pages/CustomerMappingPage'
 import CustomerFormPage from '@/sales/pages/CustomerFormPage'
 import ContactsPage from '@/sales/pages/ContactsPage'
 import ContactFormPage from '@/sales/pages/ContactFormPage'
@@ -79,29 +80,44 @@ axios.interceptors.request.use((config) => {
   return config
 })
 
-const getSalesRoutePermission = (pathname: string) => {
+const getSalesRoutePermission = (pathname: string): { moduleName: string; action: 'view' | 'create' | 'edit' } | null => {
   if (pathname.startsWith('/sales/profile')) return null
-  if (pathname.startsWith('/sales/dashboard')) return 'dashboard'
-  if (pathname.startsWith('/sales/customers') || pathname === '/customers') return 'customers'
-  if (pathname.startsWith('/sales/contacts')) return 'contacts'
-  if (pathname.startsWith('/sales/suppliers')) return 'suppliers'
-  if (pathname.startsWith('/sales/leads')) return 'leads'
-  if (pathname.startsWith('/sales/activities')) return 'activities'
-  if (pathname.startsWith('/sales/calendar')) return 'calendar'
-  if (pathname.startsWith('/sales/mail-campaign')) return 'mailCampaign'
-  if (pathname.startsWith('/sales/quotations')) return 'quotations'
-  if (pathname.startsWith('/sales/opf')) return 'opf'
-  if (pathname.startsWith('/sales/funnels')) return 'funnels'
-  if (pathname.startsWith('/sales/renewals')) return 'renewals'
-  if (pathname.startsWith('/sales/reports') || pathname === '/reports' || pathname.startsWith('/reports/')) return 'reports'
-  if (pathname.startsWith('/sales/data-admin')) return 'dataAdmin'
-  if (pathname.startsWith('/sales/employees')) return 'employees'
-  if (pathname.startsWith('/sales/company-profiles')) return 'companyProfiles'
-  if (pathname.startsWith('/sales/inventory')) return 'inventory'
-  if (pathname.startsWith('/sales/purchase-orders')) return 'purchaseOrders'
-  if (pathname.startsWith('/sales/dc-tracking')) return 'dcTracking'
-  if (pathname.startsWith('/sales/bill-sale')) return 'billSale'
-  return null
+  const moduleRoutes: Array<[string, string]> = [
+    ['/sales/dashboard', 'dashboard'],
+    ['/sales/customers', 'customers'],
+    ['/sales/customer-mapping', 'customerMapping'],
+    ['/customers', 'customers'],
+    ['/sales/contacts', 'contacts'],
+    ['/sales/suppliers', 'suppliers'],
+    ['/sales/leads', 'leads'],
+    ['/sales/activities', 'activities'],
+    ['/sales/calendar', 'calendar'],
+    ['/sales/mail-campaign', 'mailCampaign'],
+    ['/sales/quotations', 'quotations'],
+    ['/sales/opf', 'opf'],
+    ['/sales/funnels', 'funnels'],
+    ['/sales/renewals', 'renewals'],
+    ['/sales/reports', 'reports'],
+    ['/reports', 'reports'],
+    ['/sales/data-admin', 'dataAdmin'],
+    ['/sales/employees', 'employees'],
+    ['/sales/company-profiles', 'companyProfiles'],
+    ['/sales/inventory', 'inventory'],
+    ['/sales/purchase-orders', 'purchaseOrders'],
+    ['/sales/dc-tracking', 'dcTracking'],
+    ['/sales/bill-sale', 'billSale'],
+  ]
+  const matchedRoute = moduleRoutes.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+  if (!matchedRoute) return null
+
+  const [, moduleName] = matchedRoute
+  const action = /\/(new|create)(\/|$)/.test(pathname)
+    ? 'create'
+    : /\/(edit|update)(\/|$)/.test(pathname)
+      ? 'edit'
+      : 'view'
+
+  return { moduleName, action }
 }
 
 function SalesAccessDeniedPage() {
@@ -117,7 +133,7 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
   }
 
   const requiredPermission = getSalesRoutePermission(location.pathname)
-  const canView = !requiredPermission || hasPermission(requiredPermission)
+  const canView = !requiredPermission || hasPermission(requiredPermission.moduleName, requiredPermission.action)
 
   return (
     <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
@@ -134,9 +150,11 @@ function SalesRoutes() {
   const page = (element: React.ReactNode): React.ReactNode => <SalesLayout>{element}</SalesLayout>
   const routes: Array<[string, React.ReactNode]> = [
     ['/sales', <SalesLoginPage />],
+    ['/sales/access-denied', page(<SalesAccessDeniedPage />)],
     ['/sales/profile', page(<SalesProfilePage />)],
     ['/sales/dashboard', typeof window !== 'undefined' && Boolean(getStoredAuth()?.token) ? page(<DashboardPage />) : <Navigate to="/sales" replace />],
     ['/sales/customers', page(<CustomersPage />)],
+    ['/sales/customer-mapping', page(<CustomerMappingPage />)],
     ['/sales/contacts', page(<ContactsPage />)],
     ['/sales/contacts/new', page(<ContactFormPage />)],
     ['/sales/contacts/edit/:id', page(<ContactFormPage />)],
@@ -172,6 +190,7 @@ function SalesRoutes() {
     ['/sales/activities/edit/:id', page(<ActivityFormPage />)],
     ['/sales/funnels', page(<FunnelPage />)],
     ['/sales/funnels/new', page(<FunnelFormPage />)],
+    ['/sales/funnels/edit/:id', page(<FunnelFormPage />)],
     ['/sales/company-profiles', page(<CompanyProfilesPage />)],
     ['/sales/company-profiles/new', page(<CompanyProfileFormPage />)],
     ['/sales/company-profiles/edit/:id', page(<CompanyProfileFormPage />)],

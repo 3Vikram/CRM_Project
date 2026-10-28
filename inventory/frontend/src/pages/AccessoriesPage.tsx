@@ -807,7 +807,9 @@ export default function AccessoriesPage() {
             <TextField
               fullWidth
               required={outwardForm.status === 'Issued'}
-              label={outwardForm.status === 'Issued' ? 'Serial Number *' : 'Serial Number'}
+              label={outwardForm.status === 'Issued'
+                ? <>Serial Number <span className="required-asterisk">*</span></>
+                : 'Serial Number'}
               value={outwardForm.serialNumber}
               onChange={(event) => setOutwardForm((current) => ({ ...current, serialNumber: event.target.value }))}
             />
@@ -885,7 +887,7 @@ export default function AccessoriesPage() {
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
-                  label="Quantity *"
+                  label={<>Quantity <span className="required-asterisk">*</span></>}
                   type="number"
                   value={form.quantity}
                   slotProps={{ htmlInput: { min: 1 } }}

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getAuthHeaders } from './apiAuth';
-import { getCachedResponse } from './apiCache';
+import { clearApiCache, getCachedResponse } from './apiCache';
 
 const API_BASE_URL = '/api';
 
@@ -67,6 +67,16 @@ export interface LeadRecord {
     payment?: string;
     expectedClosure?: string;
     note?: string;
+    value?: string | number;
+    revenue?: string | number;
+    marginPercent?: string | number;
+    sbu?: string;
+    oem?: string;
+    stage?: string;
+    probability?: string;
+    demo?: string;
+    poc?: string;
+    tagResource?: string;
     enterpriseQuot?: string;
     addressRequired?: boolean;
     signatureRequired?: boolean;
@@ -123,6 +133,7 @@ export async function createLead(payload: Partial<LeadRecord>) {
   const response = await axios.post(`${API_BASE_URL}/leads`, payload, {
     headers: getAuthHeaders(),
   });
+  clearApiCache();
   return response.data;
 }
 
@@ -130,6 +141,7 @@ export async function updateLead(id: string, payload: Partial<LeadRecord>) {
   const response = await axios.put(`${API_BASE_URL}/leads/${id}`, payload, {
     headers: getAuthHeaders(),
   });
+  clearApiCache();
   return response.data;
 }
 
@@ -138,6 +150,7 @@ export async function deleteLead(id: string) {
     const response = await axios.delete(`${API_BASE_URL}/leads/${encodeURIComponent(id)}`, {
       headers: getAuthHeaders(),
     });
+    clearApiCache();
     return response.data;
   } catch (error) {
     console.error('Delete lead error:', axios.isAxiosError(error) ? error.response?.data || error.message : error);

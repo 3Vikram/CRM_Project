@@ -38,7 +38,7 @@ const inventoryAuthMiddleware = (req, res, next) => {
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
   const [payload, signature, extra] = token.split('.');
   if (!payload || !signature || extra) {
-    console.warn(`Inventory supplier authorization rejected for ${request}: missing or malformed Bearer token.`);
+    console.warn(`Inventory supplier authorization rejected for ${request}: missing or malformed token.`);
     return res.status(401).json({ success: false, message: 'Inventory sign-in required.' });
   }
 
@@ -95,6 +95,12 @@ const requireAdmin = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Administrator access is required.' });
 };
 
+const requireFullAccess = (req, res, next) => {
+  const { hasFullAccess } = require('../utils/accessScope');
+  if (hasFullAccess(req.user)) return next();
+  return res.status(403).json({ success: false, message: 'Administrator or manager access is required.' });
+};
+
 const requireLeadRecordPermission = (action, resource = 'lead') => async (req, res, next) => {
   if (req.user?.role === 'admin') return next();
 
@@ -136,4 +142,4 @@ const requireLeadRecordPermission = (action, resource = 'lead') => async (req, r
   }
 };
 
-module.exports = { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireAdmin, requireLeadRecordPermission, getPermissionValue, JWT_SECRET };
+module.exports = { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireAdmin, requireFullAccess, requireLeadRecordPermission, getPermissionValue, JWT_SECRET };

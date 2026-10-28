@@ -10,12 +10,25 @@ interface LeadDetailsDrawerProps {
 }
 
 const fields = [
-  ['Company', 'companyName'],
-  ['Contact', 'contactPerson'],
+  ['Company Name', 'companyName'],
+  ['Contact Person', 'contactPerson'],
+  ['Designation', 'designation'],
   ['Email', 'email'],
-  ['Source', 'sourceOfLead'],
+  ['Mobile Number', 'mobile'],
   ['Assigned To', 'assignedTo'],
+  ['Follow-up Date', 'followUpDate'],
+  ['Source Of Lead', 'sourceOfLead'],
+  ['Customer Requirements', 'customerRequirements'],
+  ['Remarks', 'remarks'],
 ] as const;
+
+const formatFollowUpDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+};
 
 export function LeadDetailsDrawer({ lead, isOpen, onClose }: LeadDetailsDrawerProps) {
   const [visible, setVisible] = useState(false);
@@ -56,11 +69,12 @@ export function LeadDetailsDrawer({ lead, isOpen, onClose }: LeadDetailsDrawerPr
             const rawValue = lead?.[key];
             const value = rawValue === undefined || rawValue === null || rawValue === ''
               ? key === 'assignedTo' ? 'Unassigned' : '-'
+              : key === 'followUpDate' ? formatFollowUpDate(String(rawValue))
               : String(rawValue);
             return (
               <div key={key} className="flex items-start justify-between gap-4 border-b border-[#EFECE5] pb-3 last:border-b-0">
                 <span className="text-sm font-semibold text-gray-500">{label}</span>
-                <span className="max-w-[65%] break-words text-right text-sm text-gray-900">{value}</span>
+                <span className="max-w-[65%] break-words whitespace-pre-wrap text-right text-sm text-gray-900">{value}</span>
               </div>
             );
           })}
