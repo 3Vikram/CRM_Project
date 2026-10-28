@@ -99,6 +99,11 @@ type ProductCatalogItem = {
 }
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+const openAssetDocument = (documentUrl: string) => {
+  const baseUrl = API_URL || window.location.origin
+  const documentUrlToOpen = new URL(documentUrl, `${baseUrl.replace(/\/+$/, '')}/`)
+  window.open(documentUrlToOpen.toString(), '_blank', 'noopener,noreferrer')
+}
 
 const dateFieldSx = {
   '& .MuiInputBase-root': {
@@ -664,7 +669,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
             <Button
               size="small"
               variant="outlined"
-              onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
+              onClick={() => openAssetDocument(documentUrl)}
               sx={{ textTransform: 'none', borderRadius: 1 }}
             >
               View PDF
@@ -678,7 +683,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
+                onClick={() => openAssetDocument(documentUrl)}
                 sx={{ textTransform: 'none', borderRadius: 1 }}
               >
                 View PDF
@@ -712,7 +717,7 @@ export default function AllAssetsPage({ initialStatus = 'all' }: { initialStatus
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => window.open(`${API_URL}${documentUrl}`, '_blank')}
+                onClick={() => openAssetDocument(documentUrl)}
                 sx={{ textTransform: 'none', borderRadius: 1 }}
               >
                 View PDF

@@ -65,6 +65,27 @@ const normalizeItems = (items) => {
 
 const normalizeChallanFields = (body) => ({
   customerName: String(body.customerName || '').trim(),
+  customerId: String(body.customerId || '').trim(),
+  customer: {
+    name: String(body.customer?.name || '').trim(),
+    addressLine1: String(body.customer?.addressLine1 || '').trim(),
+    area: String(body.customer?.area || '').trim(),
+    city: String(body.customer?.city || '').trim(),
+    state: String(body.customer?.state || '').trim(),
+    pincode: String(body.customer?.pincode || '').trim(),
+    country: String(body.customer?.country || '').trim(),
+    gstNumber: String(body.customer?.gstNumber || '').trim(),
+    email: String(body.customer?.email || '').trim(),
+    shipToSameAsBilling: body.customer?.shipToSameAsBilling !== false,
+    shipToAddress: {
+      addressLine1: String(body.customer?.shipToAddress?.addressLine1 || '').trim(),
+      area: String(body.customer?.shipToAddress?.area || '').trim(),
+      city: String(body.customer?.shipToAddress?.city || '').trim(),
+      state: String(body.customer?.shipToAddress?.state || '').trim(),
+      pincode: String(body.customer?.shipToAddress?.pincode || '').trim(),
+      country: String(body.customer?.shipToAddress?.country || '').trim(),
+    },
+  },
   contactPerson: String(body.contactPerson || '').trim(),
   opfNo: String(body.opfNo || '').trim(),
   accountManager: String(body.accountManager || '').trim(),

@@ -169,7 +169,7 @@ exports.getOPFs = async (req, res) => {
 
 exports.getInventoryOPFOptions = async (req, res) => {
   try {
-    const fields = '_id opfNo customerName contactPerson customerPONo customerPODate product description quantity unitPrice tax partNo';
+    const fields = '_id opfNo customerId customerName contactPerson customerPONo customerPODate product description quantity unitPrice tax partNo';
     if (req.params.id) {
       const opf = await OPF.findById(req.params.id).select(fields).lean();
       if (!opf) return res.status(404).json({ success: false, message: 'OPF not found.' });

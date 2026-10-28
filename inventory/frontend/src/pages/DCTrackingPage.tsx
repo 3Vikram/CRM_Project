@@ -19,6 +19,20 @@ type CustomerOption = {
   id: string
   name: string
   contact?: string
+  billToAddress: CustomerAddress
+  shipToAddress: CustomerAddress
+  shipToSameAsBilling: boolean
+  gstNumber?: string
+  email?: string
+}
+
+type CustomerAddress = {
+  addressLine1?: string
+  area?: string
+  city?: string
+  state?: string
+  pincode?: string
+  country?: string
 }
 
 type ProductRow = {
@@ -38,6 +52,7 @@ type ProductRow = {
 type DeliveryChallanForm = {
   opfNo: string
   customerName: string
+  customerId: string
   contactPerson: string
   poNo: string
   poDate: string
@@ -72,6 +87,20 @@ type DeliveryChallanRecord = {
   challanNumber?: string
   createdBy?: string
   customerName?: string
+  customerId?: string
+  customer?: {
+    name?: string
+    addressLine1?: string
+    area?: string
+    city?: string
+    state?: string
+    pincode?: string
+    country?: string
+    gstNumber?: string
+    email?: string
+    shipToSameAsBilling?: boolean
+    shipToAddress?: CustomerAddress
+  }
   contactPerson?: string
   status?: string
   createdAt?: string
@@ -103,6 +132,7 @@ type DeliveryChallanRecord = {
 
 type SalesOPFRecord = {
   _id: string
+  customerId?: string | null
   opfNo?: string
 }
 
@@ -133,6 +163,68 @@ type SalesOPFDetails = SalesOPFRecord & {
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const SALES_API_URL = '/api'
+
+const fetchSalesCustomerOptions = async (): Promise<CustomerOption[]> => {
+  const response = await fetch(`${SALES_API_URL}/customers/inventory-options`)
+  const result = await response.json().catch(() => ({})) as {
+    success?: boolean
+    data?: Array<{
+      id?: string
+      customerName?: string
+      companyName?: string
+      contactPersons?: string[]
+      primaryContactPerson?: string
+      billToAddress?: CustomerAddress
+      shipToAddress?: CustomerAddress
+      shipToSameAsBilling?: boolean
+      gstNumber?: string
+      email?: string
+    }>
+    message?: string
+  }
+
+  if (!response.ok || result.success !== true || !Array.isArray(result.data)) {
+    throw new Error(result.message || `Unable to load customers (HTTP ${response.status}).`)
+  }
+
+  return result.data.flatMap((customer) => {
+    const id = customer.id?.trim()
+    const name = customer.customerName?.trim() || customer.companyName?.trim()
+    return id && name
+      ? [{
+          id,
+          name,
+          contact: customer.primaryContactPerson?.trim() || customer.contactPersons?.[0]?.trim() || '',
+          billToAddress: customer.billToAddress || {},
+          shipToAddress: customer.shipToAddress || {},
+          shipToSameAsBilling: customer.shipToSameAsBilling !== false,
+          gstNumber: customer.gstNumber || '',
+          email: customer.email || '',
+        }]
+      : []
+  })
+}
+
+const mapCustomerToChallanCustomer = (customer: CustomerOption) => ({
+  name: customer.name,
+  addressLine1: customer.billToAddress.addressLine1 || '',
+  area: customer.billToAddress.area || '',
+  city: customer.billToAddress.city || '',
+  state: customer.billToAddress.state || '',
+  pincode: customer.billToAddress.pincode || '',
+  country: customer.billToAddress.country || '',
+  gstNumber: customer.gstNumber || '',
+  email: customer.email || '',
+  shipToSameAsBilling: customer.shipToSameAsBilling,
+  shipToAddress: {
+    addressLine1: customer.shipToAddress.addressLine1 || '',
+    area: customer.shipToAddress.area || '',
+    city: customer.shipToAddress.city || '',
+    state: customer.shipToAddress.state || '',
+    pincode: customer.shipToAddress.pincode || '',
+    country: customer.shipToAddress.country || '',
+  },
+})
 
 const getSalesAuthHeaders = (): Record<string, string> => {
   for (const key of ['synov_employee_auth', 'synov_admin_auth']) {
@@ -170,6 +262,7 @@ const createEmptyRow = (): ProductRow => ({
 const emptyForm = (): DeliveryChallanForm => ({
   opfNo: '',
   customerName: '',
+  customerId: '',
   contactPerson: '',
   accountManager: '',
   poNo: '',
@@ -275,14 +368,12 @@ export default function DCTrackingPage() {
 
     const fetchCustomerOptions = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/delivery-challans/customers`)
-        if (!response.ok) {
-          throw new Error('Unable to fetch customer list')
-        }
-        const data = await response.json()
-        setCustomerOptions(Array.isArray(data) ? data : [])
-      } catch {
+        setCustomerOptions(await fetchSalesCustomerOptions())
+      } catch (error) {
+        console.error('Unable to fetch Sales customers for Delivery Challan:', error)
         setCustomerOptions([])
+        setToastType('error')
+        setToastMessage(error instanceof Error ? error.message : 'Unable to fetch Sales customers')
       }
     }
 
@@ -306,10 +397,11 @@ export default function DCTrackingPage() {
   }, [])
 
   const contactSuggestions = useMemo(() => {
-    const matchedCustomer = customerOptions.find((customer) => customer.name === form.customerName)
+    const matchedCustomer = customerOptions.find((customer) => customer.id === form.customerId)
+      || customerOptions.find((customer) => customer.name === form.customerName)
     const specificSuggestions = matchedCustomer?.contact ? [matchedCustomer.contact] : []
     return specificSuggestions
-  }, [customerOptions, form.customerName])
+  }, [customerOptions, form.customerId, form.customerName])
 
   const filteredRows = dcRows.filter((row) => {
     return !statusFilter || row.status === statusFilter
@@ -420,7 +512,32 @@ export default function DCTrackingPage() {
       const response = await fetch(`${API_URL}/api/delivery-challans/${encodeURIComponent(row.id)}`)
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'Unable to load delivery challan')
-      setPreviewChallan(data as DeliveryChallanDocument)
+      const challan = data as DeliveryChallanDocument
+
+      try {
+        const latestCustomers = await fetchSalesCustomerOptions()
+        setCustomerOptions(latestCustomers)
+        const selectedCustomer = challan.customerId
+          ? latestCustomers.find((customer) => customer.id === challan.customerId)
+          : latestCustomers.find(
+              (customer) => customer.name.toLowerCase() === challan.customerName?.trim().toLowerCase()
+            )
+
+        if (selectedCustomer) {
+          setPreviewChallan({
+            ...challan,
+            customerId: selectedCustomer.id,
+            customer: mapCustomerToChallanCustomer(selectedCustomer),
+          })
+        } else {
+          setPreviewChallan(challan)
+        }
+      } catch (error) {
+        console.error('Unable to refresh Delivery Challan customer details from Sales:', error)
+        setToastType('error')
+        setToastMessage(error instanceof Error ? error.message : 'Unable to refresh customer details from Sales')
+        setPreviewChallan(challan)
+      }
     } catch (error) {
       setToastType('error')
       setToastMessage(error instanceof Error ? error.message : 'Unable to load delivery challan')
@@ -485,6 +602,7 @@ export default function DCTrackingPage() {
         setForm({
           opfNo: challan.opfNo || '',
           customerName: challan.customerName || '',
+          customerId: challan.customerId || '',
           contactPerson: challan.contactPerson || '',
           accountManager: challan.accountManager || '',
           poNo: challan.poNo || '',
@@ -531,6 +649,7 @@ export default function DCTrackingPage() {
       ...prev,
       opfNo: selectedOpf?.opfNo || opfId,
       customerName: '',
+      customerId: '',
       contactPerson: '',
       poNo: '',
       poDate: '',
@@ -552,10 +671,13 @@ export default function DCTrackingPage() {
 
       const opf = result.data as SalesOPFDetails
       const customerName = opf.customerName?.trim() || ''
+      const matchedCustomer = customerOptions.find((customer) => customer.id === opf.customerId)
+        || customerOptions.find((customer) => customer.name.toLowerCase() === customerName.toLowerCase())
       const contactPerson = opf.contactPerson?.trim() || ''
       setForm((prev) => ({
         ...prev,
         customerName,
+        customerId: opf.customerId || matchedCustomer?.id || '',
         contactPerson,
         poNo: opf.customerPONo?.trim() || '',
         poDate: opf.customerPODate ? String(opf.customerPODate).slice(0, 10) : '',
@@ -624,9 +746,24 @@ export default function DCTrackingPage() {
 
     try {
       setIsSubmitting(true)
+      let selectedCustomer = customerOptions.find((customer) => customer.id === form.customerId)
+      if (!selectedCustomer && form.customerId) {
+        const latestCustomers = await fetchSalesCustomerOptions()
+        setCustomerOptions(latestCustomers)
+        selectedCustomer = latestCustomers.find((customer) => customer.id === form.customerId)
+      }
+      if (form.customerId && !selectedCustomer) {
+        throw new Error('Unable to load the selected customer details from Sales.')
+      }
+      selectedCustomer ||= customerOptions.find(
+        (customer) => customer.name.toLowerCase() === form.customerName.trim().toLowerCase()
+      )
+
       const payload = {
         opfNo: form.opfNo,
         customerName: form.customerName,
+        customerId: selectedCustomer?.id || form.customerId,
+        customer: selectedCustomer ? mapCustomerToChallanCustomer(selectedCustomer) : {},
         contactPerson: form.contactPerson,
         accountManager: form.accountManager,
         poNo: form.poNo,
@@ -877,16 +1014,29 @@ export default function DCTrackingPage() {
                 id="customerName"
                 required
                 disabled={Boolean(form.opfNo) || opfCustomerNameLocked}
-                value={form.customerName}
-                onChange={(event) => updateFormValue('customerName', event.target.value)}
+                value={
+                  form.customerId
+                  || customerOptions.find((customer) => customer.name === form.customerName)?.id
+                  || form.customerName
+                }
+                onChange={(event) => {
+                  const selectedCustomer = customerOptions.find((customer) => customer.id === event.target.value)
+                  setForm((previous) => ({
+                    ...previous,
+                    customerName: selectedCustomer?.name || event.target.value,
+                    customerId: selectedCustomer?.id || '',
+                  }))
+                }}
                 className="w-full rounded-xl border border-[#D9D3C7] bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition focus:border-[#06283D] focus:ring-2 focus:ring-[#DDE7EE]"
               >
                 <option value="">Select customer</option>
-                {form.customerName && !customerOptions.some((customer) => customer.name === form.customerName) && (
-                  <option value={form.customerName}>{form.customerName}</option>
+                {form.customerName && !customerOptions.some(
+                  (customer) => customer.id === form.customerId || customer.name === form.customerName
+                ) && (
+                  <option value={form.customerId || form.customerName}>{form.customerName}</option>
                 )}
                 {customerOptions.map((customer) => (
-                  <option key={customer.id || customer.name} value={customer.name}>
+                  <option key={customer.id} value={customer.id}>
                     {customer.name}
                   </option>
                 ))}

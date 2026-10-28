@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, Download, Printer } from 'lucide-react'
+import { ArrowLeft, Building2, Download, IndianRupee, Printer, ReceiptText, Truck, UserRound } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { COMPANY_PROFILE } from '@/lib/companyProfile'
 
 type ChallanItem = {
@@ -24,17 +25,29 @@ type PartyDetails = {
   address?: string
   addressLine1?: string
   addressLine2?: string
+  area?: string
   city?: string
   state?: string
   pincode?: string
+  country?: string
   gstNumber?: string
   gstNo?: string
   email?: string
+  shipToSameAsBilling?: boolean
+  shipToAddress?: {
+    addressLine1?: string
+    area?: string
+    city?: string
+    state?: string
+    pincode?: string
+    country?: string
+  }
 }
 
 export type DeliveryChallanDocument = {
   id: string
   challanNumber?: string
+  customerId?: string
   createdAt?: string
   dcDate?: string
   deliveryNote?: string
@@ -120,21 +133,23 @@ const DELIVERY_CHALLAN_TERMS = [
   'Demo material must be returned within the agreed demo duration, which shall not exceed 7 days. Any delay beyond this period, without written approval from Synov IT Services Pvt Ltd, will result in the material being billed at its DC value. The partner agrees to make payment for the same within 7 days from the date of invoice.',
 ]
 
-function PartyBox({ title, party }: { title: string; party: PartyDetails }) {
+function PartyBox({ title, party, icon }: { title: string; party: PartyDetails; icon: ReactNode }) {
   const address = [
     party.address,
     party.addressLine1,
     party.addressLine2,
+    party.area,
     party.city,
     party.state,
     party.pincode,
+    party.country,
   ]
     .filter((part): part is string => Boolean(part?.trim()))
     .join(', ')
 
   return (
     <section className="dc-party">
-      <h2>{title}</h2>
+      <h2>{icon}{title}</h2>
       <strong>{optionalValue(party.name || party.customerName)}</strong>
       {party.contactPerson && <div>Contact: {party.contactPerson}</div>}
       <div>{optionalValue(address || undefined)}</div>
@@ -163,16 +178,13 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
   }, 0)
   const customer = challan.customer || {}
   const billTo = challan.billTo || customer
-  const dcFor = challan.dcFor || challan.contact || {
-    name: challan.customerName,
-    customerName: challan.customerName,
-    contactPerson: challan.contactPerson,
-    address: customer.address,
-    city: customer.city,
-    state: customer.state,
-    pincode: customer.pincode,
-    gstNumber: customer.gstNumber || customer.gstNo,
-    email: customer.email,
+  const shipTo = customer.shipToAddress || {}
+  const hasShipToAddress = Object.values(shipTo).some((value) => Boolean(value?.trim()))
+  const dcForAddress = customer.shipToSameAsBilling === false && hasShipToAddress ? shipTo : customer
+  const dcFor = challan.dcFor || {
+    ...customer,
+    ...dcForAddress,
+    contactPerson: customer.contactPerson || challan.contactPerson,
   }
   const dcNumber = optionalValue(challan.challanNumber)
   const filename = `${(challan.challanNumber || 'delivery-challan').replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`
@@ -180,13 +192,34 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
   const downloadPdf = async () => {
     if (!documentRef.current) return
     setIsDownloading(true)
+    const documentElement = documentRef.current
+    const previousStyle = documentElement.getAttribute('style')
     try {
+      documentElement.style.width = '194mm'
+      documentElement.style.maxWidth = 'none'
+      documentElement.style.margin = '0'
+      documentElement.style.padding = '5mm'
+      documentElement.style.border = '0.4mm solid #063B60'
+      documentElement.style.boxShadow = 'none'
+
+      const images = Array.from(documentElement.querySelectorAll('img'))
+      await Promise.all(images.map(async (image) => {
+        if (image.complete) {
+          if (image.naturalWidth === 0) throw new Error(`Unable to load Delivery Challan image: ${image.src}`)
+          return
+        }
+        await new Promise<void>((resolve, reject) => {
+          image.addEventListener('load', () => resolve(), { once: true })
+          image.addEventListener('error', () => reject(new Error(`Unable to load Delivery Challan image: ${image.src}`)), { once: true })
+        })
+      }))
+
       const { default: html2pdf } = await import('html2pdf.js')
       const pdfOptions = {
-        margin: 10,
+        margin: 8,
         filename,
         image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
         pagebreak: { mode: ['css', 'legacy'] },
       }
@@ -194,7 +227,12 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
         .set(pdfOptions)
         .from(documentRef.current)
         .save()
+    } catch (error) {
+      console.error('Failed to generate Delivery Challan PDF', error)
+      window.alert('Unable to generate the Delivery Challan PDF. Please try again.')
     } finally {
+      if (previousStyle === null) documentElement.removeAttribute('style')
+      else documentElement.setAttribute('style', previousStyle)
       setIsDownloading(false)
     }
   }
@@ -203,26 +241,36 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
     <div className="dc-preview-root">
       <style>{`
         .dc-preview-root { color: #17212b; }
-        .dc-preview-document { width: 100%; max-width: 190mm; margin: 0 auto; background: #fff; color: #17212b; font-family: "Times New Roman", Times, serif; font-size: 10px; }
+        .dc-preview-document { width: 194mm; max-width: 100%; margin: 0 auto; padding: 5mm !important; border: 0.4mm solid #063B60 !important; box-shadow: none !important; background: #fff; color: #17212b; font-family: "Times New Roman", Times, serif; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .dc-preview-document *, .dc-preview-document *::before, .dc-preview-document *::after { box-sizing: border-box; }
-        .dc-preview-document .dc-header { position: relative; min-height: 78px; padding: 8px 76px 12px; text-align: center; border-bottom: 1px solid #333; }
-        .dc-preview-document .dc-header img { position: absolute; top: 5px; right: 3px; width: 64px; height: 64px; object-fit: contain; }
-        .dc-preview-document .dc-title { margin: 0 0 8px; font-size: 18px; font-weight: 700; }
-        .dc-preview-document .dc-company { font-size: 10px; font-weight: 700; }
-        .dc-preview-document .dc-company-address { margin: 3px auto; max-width: 490px; line-height: 1.35; }
-        .dc-preview-document .dc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #333; border-left: 1px solid #333; margin-top: 10px; }
-        .dc-preview-document .dc-field { min-height: 37px; padding: 5px 6px; border-right: 1px solid #333; border-bottom: 1px solid #333; overflow-wrap: anywhere; }
-        .dc-preview-document .dc-field b { display: block; margin-bottom: 3px; font-size: 8px; text-transform: uppercase; }
-        .dc-preview-document .dc-parties { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; }
-        .dc-preview-document .dc-party { min-height: 102px; padding: 7px; border: 1px solid #333; border-right: 0; line-height: 1.45; overflow-wrap: anywhere; }
-        .dc-preview-document .dc-party:last-child { border-right: 1px solid #333; }
-        .dc-preview-document .dc-party h2 { margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid #777; font-size: 9px; }
-        .dc-preview-document .dc-items { width: 100%; margin-top: 10px; border-collapse: collapse; table-layout: fixed; }
-        .dc-preview-document .dc-items th, .dc-preview-document .dc-items td { padding: 2px 3px !important; border: 1px solid #333; font-size: 10px !important; overflow-wrap: anywhere; text-align: left; vertical-align: top; height: auto !important; min-height: 0 !important; }
-        .dc-preview-document .dc-items th { background: #f1f1f1; font-size: 9px !important; line-height: 1.2; }
-        .dc-preview-document .dc-items td { line-height: 1.25; }
+        .dc-preview-document .dc-brandbar { position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 80px; padding: 8px 16px; overflow: hidden; border-top: 4px solid #079DB5; background: #fff; }
+        .dc-preview-document .dc-brandbar::before, .dc-preview-document .dc-brandbar::after { position: absolute; inset: 0 0 0 auto; content: ""; pointer-events: none; }
+        .dc-preview-document .dc-brandbar::before { width: 61%; background: #063B60; clip-path: polygon(0 0, 100% 0, 100% 100%, 20% 100%); }
+        .dc-preview-document .dc-brandbar::after { width: 48%; background: #079DB5; clip-path: polygon(0 0, 18% 0, 39% 100%, 20% 100%); }
+        .dc-preview-document .dc-brand-identity { position: relative; z-index: 1; display: flex; align-items: center; }
+        .dc-preview-document .dc-brand-logo { width: 58px; height: 62px; object-fit: contain; }
+        .dc-preview-document .dc-brand-wordmark { position: absolute; z-index: 1; top: 50%; right: 18px; display: grid; color: #fff; line-height: 1; text-align: right; transform: translateY(-50%); }
+        .dc-preview-document .dc-brand-wordmark strong { font-family: Arial, sans-serif; font-size: 20px; letter-spacing: 0.18em; }
+        .dc-preview-document .dc-brand-wordmark span { margin-top: 4px; font-size: 8px; letter-spacing: 0.2em; }
+        .dc-preview-document .dc-header { position: relative; min-height: 88px; padding: 11px 0 9px; text-align: center; border-bottom: 2px solid #079DB5; background: #fff; }
+        .dc-preview-document .dc-title { margin: 0 0 5px; color: #063B60; font-size: 23px; font-weight: 700; }
+        .dc-preview-document .dc-company { font-size: 11px; font-weight: 700; color: #063B60; }
+        .dc-preview-document .dc-company-address { margin: 3px auto; line-height: 1.35; }
+        .dc-preview-document .dc-header-gst { color: #063B60; font-weight: 700; }
+        .dc-preview-document .dc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 8px; border-top: 1px solid #70aabe; border-left: 1px solid #70aabe; background: #fff; }
+        .dc-preview-document .dc-field { min-height: 34px; padding: 5px 7px; border-right: 1px solid #70aabe; border-bottom: 1px solid #70aabe; background: #fff; overflow-wrap: anywhere; }
+        .dc-preview-document .dc-field b { display: block; margin-bottom: 3px; color: #063B60; font-size: 8px; text-transform: uppercase; }
+        .dc-preview-document .dc-parties { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
+        .dc-preview-document .dc-party { min-width: 0; min-height: 112px; padding: 0 8px 8px; border: 1px solid #70aabe; border-radius: 6px; background: #fff; line-height: 1.4; overflow-wrap: anywhere; }
+        .dc-preview-document .dc-party h2 { display: flex; align-items: center; gap: 7px; margin: 0 -8px 7px; padding: 6px 8px; border-radius: 5px 5px 0 0; background: #08748b; color: #fff; font-size: 10px; letter-spacing: 0.03em; text-transform: none; }
+        .dc-preview-document .dc-party h2 svg { width: 13px; height: 13px; }
+        .dc-preview-document .dc-items { width: 100%; margin-top: 9px; border-collapse: collapse; table-layout: fixed; background: #fff; }
+        .dc-preview-document .dc-items th, .dc-preview-document .dc-items td { padding: 5px 4px !important; border: 1px solid #b7cbd4; background: #fff; font-size: 9px !important; overflow-wrap: anywhere; word-break: normal; text-align: left; vertical-align: top; height: auto !important; min-height: 0 !important; }
+        .dc-preview-document .dc-items th { background: #063B60; color: #fff; font-size: 8.5px !important; font-weight: 700; line-height: 1.2; }
+        .dc-preview-document .dc-items td { line-height: 1.3; }
         .dc-preview-document .dc-items tbody tr { height: auto !important; min-height: 0 !important; }
-        .dc-preview-document .dc-items tbody td:nth-child(2), .dc-preview-document .dc-items tbody td:nth-child(3), .dc-preview-document .dc-items tbody td:nth-child(4) { padding: 2px 3px !important; font-size: 10px !important; line-height: 1.25 !important; white-space: normal !important; overflow-wrap: anywhere !important; word-break: break-word !important; }
+        .dc-preview-document .dc-items tbody td:nth-child(2), .dc-preview-document .dc-items tbody td:nth-child(3) { padding: 3px 4px !important; font-size: 9px !important; line-height: 1.25 !important; white-space: normal !important; overflow-wrap: anywhere !important; word-break: break-word !important; }
+        .dc-preview-document .dc-items tbody td:nth-child(4) { white-space: normal !important; overflow-wrap: anywhere !important; word-break: break-word !important; }
         .dc-preview-document .dc-items th:nth-child(1) { width: 5%; }
         .dc-preview-document .dc-items th:nth-child(2) { width: 17%; }
         .dc-preview-document .dc-items th:nth-child(3) { width: 19%; }
@@ -232,80 +280,74 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
         .dc-preview-document .dc-items th:nth-child(7) { width: 10%; }
         .dc-preview-document .dc-items th:nth-child(8) { width: 9%; }
         .dc-preview-document .dc-items th:nth-child(9) { width: 11%; }
-        .dc-preview-document .dc-totals { width: 48%; margin: 0 0 0 auto; border-collapse: collapse; }
-        .dc-preview-document .dc-totals th, .dc-preview-document .dc-totals td { padding: 4px 7px; border: 1px solid #333; font-size: 10px !important; text-align: right; }
-        .dc-preview-document .dc-amount-words, .dc-preview-document .dc-terms { margin-top: 9px; padding: 7px; border: 1px solid #333; }
-        .dc-preview-document .dc-terms { overflow-wrap: anywhere; line-height: 1.4; }
-        .dc-preview-document .dc-terms li { break-inside: avoid; page-break-inside: avoid; margin-bottom: 3px; }
-        .dc-preview-document .dc-delivery-note { margin-top: 9px; padding: 7px; border: 1px solid #333; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
-        .dc-preview-document .dc-section-title { margin: 0 0 5px; font-size: 9px; font-weight: 700; }
-        .dc-preview-document .dc-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 22px; page-break-inside: avoid; }
-        .dc-preview-document .dc-signature { min-height: 75px; padding: 7px; border: 1px solid #333; display: flex; flex-direction: column; justify-content: space-between; }
-        .dc-preview-document .dc-generated { margin: 10px 0 0; padding-bottom: 5mm; text-align: center; font-size: 8px; }
+        .dc-preview-document .dc-totals { width: 44%; margin: 7px 0 0 auto; border-collapse: collapse; }
+        .dc-preview-document .dc-totals th, .dc-preview-document .dc-totals td { padding: 4px 7px; border: 1px solid #cbd5dc; background: #fff; font-size: 9px !important; text-align: right; }
+        .dc-preview-document .dc-totals .dc-grand-total th, .dc-preview-document .dc-totals .dc-grand-total td { background: #063B60; color: #fff; font-weight: 700; }
+        .dc-preview-document .dc-amount-words { display: flex; align-items: center; gap: 10px; margin-top: 9px; padding: 10px; border: 1px solid #a9deea; border-radius: 6px; background: #eaf8fb; color: #063B60; }
+        .dc-preview-document .dc-amount-words svg { flex: 0 0 22px; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: #063B60; color: #fff; }
+        .dc-preview-document .dc-amount-content { display: grid; gap: 3px; }
+        .dc-preview-document .dc-terms { margin-top: 9px; padding: 8px 9px; border-top: 1px solid #70aabe; border-right: 1px solid #70aabe; border-bottom: 1px solid #70aabe; border-left: 3px solid #079DB5; background: #fff; overflow-wrap: anywhere; line-height: 1.4; }
+        .dc-preview-document .dc-terms li { break-inside: avoid; page-break-inside: avoid; margin-bottom: 3px; padding-left: 2px; }
+        .dc-preview-document .dc-delivery-note { margin-top: 9px; padding: 7px; border: 1px solid #cbd5dc; background: #fff; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
+        .dc-preview-document .dc-section-title { margin: 0 0 5px; color: #063B60; font-size: 10px; font-weight: 700; }
+        .dc-preview-document .dc-terms .dc-section-title { display: flex; align-items: center; gap: 6px; }
+        .dc-preview-document .dc-terms .dc-section-title svg { width: 14px; height: 14px; color: #08748b; }
+        .dc-preview-document .dc-terms .dc-section-title { margin: -1px 0 6px; padding-top: 5px; }
+        .dc-preview-document .dc-signatures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
+        .dc-preview-document .dc-signature { min-width: 0; min-height: 82px; padding: 8px; border: 1px solid #70aabe; background: #fff; display: flex; flex-direction: column; justify-content: space-between; overflow-wrap: anywhere; }
+        .dc-preview-document .dc-signature strong { color: #063B60; }
+        .dc-preview-document .dc-signature span { padding-top: 14px; border-top: 1px solid #9aaab4; color: #53636d; font-size: 8px; }
+        .dc-preview-document .dc-footer { position: relative; min-height: 32px; margin-top: 10px; padding: 7px 0 2px; border-top: 1px solid #cbd5dc; color: #063B60; text-align: right; font-size: 9px; font-style: italic; }
+        .dc-preview-document .dc-generated { margin: 4px 0 0; padding: 0 0 2mm; color: #53636d; text-align: center; font-size: 8px; font-style: normal; }
+        .dc-preview-document .dc-footer::before, .dc-preview-document .dc-footer::after { position: absolute; bottom: 0; left: 0; width: 20%; height: 16px; content: ""; background: #063B60; clip-path: polygon(0 0, 76% 0, 100% 100%, 0 100%); }
+        .dc-preview-document .dc-footer::after { left: 0; width: 14%; background: #079DB5; clip-path: polygon(0 0, 47% 0, 100% 100%, 0 100%); }
         .dc-preview-document .dc-keep { page-break-inside: auto; break-inside: auto; }
-        @page { size: A4 portrait; margin: 0; }
+        @page { size: A4 portrait; margin: 8mm; }
         @media print {
           html, body, #root { width: 100% !important; height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
+          body { position: relative !important; }
+          body *:has(.dc-preview-root) { width: 100% !important; max-width: none !important; min-width: 0 !important; height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
           body * { visibility: hidden !important; }
-          .dc-preview-root, .dc-preview-root * { visibility: visible !important; }
+          .dc-preview-document, .dc-preview-document * { visibility: visible !important; }
+          .dc-preview-document, .dc-preview-document * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .dc-preview-controls { display: none !important; }
-          .dc-preview-root { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
-          .dc-preview-document { width: 210mm !important; max-width: 210mm !important; margin: 0 auto !important; padding: 10mm !important; border: 0 !important; box-shadow: none !important; }
-          .dc-preview-document .dc-items thead { display: table-header-group; }
-          .dc-preview-document .dc-items tbody tr { height: auto !important; min-height: 0 !important; break-inside: auto; page-break-inside: auto; }
-          .dc-preview-document .dc-party { page-break-inside: avoid; }
-          .dc-preview-document { font-size: 12px !important; }
-          .dc-preview-document .dc-title { font-size: 22px !important; }
-          .dc-preview-document .dc-company { font-size: 12px !important; }
-          .dc-preview-document .dc-field { font-size: 12px !important; }
-          .dc-preview-document .dc-field b { font-size: 10px !important; }
-          .dc-preview-document .dc-party { font-size: 12px !important; }
-          .dc-preview-document .dc-party h2 { font-size: 11px !important; }
+          .dc-preview-root { position: absolute !important; inset: 0 auto auto 0 !important; width: 194mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
+            .dc-preview-document { width: 194mm !important; max-width: none !important; margin: 0 !important; padding: 5mm !important; border: 0.4mm solid #063B60 !important; box-shadow: none !important; background: #fff !important; font-size: 10px !important; break-after: auto !important; page-break-after: auto !important; }
+          .dc-preview-document .dc-brandbar { min-height: 74px !important; padding: 6px 12px !important; }
+          .dc-preview-document .dc-brand-logo { width: 56px !important; height: 60px !important; }
+          .dc-preview-document .dc-brand-wordmark { right: 16px !important; }
+          .dc-preview-document .dc-brand-wordmark strong { font-size: 19px !important; }
+          .dc-preview-document .dc-header { min-height: 82px !important; padding: 8px 0 !important; }
+          .dc-preview-document .dc-title { font-size: 21px !important; }
+          .dc-preview-document .dc-company { font-size: 10px !important; }
+          .dc-preview-document .dc-company-address { max-width: none !important; font-size: 10px !important; }
+          .dc-preview-document .dc-grid { margin-top: 7px !important; }
+          .dc-preview-document .dc-field { min-height: 34px !important; padding: 5px 7px !important; font-size: 10px !important; }
+          .dc-preview-document .dc-field b { font-size: 9px !important; }
+          .dc-preview-document .dc-parties { gap: 7px !important; margin-top: 7px !important; }
+          .dc-preview-document .dc-party { min-height: 106px !important; padding: 0 7px 7px !important; font-size: 9px !important; }
+          .dc-preview-document .dc-party h2 { font-size: 10px !important; }
+          .dc-preview-document .dc-items { width: 100% !important; margin-top: 8px !important; }
           .dc-preview-document .dc-items th,
-          .dc-preview-document .dc-items td { font-size: 12px !important; }
-          .dc-preview-document .dc-items th { font-size: 11px !important; }
-          .dc-preview-document .dc-items tbody td:nth-child(n) {
-            padding-top: 4px !important;
-            padding-bottom: 4px !important;
-            font-size: 12px !important;
-            line-height: 1.3 !important;
-          }
+          .dc-preview-document .dc-items td { padding: 3px 4px !important; font-size: 9px !important; }
           .dc-preview-document .dc-items tbody td:nth-child(2),
-          .dc-preview-document .dc-items tbody td:nth-child(3) {
-            font-size: 15px !important;
-            line-height: 1.25 !important;
-          }
-          .dc-preview-document .dc-items th:nth-child(1),
-          .dc-preview-document .dc-items td:nth-child(1) { width: 4% !important; }
-          .dc-preview-document .dc-items th:nth-child(2),
-          .dc-preview-document .dc-items td:nth-child(2) { width: 23% !important; }
-          .dc-preview-document .dc-items th:nth-child(3),
-          .dc-preview-document .dc-items td:nth-child(3) { width: 26% !important; }
-          .dc-preview-document .dc-items th:nth-child(4),
-          .dc-preview-document .dc-items td:nth-child(4) { width: 12% !important; }
-          .dc-preview-document .dc-items th:nth-child(5),
-          .dc-preview-document .dc-items td:nth-child(5) { width: 5% !important; }
-          .dc-preview-document .dc-items th:nth-child(6),
-          .dc-preview-document .dc-items td:nth-child(6) { width: 9% !important; }
-          .dc-preview-document .dc-items th:nth-child(7),
-          .dc-preview-document .dc-items td:nth-child(7) { width: 7% !important; }
-          .dc-preview-document .dc-items th:nth-child(8),
-          .dc-preview-document .dc-items td:nth-child(8) { width: 5% !important; }
-          .dc-preview-document .dc-items th:nth-child(9),
-          .dc-preview-document .dc-items td:nth-child(9) { width: 8% !important; }
-          .dc-preview-document .dc-items tbody td:nth-child(7),
-          .dc-preview-document .dc-items tbody td:nth-child(8),
-          .dc-preview-document .dc-items tbody td:nth-child(9) {
-            font-size: 10px !important;
-          }
+          .dc-preview-document .dc-items tbody td:nth-child(3) { font-size: 8.5px !important; line-height: 1.25 !important; }
+          .dc-preview-document .dc-totals { width: 44% !important; margin-top: 6px !important; }
           .dc-preview-document .dc-totals th,
-          .dc-preview-document .dc-totals td { font-size: 12px !important; }
-          .dc-preview-document .dc-amount-words,
+          .dc-preview-document .dc-totals td { padding: 5px 7px !important; font-size: 10px !important; }
+          .dc-preview-document .dc-amount-words { margin-top: 7px !important; padding: 8px !important; font-size: 10px !important; }
           .dc-preview-document .dc-terms,
-          .dc-preview-document .dc-delivery-note,
-          .dc-preview-document .dc-signature { font-size: 12px !important; }
-          .dc-preview-document .dc-section-title { font-size: 11px !important; }
-          .dc-preview-document .dc-generated { font-size: 10px !important; }
+          .dc-preview-document .dc-delivery-note { margin-top: 7px !important; padding: 7px !important; font-size: 9px !important; line-height: 1.35 !important; }
+          .dc-preview-document .dc-section-title { font-size: 10px !important; }
+          .dc-preview-document .dc-signatures { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; margin-top: 8px !important; }
+          .dc-preview-document .dc-signature { min-height: 72px !important; padding: 7px !important; font-size: 9px !important; }
+          .dc-preview-document .dc-signature span { font-size: 9px !important; }
+          .dc-preview-document .dc-footer { min-height: 24px !important; margin-top: 8px !important; padding-top: 7px !important; }
+          .dc-preview-document .dc-generated { padding-bottom: 0 !important; }
+          .dc-preview-document .dc-brandbar, .dc-preview-document .dc-header, .dc-preview-document .dc-grid, .dc-preview-document .dc-parties, .dc-preview-document .dc-totals, .dc-preview-document .dc-amount-words, .dc-preview-document .dc-terms, .dc-preview-document .dc-delivery-note, .dc-preview-document .dc-signatures, .dc-preview-document .dc-footer { break-inside: avoid; page-break-inside: avoid; }
+          .dc-preview-document .dc-items thead { display: table-header-group; }
+          .dc-preview-document .dc-items tbody tr { height: auto !important; min-height: 0 !important; break-inside: avoid; page-break-inside: avoid; }
+          .dc-preview-document .dc-brandbar::before, .dc-preview-document .dc-brandbar::after, .dc-preview-document .dc-footer::before, .dc-preview-document .dc-footer::after { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
         }
       `}</style>
 
@@ -340,12 +382,17 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
       </div>
 
       <article className="dc-preview-document border border-[#333] bg-white p-4 shadow-sm" ref={documentRef}>
+        <div className="dc-brandbar" aria-label="Synov brand banner">
+          <div className="dc-brand-identity">
+            <img className="dc-brand-logo" alt="Synov logo" src={COMPANY_PROFILE.logoUrl} />
+          </div>
+          <div className="dc-brand-wordmark"><strong>SYNOV</strong><span>Stronger Together</span></div>
+        </div>
         <header className="dc-header">
-          <img alt="Synov IT Services logo" src={COMPANY_PROFILE.logoUrl} />
           <h1 className="dc-title">Delivery Challan</h1>
           <div className="dc-company">{COMPANY_PROFILE.name}</div>
           <div className="dc-company-address">{COMPANY_PROFILE.address}</div>
-          <div>GST No: {COMPANY_PROFILE.gstNumber}</div>
+          <div className="dc-header-gst">GST No: {COMPANY_PROFILE.gstNumber}</div>
         </header>
 
         <section className="dc-grid" aria-label="Delivery Challan information">
@@ -369,7 +416,13 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
         <div className="dc-parties">
           <PartyBox
             title="DC By"
-            party={{ name: COMPANY_PROFILE.name, address: COMPANY_PROFILE.address, gstNumber: COMPANY_PROFILE.gstNumber }}
+            party={{
+              name: COMPANY_PROFILE.name,
+              address: COMPANY_PROFILE.address,
+              gstNumber: COMPANY_PROFILE.gstNumber,
+              email: 'pavan@3Vikram.in',
+            }}
+            icon={<Truck aria-hidden="true" />}
           />
           <PartyBox
             title="Bill To"
@@ -378,6 +431,7 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
               name: billTo.name || challan.customerName,
               customerName: billTo.customerName || challan.customerName,
             }}
+            icon={<UserRound aria-hidden="true" />}
           />
           <PartyBox
             title="DC For"
@@ -386,6 +440,7 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
               name: dcFor.name || challan.customerName,
               contactPerson: dcFor.contactPerson || challan.contactPerson,
             }}
+            icon={<Building2 aria-hidden="true" />}
           />
         </div>
 
@@ -432,13 +487,9 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
             <tbody>
               <tr><th>Subtotal</th><td>{challan.currency || 'INR'} {money(subtotal)}</td></tr>
               <tr><th>GST</th><td>{challan.currency || 'INR'} {money(gstTotal)}</td></tr>
-              <tr><th>Grand Total</th><td><strong>{challan.currency || 'INR'} {money(grandTotal)}</strong></td></tr>
+              <tr className="dc-grand-total"><th>Grand Total</th><td><strong>{challan.currency || 'INR'} {money(grandTotal)}</strong></td></tr>
             </tbody>
           </table>
-          <section className="dc-amount-words">
-            <h2 className="dc-section-title">Amount in Words</h2>
-            <div>{numberToWords(grandTotal)} Rupees Only</div>
-          </section>
           {challan.deliveryNote?.trim() && (
             <section className="dc-delivery-note">
               <strong>Delivery Note:</strong>{' '}
@@ -446,22 +497,32 @@ export default function DeliveryChallanPreview({ challan, onBack }: DeliveryChal
             </section>
           )}
           <section className="dc-terms">
-            <h2 className="dc-section-title">Terms &amp; Conditions</h2>
+            <h2 className="dc-section-title"><ReceiptText aria-hidden="true" />Terms &amp; Conditions</h2>
             <ol className="m-0 list-decimal space-y-1 pl-4">
               {DELIVERY_CHALLAN_TERMS.map((term) => <li key={term}>{term}</li>)}
             </ol>
           </section>
+          <section className="dc-amount-words">
+            <IndianRupee aria-hidden="true" />
+            <div className="dc-amount-content">
+              <h2 className="dc-section-title">Amount in Words:</h2>
+              <strong>{numberToWords(grandTotal)} Rupees Only</strong>
+            </div>
+          </section>
           <div className="dc-signatures">
             <section className="dc-signature">
-              <strong>For {COMPANY_PROFILE.name}</strong>
-              {challan.signatureRequired && <span>Authorized Signature</span>}
+              <strong>For Synov IT Services Pvt Ltd</strong>
+              <span>Authorized Signatory</span>
             </section>
             <section className="dc-signature">
-              <strong>For {optionalValue(challan.customerName)}</strong>
-              {challan.signatureRequired && <span>Customer Signature</span>}
+              <strong>Received By Navikra Tech Solutions Pvt Ltd</strong>
+              <span>Signature &amp; Seal</span>
             </section>
           </div>
-          <p className="dc-generated">This is an electronically generated document, signature not required.</p>
+          <footer className="dc-footer">
+            <span>Technology for a better tomorrow</span>
+            <p className="dc-generated">This is an electronically generated document, signature not required.</p>
+          </footer>
         </div>
       </article>
     </div>

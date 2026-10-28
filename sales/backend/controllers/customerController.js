@@ -196,19 +196,32 @@ exports.getCustomers = async (req, res) => {
 
 exports.getInventoryCustomerOptions = async (_req, res) => {
   try {
-    const customers = await Customer.find({
-      $or: [
-        { customerName: { $type: 'string', $regex: /\S/ } },
-        { companyName: { $type: 'string', $regex: /\S/ } },
-      ],
-    })
-      .select({ _id: 1, customerName: 1, companyName: 1, contacts: 1 })
-      .sort({ customerName: 1, companyName: 1, _id: 1 })
+    const customers = await Customer.find({})
+      .select({
+        _id: 1,
+        companyName: 1,
+        contacts: 1,
+        billToAddress: 1,
+        shipToSameAsBilling: 1,
+        shipToAddress: 1,
+        gstNumber: 1,
+        email: 1,
+      })
+      .sort({ companyName: 1, _id: 1 })
       .lean();
 
     return res.status(200).json({
       success: true,
-      data: customers.map(({ _id, customerName, companyName, contacts = [] }) => {
+      data: customers.map(({
+        _id,
+        companyName,
+        contacts = [],
+        billToAddress = {},
+        shipToSameAsBilling = true,
+        shipToAddress = {},
+        gstNumber = '',
+        email = '',
+      }) => {
         const customerContacts = Array.isArray(contacts) ? contacts : [];
         const contactPersons = customerContacts
           .map((contact) => String(contact?.name || '').trim())
@@ -216,13 +229,19 @@ exports.getInventoryCustomerOptions = async (_req, res) => {
         const primaryContactPerson =
           customerContacts.find((contact) => String(contact?.contactType || '').trim().toLowerCase() === 'primary')
             ?.name?.trim() || contactPersons[0] || '';
+        const customerCompanyName = String(companyName || '').trim() || 'Untitled Customer';
 
         return {
           id: String(_id),
-          customerName: customerName || companyName,
-          companyName,
+          customerName: customerCompanyName,
+          companyName: customerCompanyName,
           contactPersons,
           primaryContactPerson,
+          billToAddress,
+          shipToSameAsBilling,
+          shipToAddress,
+          gstNumber,
+          email,
         };
       }),
     });

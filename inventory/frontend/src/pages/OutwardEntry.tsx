@@ -257,7 +257,7 @@ export default function OutwardEntry() {
           >
             Back
           </Button>
-        </Box>
+        </Box>getOptionLabel
 
         <Card sx={{ borderRadius: 1, p: '30px', boxShadow: '0px 4px 10px rgba(0,0,0,0.04)', bgcolor: '#ffffff', mt: 1, width: '95%', mx: 'auto' }}>
           <CardContent sx={{ p: 0 }}>
@@ -266,41 +266,86 @@ export default function OutwardEntry() {
               <Box sx={{ display: 'grid', gap: '14px' }}>
                 <Box>
                   <Typography sx={{ fontSize: 14, fontWeight: 500, color: '#1F2937', mb: '6px' }}>Customer Name <Box component="span" sx={{ color: 'red' }}>*</Box></Typography>
-                  <Autocomplete
-                    options={customers}
-                    value={customers.find((customer) => customer.id === customerId) || null}
-                    onChange={(_, customer) => {
-                      setCustomerId(customer?.id || '')
-                      setCustomerName(customer?.customerName || '')
-                    }}
-                    getOptionLabel={(customer) => customer.customerName}
-                    isOptionEqualToValue={(option, value) => option.id === value.id}
-                    renderOption={(props, customer) => (
-                      <li {...props}>
-                        <Box sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4 }}>
-                          {customer.customerName}
-                        </Box>
-                      </li>
-                    )}
-                    loading={customersLoading}
-                    loadingText="Loading customers..."
-                    noOptionsText={customersError ? 'Unable to load customers' : 'No customers available'}
-                    fullWidth
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        placeholder={customersLoading ? 'Loading customers...' : 'Select a customer'}
-                        error={Boolean(customersError)}
-                        helperText={customersError || (!customersLoading && customers.length === 0 ? 'No customers are saved in Sales yet.' : '')}
-                        sx={{
-                          '& .MuiOutlinedInput-root': { minHeight: 40, height: 'auto', borderRadius: 1, backgroundColor: '#fff', flexWrap: 'nowrap' },
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#444' },
-                          '& .MuiAutocomplete-input': { minWidth: 0, padding: '8px 10px !important', fontSize: 14, color: '#000', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' },
-                          '& .MuiFormHelperText-root': { mx: 0 },
-                        }}
-                      />
-                    )}
-                  />
+                  
+<Autocomplete
+  options={customers}
+  value={customers.find((customer) => customer.id === customerId) || null}
+  onChange={(_, customer) => {
+    setCustomerId(customer?.id || '')
+    setCustomerName(customer?.companyName || '')
+  }}
+  getOptionLabel={(customer) =>
+    typeof customer === 'string'
+      ? customer
+      : customer?.companyName || ''
+  }
+  isOptionEqualToValue={(option, value) =>
+    option.id === value.id
+  }
+  renderOption={(props, customer) => (
+    <li {...props}>
+      <Box
+        sx={{
+          whiteSpace: 'normal',
+          overflowWrap: 'anywhere',
+          lineHeight: 1.4,
+        }}
+      >
+        {customer.companyName}
+      </Box>
+    </li>
+  )}
+  loading={customersLoading}
+  loadingText="Loading customers..."
+  noOptionsText={
+    customersError
+      ? 'Unable to load customers'
+      : 'No customers available'
+  }
+  fullWidth
+  renderInput={(params) => (
+    <TextField
+      {...params}
+      placeholder={
+        customersLoading
+          ? 'Loading customers...'
+          : 'Select a customer'
+      }
+      error={Boolean(customersError)}
+      helperText={
+        customersError ||
+        (!customersLoading && customers.length === 0
+          ? 'No customers are saved in Sales yet.'
+          : '')
+      }
+      sx={{
+        '& .MuiOutlinedInput-root': {
+          minHeight: 40,
+          height: 'auto',
+          borderRadius: 1,
+          backgroundColor: '#fff',
+          flexWrap: 'nowrap',
+        },
+        '& .MuiOutlinedInput-notchedOutline': {
+          borderColor: '#444',
+        },
+        '& .MuiAutocomplete-input': {
+          minWidth: 0,
+          padding: '8px 10px !important',
+          fontSize: 14,
+          color: '#000',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+        },
+        '& .MuiFormHelperText-root': {
+          mx: 0,
+        },
+      }}
+    />
+  )}
+/>
+
                 </Box>
 
                 <Box>

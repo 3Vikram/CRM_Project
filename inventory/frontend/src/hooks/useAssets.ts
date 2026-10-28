@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getInventorySessionToken } from '@/lib/inventoryAuth'
 
 export interface Asset {
   id: string
@@ -127,12 +128,19 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 export interface InventoryCustomerOption {
   id: string
-  customerName: string
+  companyName: string
 }
 
 export async function fetchInventoryCustomers(): Promise<InventoryCustomerOption[]> {
-  const response = await fetch(`${API_URL}/api/customers/inventory-options`)
-  const result: { success?: boolean; data?: InventoryCustomerOption[]; message?: string } = await response
+  const token = getInventorySessionToken()
+  if (!token) {
+    throw new Error('Inventory sign-in required. Please sign in to Inventory again.')
+  }
+
+  const response = await fetch(`${API_URL}/api/customers/inventory-options`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const result: { success?: boolean; data?: Array<{ id?: string; companyName?: string }>; message?: string } = await response
     .json()
     .catch(() => ({}))
 
@@ -143,7 +151,14 @@ export async function fetchInventoryCustomers(): Promise<InventoryCustomerOption
     throw new Error('Customer list response was invalid.')
   }
 
-  return result.data
+  return result.data.map((customer) => {
+    const id = customer.id?.trim()
+    const companyName = customer.companyName?.trim()
+    if (!id || !companyName) {
+      throw new Error('Customer list response did not include a customer ID and company name.')
+    }
+    return { id, companyName }
+  })
 }
 
 export function triggerInventoryRefresh() {

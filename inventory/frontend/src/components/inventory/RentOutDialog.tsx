@@ -162,7 +162,7 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
             if (field.key === 'customerName') {
               const selectedCustomer =
                 customers.find((customer) => customer.id === values.customerId) ||
-                customers.find((customer) => customer.customerName === values.customerName) ||
+                customers.find((customer) => customer.companyName === values.customerName) ||
                 null
 
               return (
@@ -174,15 +174,15 @@ export function RentOutDialog({ open, asset, onClose, onSubmit, submitLabel = 'U
                       setValues((current) => ({
                         ...current,
                         customerId: customer?.id || '',
-                        customerName: customer?.customerName || '',
+                        customerName: customer?.companyName || '',
                       }))
                     }}
-                    getOptionLabel={(customer) => customer.customerName}
+                    getOptionLabel={(option) => option.companyName || ''}
                     isOptionEqualToValue={(option, value) => option.id === value.id}
                     renderOption={(props, customer) => (
                       <li {...props}>
                         <Box sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.4 }}>
-                          {customer.customerName}
+                          {customer.companyName || ''}
                         </Box>
                       </li>
                     )}

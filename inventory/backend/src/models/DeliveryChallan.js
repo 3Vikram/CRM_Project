@@ -50,6 +50,30 @@ const DeliveryChallanItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const DeliveryChallanCustomerSchema = new mongoose.Schema(
+  {
+    name: { type: String, default: '', trim: true },
+    addressLine1: { type: String, default: '', trim: true },
+    area: { type: String, default: '', trim: true },
+    city: { type: String, default: '', trim: true },
+    state: { type: String, default: '', trim: true },
+    pincode: { type: String, default: '', trim: true },
+    country: { type: String, default: '', trim: true },
+    gstNumber: { type: String, default: '', trim: true },
+    email: { type: String, default: '', trim: true },
+    shipToSameAsBilling: { type: Boolean, default: true },
+    shipToAddress: {
+      addressLine1: { type: String, default: '', trim: true },
+      area: { type: String, default: '', trim: true },
+      city: { type: String, default: '', trim: true },
+      state: { type: String, default: '', trim: true },
+      pincode: { type: String, default: '', trim: true },
+      country: { type: String, default: '', trim: true },
+    },
+  },
+  { _id: false }
+);
+
 const DeliveryChallanSchema = new mongoose.Schema(
   {
     challanNumber: {
@@ -62,6 +86,15 @@ const DeliveryChallanSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    customerId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    customer: {
+      type: DeliveryChallanCustomerSchema,
+      default: () => ({}),
     },
     contactPerson: {
       type: String,

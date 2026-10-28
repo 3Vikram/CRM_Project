@@ -51,7 +51,8 @@ const RETRY_MAX_DELAY_MS = 30_000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/uploads/documents', express.static(path.resolve(serverDirectory, '../uploads/documents')));
+app.use('/uploads/products', express.static(path.resolve(serverDirectory, '../uploads/products')));
 
 app.use('/api/inventory/auth', inventoryAuthRoutes);
 app.use('/api/inventory', requireInventoryAuth);
