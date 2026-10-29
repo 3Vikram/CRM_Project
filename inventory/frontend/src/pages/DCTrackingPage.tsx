@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
+import { Autocomplete, TextField } from '@mui/material'
 import { Download, Plus, Save, Trash2, RotateCcw, User, Package, Eye, Pencil } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
@@ -294,6 +295,17 @@ const mapChallanToDashboardRow = (challan: DeliveryChallanRecord): DashboardRow 
   status: challan.status || '—',
 })
 
+const isCustomerOptionsResponse = (data: unknown): data is { options: string[]; total: number } =>
+  Boolean(
+    data &&
+      typeof data === 'object' &&
+      'options' in data &&
+      Array.isArray(data.options) &&
+      data.options.every((option: unknown) => typeof option === 'string') &&
+      'total' in data &&
+      typeof data.total === 'number'
+  )
+
 export default function DCTrackingPage() {
   const opfFetchSequence = useRef(0)
   const [opfOptions, setOpfOptions] = useState<SalesOPFRecord[]>([])
@@ -306,6 +318,14 @@ export default function DCTrackingPage() {
   const [rows, setRows] = useState<ProductRow[]>([createEmptyRow()])
   const [dcRows, setDcRows] = useState<DashboardRow[]>([])
   const [statusFilter, setStatusFilter] = useState('')
+  const [customerNameFilter, setCustomerNameFilter] = useState('')
+  const [customerFilterInput, setCustomerFilterInput] = useState('')
+  const [customerFilterOptions, setCustomerFilterOptions] = useState<string[]>([])
+  const [customerFilterOpen, setCustomerFilterOpen] = useState(false)
+  const [customerFilterLoading, setCustomerFilterLoading] = useState(false)
+  const [customerFilterError, setCustomerFilterError] = useState('')
+  const [customerFilterPage, setCustomerFilterPage] = useState(0)
+  const [customerFilterHasMore, setCustomerFilterHasMore] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingDcId, setEditingDcId] = useState<string | null>(null)
   const [form, setForm] = useState<DeliveryChallanForm>(emptyForm)
@@ -351,21 +371,6 @@ export default function DCTrackingPage() {
       }
     }
 
-    const fetchDeliveryChallans = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/delivery-challans`)
-        if (!response.ok) throw new Error('Unable to fetch delivery challans')
-        const data = await response.json() as DeliveryChallanRecord[]
-        if (!Array.isArray(data)) throw new Error('Invalid delivery challan response')
-        setDcRows(data.map(mapChallanToDashboardRow))
-      } catch (error) {
-        setToastType('error')
-        setToastMessage(error instanceof Error ? error.message : 'Unable to fetch delivery challans')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     const fetchCustomerOptions = async () => {
       try {
         setCustomerOptions(await fetchSalesCustomerOptions())
@@ -393,8 +398,91 @@ export default function DCTrackingPage() {
     void fetchOPFs()
     void fetchCustomerOptions()
     void fetchProducts()
-    void fetchDeliveryChallans()
   }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        const query = new URLSearchParams()
+        if (customerNameFilter.trim()) query.set('customerName', customerNameFilter.trim())
+        if (statusFilter) query.set('status', statusFilter)
+        const queryString = query.toString()
+        const response = await fetch(
+          `${API_URL}/api/delivery-challans${queryString ? `?${queryString}` : ''}`,
+          { signal: controller.signal }
+        )
+        if (!response.ok) throw new Error('Unable to fetch delivery challans')
+        const data = await response.json() as DeliveryChallanRecord[]
+        if (!Array.isArray(data)) throw new Error('Invalid delivery challan response')
+        setDcRows(data.map(mapChallanToDashboardRow))
+      } catch (error) {
+        if (controller.signal.aborted) return
+        setToastType('error')
+        setToastMessage(error instanceof Error ? error.message : 'Unable to fetch delivery challans')
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false)
+      }
+    }, customerNameFilter.trim() ? 250 : 0)
+
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [customerNameFilter, statusFilter])
+
+  useEffect(() => {
+    setCustomerFilterInput(customerNameFilter)
+  }, [customerNameFilter])
+
+  useEffect(() => {
+    if (!customerFilterOpen) return
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        setCustomerFilterLoading(true)
+        const query = new URLSearchParams({
+          search: customerFilterInput.trim(),
+          page: String(customerFilterPage),
+          pageSize: '50',
+        })
+        const response = await fetch(`${API_URL}/api/delivery-challans/customers?${query}`, {
+          signal: controller.signal,
+        })
+        const data: unknown = await response.json().catch(() => null)
+        if (!response.ok) {
+          const message =
+            data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+              ? data.error
+              : `Request failed with status ${response.status}`
+          throw new Error(`Unable to load customer names: ${message}`)
+        }
+        if (!isCustomerOptionsResponse(data)) {
+          throw new Error('The customer-name API returned an invalid response.')
+        }
+
+        setCustomerFilterOptions((current) => customerFilterPage === 0
+          ? data.options
+          : [...new Set([...current, ...data.options])])
+        setCustomerFilterHasMore((customerFilterPage + 1) * 50 < data.total)
+        setCustomerFilterError('')
+      } catch (error) {
+        if (controller.signal.aborted) return
+        setCustomerFilterOptions([])
+        setCustomerFilterHasMore(false)
+        setCustomerFilterError(error instanceof Error ? error.message : 'Unable to load customer names.')
+      } finally {
+        if (!controller.signal.aborted) setCustomerFilterLoading(false)
+      }
+    }, customerFilterPage === 0 ? 250 : 0)
+
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [customerFilterInput, customerFilterOpen, customerFilterPage])
 
   const contactSuggestions = useMemo(() => {
     const matchedCustomer = customerOptions.find((customer) => customer.id === form.customerId)
@@ -404,8 +492,19 @@ export default function DCTrackingPage() {
   }, [customerOptions, form.customerId, form.customerName])
 
   const filteredRows = dcRows.filter((row) => {
-    return !statusFilter || row.status === statusFilter
+    const normalizedCustomerName = customerNameFilter.trim().toLowerCase()
+    const matchesCustomer =
+      !normalizedCustomerName || row.customerName.toLowerCase().includes(normalizedCustomerName)
+    return matchesCustomer && (!statusFilter || row.status === statusFilter)
   })
+
+  const handleCustomerFilterListboxScroll = (event: UIEvent<HTMLElement>) => {
+    const listbox = event.currentTarget
+    const nearBottom = listbox.scrollTop + listbox.clientHeight >= listbox.scrollHeight - 24
+    if (nearBottom && customerFilterHasMore && !customerFilterLoading) {
+      setCustomerFilterPage((current) => current + 1)
+    }
+  }
 
   const downloadReport = async () => {
     try {
@@ -492,7 +591,7 @@ export default function DCTrackingPage() {
     )
   }
 
-  const addRow = () => {
+    const addRow = () => {
     setRows((prev) => [...prev, createEmptyRow()])
   }
 
@@ -556,7 +655,13 @@ export default function DCTrackingPage() {
       if (!response.ok) throw new Error(data.error || 'Unable to delete delivery challan')
 
       setDcRows((prev) => prev.filter((challan) => challan.id !== row.id))
-      const listResponse = await fetch(`${API_URL}/api/delivery-challans`)
+      const query = new URLSearchParams()
+      if (customerNameFilter.trim()) query.set('customerName', customerNameFilter.trim())
+      if (statusFilter) query.set('status', statusFilter)
+      const queryString = query.toString()
+      const listResponse = await fetch(
+        `${API_URL}/api/delivery-challans${queryString ? `?${queryString}` : ''}`
+      )
       const challans = await listResponse.json().catch(() => [])
       if (!listResponse.ok || !Array.isArray(challans)) {
         throw new Error('Delivery challan was deleted, but the dashboard could not be refreshed.')
@@ -845,6 +950,61 @@ export default function DCTrackingPage() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-[#E7E3DA] bg-white p-4 shadow-sm">
+        <Autocomplete
+          freeSolo
+          open={customerFilterOpen}
+          onOpen={() => {
+            setCustomerFilterOptions([])
+            setCustomerFilterPage(0)
+            setCustomerFilterOpen(true)
+          }}
+          onClose={() => setCustomerFilterOpen(false)}
+          openOnFocus
+          options={customerFilterOptions}
+          value={customerNameFilter}
+          inputValue={customerFilterInput}
+          loading={customerFilterLoading}
+          loadingText="Loading customer names..."
+          filterOptions={(availableOptions) => availableOptions}
+          onChange={(_, selectedValue) => {
+            const selected = String(selectedValue || '')
+            setCustomerFilterInput(selected)
+            setCustomerNameFilter(selected)
+            setCustomerFilterPage(0)
+          }}
+          onInputChange={(_, nextValue, reason) => {
+            setCustomerFilterInput(nextValue)
+            if (reason === 'input' || reason === 'clear') {
+              setCustomerFilterOptions([])
+              setCustomerFilterPage(0)
+              setCustomerNameFilter(nextValue)
+            }
+          }}
+          slotProps={{
+            popper: { sx: { zIndex: 1500 } },
+            listbox: { onScroll: handleCustomerFilterListboxScroll },
+          }}
+          noOptionsText={customerFilterError || 'No matching customers'}
+          sx={{ width: '100%', maxWidth: { sm: 256 }, flex: { sm: '0 1 256px' } }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Customer Name"
+              error={Boolean(customerFilterError)}
+              helperText={customerFilterError || ' '}
+              sx={{
+                '& .MuiInputBase-root': {
+                  borderRadius: '0.75rem',
+                  backgroundColor: '#FFFFFF',
+                  minHeight: 44,
+                  fontSize: '0.875rem',
+                },
+                '& .MuiInputLabel-root': { fontSize: '0.875rem' },
+                '& .MuiFormHelperText-root': { display: customerFilterError ? 'block' : 'none' },
+              }}
+            />
+          )}
+        />
         <label className="w-full text-sm font-medium text-gray-700 sm:w-56">
           Status
           <select

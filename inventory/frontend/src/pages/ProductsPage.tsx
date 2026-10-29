@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type UIEvent } from 'react'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   CircularProgress,
@@ -81,53 +82,47 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
   const [productNameFilter, setProductNameFilter] = useState('')
   const [descriptionFilter, setDescriptionFilter] = useState('')
   const [pageSize, setPageSize] = useState(10)
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
+  const [totalProducts, setTotalProducts] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
-  const fetchProducts = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`${API_URL}/api/products`)
-      if (!response.ok) throw new Error('Failed to fetch products')
-      const data = await response.json()
-      setProducts(data)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch products')
-      setProducts([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    void fetchProducts()
-  }, [])
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        setLoading(true)
+        const query = new URLSearchParams({
+          page: String(paginationModel.page),
+          pageSize: String(paginationModel.pageSize),
+          productName: productNameFilter.trim(),
+          description: descriptionFilter.trim(),
+        })
+        const response = await fetch(`${API_URL}/api/products?${query}`, { signal: controller.signal })
+        if (!response.ok) throw new Error('Failed to fetch products')
+        const data: { products: Product[]; total: number } = await response.json()
+        setProducts(data.products)
+        setTotalProducts(data.total)
+        setError(null)
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setError(err instanceof Error ? err.message : 'Failed to fetch products')
+        setProducts([])
+        setTotalProducts(0)
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }, 250)
 
-  const filteredRows = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase()
-    const normalizedProductName = productNameFilter.trim().toLowerCase()
-    const normalizedDescription = descriptionFilter.trim().toLowerCase()
-
-    return products.filter((product) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        [product.productName, product.productModel || '', product.description, product.hsnSac, String(product.gst), String(product.price)]
-          .join(' ')
-          .toLowerCase()
-          .includes(normalizedSearch)
-
-      const matchesProductName = !normalizedProductName || product.productName.toLowerCase().includes(normalizedProductName)
-      const matchesDescription = !normalizedDescription || product.description.toLowerCase().includes(normalizedDescription)
-
-      return matchesSearch && matchesProductName && matchesDescription
-    })
-  }, [products, productNameFilter, descriptionFilter, search])
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [paginationModel, productNameFilter, descriptionFilter, refreshKey])
 
   const columns: GridColDef[] = [
     {
@@ -223,7 +218,7 @@ export default function ProductsPage() {
     },
   ]
 
-  const rows = filteredRows.map((product) => ({
+  const rows = useMemo(() => products.map((product) => ({
     id: product.id,
     productName: product.productName || '-',
     description: product.description || '-',
@@ -232,7 +227,7 @@ export default function ProductsPage() {
     price: product.price ? formatCurrency(product.price) : '-',
     createdDate: product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '-',
     product,
-  }))
+  })), [products])
 
   const deleteProduct = async (id: string) => {
     try {
@@ -246,20 +241,39 @@ export default function ProductsPage() {
       }
 
       setError(null)
-      await fetchProducts()
+      setRefreshKey((key) => key + 1)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete product')
     }
   }
 
   const handleDownloadReport = async () => {
-    await downloadExcelReport({
-      fileName: 'products-report.xlsx',
-      sheetName: 'Products',
-      headers: ['Product Name', 'Description', 'HSN/SAC', 'GST', 'Price', 'Created Date'],
-      rows: rows.map((row) => [row.productName, row.description, row.hsnSac, row.gst, row.price, row.createdDate]),
-      wideColumns: [0, 1],
-    })
+    try {
+      const query = new URLSearchParams({
+        productName: productNameFilter.trim(),
+        description: descriptionFilter.trim(),
+      })
+      const response = await fetch(`${API_URL}/api/products?${query}`)
+      if (!response.ok) throw new Error('Failed to fetch products for the report')
+      const reportProducts: Product[] = await response.json()
+      await downloadExcelReport({
+        fileName: 'products-report.xlsx',
+        sheetName: 'Products',
+        headers: ['Product Name', 'Description', 'HSN/SAC', 'GST', 'Price', 'Created Date'],
+        rows: reportProducts.map((product) => [
+          product.productName || '-',
+          product.description || '-',
+          product.hsnSac || '-',
+          formatGstForDisplay(String(product.gst || '')),
+          product.price ? formatCurrency(product.price) : '-',
+          product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '-',
+        ]),
+        wideColumns: [0, 1],
+      })
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download the product report')
+    }
   }
 
   return (
@@ -283,11 +297,15 @@ export default function ProductsPage() {
       <Paper elevation={0} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', border: '1px solid #E8EEF5', borderRadius: 3, backgroundColor: '#FFFFFF', boxShadow: '0 12px 28px rgba(15, 36, 56, 0.04)', p: { xs: 2, md: 2.5 } }}>
         <Grid container spacing={2} sx={{ width: '100%', maxWidth: '100%', alignItems: 'center' }}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
-              fullWidth
+            <ProductFilterAutocomplete
+              field="productName"
               label="Product Name"
               value={productNameFilter}
-              onChange={(event) => setProductNameFilter(event.target.value)}
+              onChange={(value) => {
+                setProductNameFilter(value)
+                setPaginationModel((model) => ({ ...model, page: 0 }))
+              }}
+              refreshKey={refreshKey}
               sx={{
                 '& .MuiInputBase-root': { borderRadius: 2, minHeight: 48, fontSize: '15px' },
                 '& .MuiInputLabel-root': { fontSize: '15px' },
@@ -296,11 +314,15 @@ export default function ProductsPage() {
           </Grid>
 
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
-              fullWidth
+            <ProductFilterAutocomplete
+              field="description"
               label="Product Description"
               value={descriptionFilter}
-              onChange={(event) => setDescriptionFilter(event.target.value)}
+              onChange={(value) => {
+                setDescriptionFilter(value)
+                setPaginationModel((model) => ({ ...model, page: 0 }))
+              }}
+              refreshKey={refreshKey}
               sx={{
                 '& .MuiInputBase-root': { borderRadius: 2, minHeight: 48, fontSize: '15px' },
                 '& .MuiInputLabel-root': { fontSize: '15px' },
@@ -349,7 +371,8 @@ export default function ProductsPage() {
                 rows={rows}
                 columns={columns}
                 pagination
-                paginationMode="client"
+                paginationMode="server"
+                rowCount={totalProducts}
                 pageSizeOptions={[10, 25, 50, 100]}
                 paginationModel={paginationModel}
                 onPaginationModelChange={(model) => {
@@ -375,7 +398,7 @@ export default function ProductsPage() {
                       }}
                     >
                       <Typography variant="body2" sx={{ fontWeight: 700, color: '#06283D' }}>
-                        Total Products: {filteredRows.length}
+                        Total Products: {totalProducts}
                       </Typography>
 
                       <GridFooterContainer sx={{ borderTop: 0 }}>
@@ -451,10 +474,175 @@ export default function ProductsPage() {
         onClose={() => setIsDialogOpen(false)}
         onSaved={async () => {
           setIsDialogOpen(false)
-          await fetchProducts()
+          setRefreshKey((key) => key + 1)
         }}
       />
     </Box>
+  )
+}
+
+function ProductFilterAutocomplete({
+  field,
+  label,
+  value,
+  onChange,
+  refreshKey,
+  sx,
+}: {
+  field: 'productName' | 'description'
+  label: string
+  value: string
+  onChange: (value: string) => void
+  refreshKey: number
+  sx: object
+}) {
+  const [inputValue, setInputValue] = useState(value)
+  const [options, setOptions] = useState<string[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [optionError, setOptionError] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const pageSize = 50
+
+  useEffect(() => {
+    setInputValue(value)
+  }, [value])
+
+  useEffect(() => {
+    if (!open) return
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        setLoading(true)
+        const query = new URLSearchParams({
+          field,
+          search: inputValue.trim(),
+          page: String(page),
+          pageSize: String(pageSize),
+        })
+        const requestUrl = `${API_URL}/api/products/options?${query}`
+        const response = await fetch(requestUrl, { signal: controller.signal })
+        const data: unknown = await response.json().catch(() => null)
+        if (!response.ok) {
+          const message =
+            data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+              ? data.error
+              : `Request failed with status ${response.status}`
+          throw new Error(`Failed to load ${label.toLowerCase()} options: ${message}`)
+        }
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          !('options' in data) ||
+          !Array.isArray(data.options) ||
+          !data.options.every((option: unknown) => typeof option === 'string') ||
+          !('total' in data) ||
+          typeof data.total !== 'number'
+        ) {
+          throw new Error(`The product options API returned an invalid response for ${field}`)
+        }
+
+        const nextOptions = page === 0 ? data.options : [...new Set([...options, ...data.options])]
+        if (import.meta.env.DEV) {
+          console.debug('[ProductsPage] Product filter options response', {
+            field,
+            requestUrl,
+            status: response.status,
+            optionCount: data.options.length,
+            total: data.total,
+            page,
+          })
+          console.debug('[ProductsPage] Options passed to Autocomplete', {
+            field,
+            optionCount: nextOptions.length,
+          })
+        }
+        setOptions(nextOptions)
+        setHasMore((page + 1) * pageSize < data.total)
+        setOptionError(null)
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setOptions([])
+        setHasMore(false)
+        const message = err instanceof Error ? err.message : `Failed to load ${label.toLowerCase()} options`
+        if (import.meta.env.DEV) console.error(`[ProductsPage] ${field} options request failed`, message)
+        setOptionError(message)
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }, page === 0 ? 250 : 0)
+
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [field, inputValue, label, open, page, refreshKey])
+
+  const handleListboxScroll = (event: UIEvent<HTMLElement>) => {
+    const listbox = event.currentTarget
+    const nearBottom = listbox.scrollTop + listbox.clientHeight >= listbox.scrollHeight - 24
+    if (nearBottom && hasMore && !loading) setPage((current) => current + 1)
+  }
+
+  return (
+    <Autocomplete
+      freeSolo
+      fullWidth
+      open={open}
+      disablePortal={false}
+      onFocus={() => setOpen(true)}
+      onClick={() => {
+        if (!open) setOpen(true)
+      }}
+      onOpen={() => {
+        setOptions([])
+        setPage(0)
+        setOpen(true)
+      }}
+      onClose={() => setOpen(false)}
+      openOnFocus
+      options={options}
+      value={value}
+      inputValue={inputValue}
+      loading={loading}
+      loadingText={`Loading ${label.toLowerCase()} options...`}
+      filterOptions={(availableOptions) => availableOptions}
+      onChange={(_, selectedValue) => {
+        const nextValue = String(selectedValue || '')
+        setInputValue(nextValue)
+        onChange(nextValue)
+        setPage(0)
+      }}
+      onInputChange={(_, nextValue, reason) => {
+        setInputValue(nextValue)
+        if (reason === 'input' || reason === 'clear') {
+          setOptions([])
+          setPage(0)
+          onChange(nextValue)
+        }
+      }}
+      slotProps={{
+        popper: { sx: { zIndex: 1500 } },
+        listbox: { onScroll: handleListboxScroll },
+      }}
+      noOptionsText={loading ? 'Loading...' : `No ${label.toLowerCase()} options found`}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          fullWidth
+          label={label}
+          error={Boolean(optionError)}
+          helperText={optionError}
+          sx={{
+            '& .MuiInputBase-root': { borderRadius: 2, minHeight: 48, fontSize: '15px' },
+            '& .MuiInputLabel-root': { fontSize: '15px' },
+            ...sx,
+          }}
+        />
+      )}
+    />
   )
 }
 

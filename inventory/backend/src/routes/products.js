@@ -44,25 +44,118 @@ const normalizeProduct = (product) => ({
   },
 });
 
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const MAX_PAGE_SIZE = 100;
+
+const getPagination = (query) => {
+  const page = Number(query.page ?? 0);
+  const pageSize = Number(query.pageSize ?? 50);
+
+  if (!Number.isInteger(page) || page < 0 || !Number.isInteger(pageSize) || pageSize < 1) {
+    return null;
+  }
+
+  return { page, pageSize: Math.min(pageSize, MAX_PAGE_SIZE) };
+};
+
+router.get('/options', async (req, res) => {
+  try {
+    const field = String(req.query.field || '');
+    if (field !== 'productName' && field !== 'description') {
+      return res.status(400).json({ error: 'Field must be productName or description' });
+    }
+
+    const pagination = getPagination(req.query);
+    if (!pagination) {
+      return res.status(400).json({ error: 'Invalid pagination parameters' });
+    }
+
+    const search = String(req.query.search || '').trim();
+    const match = { isActive: { $ne: false }, [field]: { $type: 'string', $ne: '' } };
+    if (search) {
+      match[field].$regex = escapeRegex(search);
+      match[field].$options = 'i';
+    }
+
+    const [result] = await Product.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $toLower: { $trim: { input: `$${field}` } } },
+          value: { $first: { $trim: { input: `$${field}` } } },
+        },
+      },
+      { $match: { _id: { $ne: '' } } },
+      {
+        $facet: {
+          options: [
+            { $sort: { _id: 1 } },
+            { $skip: pagination.page * pagination.pageSize },
+            { $limit: pagination.pageSize },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ]);
+
+    res.json({
+      options: result.options.map(({ value }) => value),
+      total: result.total[0]?.count || 0,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    });
+  } catch (error) {
+    console.error('Error fetching product filter options:', error);
+    res.status(500).json({ error: 'Failed to fetch product filter options' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
-    const { search = '', minPrice, maxPrice } = req.query;
+    const { search = '', minPrice, maxPrice, productName, description } = req.query;
 
     const filters = { isActive: { $ne: false } };
     const text = String(search || '').trim();
 
     if (text) {
+      const regex = { $regex: escapeRegex(text), $options: 'i' };
       filters.$or = [
-        { productName: { $regex: text, $options: 'i' } },
-        { description: { $regex: text, $options: 'i' } },
-        { hsnSac: { $regex: text, $options: 'i' } },
+        { productName: regex },
+        { description: regex },
+        { hsnSac: regex },
       ];
     }
+
+    const normalizedProductName = String(productName || '').trim();
+    const normalizedDescription = String(description || '').trim();
+    if (normalizedProductName) filters.productName = { $regex: escapeRegex(normalizedProductName), $options: 'i' };
+    if (normalizedDescription) filters.description = { $regex: escapeRegex(normalizedDescription), $options: 'i' };
 
     if (minPrice || maxPrice) {
       filters.price = {};
       if (minPrice) filters.price.$gte = Number(minPrice);
       if (maxPrice) filters.price.$lte = Number(maxPrice);
+    }
+
+    const isPaginated = req.query.page !== undefined || req.query.pageSize !== undefined;
+    if (isPaginated) {
+      const pagination = getPagination(req.query);
+      if (!pagination) return res.status(400).json({ error: 'Invalid pagination parameters' });
+
+      const [products, total] = await Promise.all([
+        Product.find(filters)
+          .sort({ productName: 1, createdAt: -1 })
+          .skip(pagination.page * pagination.pageSize)
+          .limit(pagination.pageSize),
+        Product.countDocuments(filters),
+      ]);
+
+      return res.json({
+        products: products.map(normalizeProduct),
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      });
     }
 
     const products = await Product.find(filters).sort({ productName: 1, createdAt: -1 });

@@ -1,9 +1,8 @@
 import express from 'express';
-import { Asset } from '../models/Asset.js';
-import { AssetMovement } from '../models/AssetMovement.js';
 import { DeliveryChallan } from '../models/DeliveryChallan.js';
 
 const router = express.Router();
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const getNextChallanNumber = async () => {
   const year = new Date().getFullYear();
@@ -122,33 +121,63 @@ const validateChallanFields = (fields) => {
   }
 };
 
-router.get('/customers', async (_req, res) => {
+router.get('/customers', async (req, res) => {
   try {
-    const [assetCustomers, movementCustomers] = await Promise.all([
-      Asset.distinct('customerName', { customerName: { $exists: true, $ne: '' } }),
-      AssetMovement.distinct('customerName', { customerName: { $exists: true, $ne: '' } }),
+    const search = String(req.query.search || '').trim();
+    const page = Number(req.query.page ?? 0);
+    const requestedPageSize = Number(req.query.pageSize ?? 50);
+    if (!Number.isInteger(page) || page < 0 || !Number.isInteger(requestedPageSize) || requestedPageSize < 1) {
+      return res.status(400).json({ error: 'Invalid pagination parameters' });
+    }
+    const pageSize = Math.min(requestedPageSize, 100);
+    const match = { customerName: { $type: 'string', $ne: '' } };
+    if (search) {
+      match.customerName.$regex = escapeRegex(search);
+      match.customerName.$options = 'i';
+    }
+
+    const [result] = await DeliveryChallan.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $toLower: { $trim: { input: '$customerName' } } },
+          name: { $first: { $trim: { input: '$customerName' } } },
+        },
+      },
+      { $match: { _id: { $ne: '' } } },
+      {
+        $facet: {
+          options: [
+            { $sort: { _id: 1 } },
+            { $skip: page * pageSize },
+            { $limit: pageSize },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
     ]);
 
-    const customerNames = [...new Set([...assetCustomers, ...movementCustomers].filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-
-    const data = customerNames.map((name) => ({
-      id: name,
-      name,
-      contact: name,
-    }));
-
-    res.json(data);
+    res.json({
+      options: result.options.map(({ name }) => name),
+      total: result.total[0]?.count || 0,
+      page,
+      pageSize,
+    });
   } catch (error) {
     console.error('Error fetching delivery challan customers:', error);
     res.status(500).json({ error: 'Failed to fetch customers' });
   }
 });
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const challans = await DeliveryChallan.find().sort({ createdAt: -1 }).limit(25).lean();
+    const filters = {};
+    const customerName = String(req.query.customerName || '').trim();
+    const status = String(req.query.status || '').trim();
+    if (customerName) filters.customerName = { $regex: escapeRegex(customerName), $options: 'i' };
+    if (status) filters.status = status;
+
+    const challans = await DeliveryChallan.find(filters).sort({ createdAt: -1 }).limit(25).lean();
     res.json(challans.map((challan) => ({
       ...challan,
       id: challan._id.toString(),
