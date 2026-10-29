@@ -353,7 +353,6 @@ export default function OPFGenerateFormPage() {
       formData.append('enduserAddress', enduserAddress)
       formData.append('billToAddress', billToAddress)
       formData.append('shipToAddress', shipToAddress)
-      if (!isEditMode) formData.append('createdBy', window.localStorage.getItem('userName') || 'Admin')
       if (customerPOFile) formData.append('customerPOFile', customerPOFile)
 
       // Append all uploaded documents

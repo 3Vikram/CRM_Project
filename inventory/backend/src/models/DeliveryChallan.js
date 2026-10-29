@@ -82,6 +82,8 @@ const DeliveryChallanSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    createdBy: { type: String, default: 'System', trim: true },
+    createdById: { type: String, default: '', trim: true, index: true },
     customerName: {
       type: String,
       required: true,

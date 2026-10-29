@@ -13,6 +13,7 @@ const emailLogSchema = new mongoose.Schema(
     sentAt: { type: Date, default: Date.now },
     errorMessage: { type: String, default: '' },
     senderEmail: { type: String, default: '', trim: true, lowercase: true },
+    recipientId: { type: String, default: '', unique: true, sparse: true, index: true },
     trackingId: { type: String, default: '', unique: true, sparse: true, index: true },
     trackingToken: { type: String, default: '', unique: true, sparse: true, index: true },
     openedAt: { type: Date, default: null },

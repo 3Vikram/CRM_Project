@@ -239,7 +239,6 @@ function InwardAssetDrawer({ onClose, onSuccess }: { onClose: () => void; onSucc
         price: form.price ? Number(form.price) : 0,
         warrantyExpiry: form.warrantyExpiry || undefined,
         location: form.location,
-        createdBy: 'System',
       })
 
       onSuccess('Inward recorded successfully.')

@@ -1,6 +1,6 @@
 const Activity = require('../models/Activity');
 const Lead = require('../models/Lead');
-const { ownerScope, creatorFields } = require('../utils/accessScope');
+const { ownerScope, creatorFields, resolveCreatorNames } = require('../utils/accessScope');
 
 const buildTimeline = (title, description, type = 'info') => ({
   title,
@@ -40,6 +40,7 @@ const normalizeActivity = (activity) => ({
   reminder: activity.reminder || '',
   status: activity.status || 'Open',
   createdBy: activity.createdBy || 'Current User',
+  createdById: activity.createdById || '',
   lastModifiedBy: activity.lastModifiedBy || 'Current User',
 });
 
@@ -121,6 +122,7 @@ exports.getActivities = async (req, res) => {
       sortOrder = 'desc',
       status = '',
       createdBy = '',
+      createdById = '',
       customerName = '',
       activityDatePreset = '',
       followUpPreset = '',
@@ -131,7 +133,16 @@ exports.getActivities = async (req, res) => {
 
     const query = { deletedAt: null };
     if (status) query.status = status;
-    if (createdBy) query.createdBy = createdBy;
+    if (createdById) {
+      query.$and = [{
+        $or: [
+          { createdById },
+          { createdById: { $in: [null, ''] }, createdBy },
+        ],
+      }];
+    } else if (createdBy) {
+      query.createdBy = createdBy;
+    }
     if (customerName) query.customerName = customerName;
     if (response) query.response = response;
     if (activityId) query.activityId = activityId;
@@ -171,7 +182,7 @@ exports.getActivities = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: activities.map(normalizeActivity),
+      data: await resolveCreatorNames(activities.map(normalizeActivity)),
       pagination: {
         total,
         page: pageNum,
@@ -188,7 +199,7 @@ exports.getActivityById = async (req, res) => {
   try {
     const activity = await Activity.findOne({ $and: [{ _id: req.params.id, deletedAt: null }, ownerScope(req)] }).lean();
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
-    res.status(200).json({ success: true, data: normalizeActivity(activity) });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(normalizeActivity(activity)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || 'Unable to load activity' });
   }

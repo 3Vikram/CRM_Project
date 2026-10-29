@@ -122,7 +122,6 @@ export default function MailCampaignFormPage() {
     formData.append('campaignBody', campaignBody)
     formData.append('footer', footer)
     formData.append('status', action)
-    formData.append('createdBy', typeof window !== 'undefined' ? (window.localStorage.getItem('userName') || window.localStorage.getItem('name') || 'Admin') : 'Admin')
     formData.append('createdDate', new Date().toISOString().split('T')[0])
     formData.append('batchName', batchName)
     formData.append('batchNumber', batchNumber ? String(batchNumber) : '')

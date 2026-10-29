@@ -20,5 +20,5 @@ bash deploy/update.sh
 
 - Backend process logs: `pm2 logs`
 - Nginx errors: `sudo tail -f /var/log/nginx/error.log`
-- Set `TRACKING_BASE_URL` in `sales/backend/.env` to the server's public address, for example `http://<server-ip>`.
+- Set `MAIL_TRACKING_BASE_URL` in `sales/backend/.env` to the public HTTPS hostname configured in DNS and nginx (for example `https://crm.example.com`), without a trailing slash. It must proxy `/api/mail-campaigns/track/open/:trackingId` to port 5001. A reachable Quick Tunnel is suitable for development only; use a stable custom hostname or named Cloudflare Tunnel for production.
 - Add the server's public IP to MongoDB Atlas > Network Access.

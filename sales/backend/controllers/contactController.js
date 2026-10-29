@@ -7,6 +7,7 @@ const { resolveCustomerCreator } = require('../services/customerCreator');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = require('../utils/queryUtils');
+const { resolveCreatorNames } = require('../utils/accessScope');
 
 const normalizePhone = (value = '') => value.replace(/[^\d+]/g, '').trim();
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -79,6 +80,8 @@ const normalizeContactRecord = (contact = {}) => {
   normalized.mail = source.mail || '';
   normalized.contactNumber = source.contactNumber || source.number || '';
   normalized.email = source.email || '';
+  normalized.createdBy = source.createdBy || source.employeeName || '';
+  normalized.createdById = source.createdById || source.employeeId || '';
   return normalized;
 };
 
@@ -131,6 +134,8 @@ exports.getContacts = async (req, res) => {
       employeeId: 1,
       employeeEmail: 1,
       employeeName: 1,
+      createdBy: 1,
+      createdById: 1,
       batchId: 1,
       createdAt: 1,
     };
@@ -163,7 +168,7 @@ exports.getContacts = async (req, res) => {
     const employeeGroups = await buildEmployeeGroups();
     res.status(200).json({
       success: true,
-      data: contacts.map((contact) => normalizeContactRecord(contact)),
+      data: await resolveCreatorNames(contacts.map((contact) => normalizeContactRecord(contact))),
       batches,
       employeeGroups,
       pagination: {
@@ -290,7 +295,7 @@ exports.getContactById = async (req, res) => {
     if (!contact) {
       return res.status(404).json({ success: false, message: 'Contact not found' });
     }
-    res.status(200).json({ success: true, data: normalizeContactRecord(contact) });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(normalizeContactRecord(contact)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -401,6 +406,8 @@ exports.createContact = async (req, res) => {
       contactNumber,
       email,
       ...identity,
+      createdBy: identity.employeeName,
+      createdById: identity.employeeId,
       ...(selectedBatch ? { batchId: selectedBatch._id, batchNumber: selectedBatch.batchNumber, batchName: `Batch ${selectedBatch.batchNumber}` } : {}),
     });
 
@@ -408,7 +415,7 @@ exports.createContact = async (req, res) => {
       await CustomerBatch.updateOne({ _id: selectedBatch._id }, { $inc: { customerCount: 1 }, $addToSet: { customers: contact._id } });
     }
 
-    res.status(201).json({ success: true, message: 'Contact created successfully', data: normalizeContactRecord(contact.toObject ? contact.toObject() : contact) });
+    res.status(201).json({ success: true, message: 'Contact created successfully', data: await resolveCreatorNames(normalizeContactRecord(contact.toObject ? contact.toObject() : contact)) });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
@@ -485,7 +492,14 @@ exports.importContacts = async (req, res) => {
     );
     const batchNumber = counter.value;
     const batchName = `Batch ${batchNumber}`;
-    const inserted = await Contact.insertMany(newContacts.map((contact) => ({ ...contact, ...identity, batchName, batchNumber })), { ordered: false });
+    const inserted = await Contact.insertMany(newContacts.map((contact) => ({
+      ...contact,
+      ...identity,
+      createdBy: identity.employeeName,
+      createdById: identity.employeeId,
+      batchName,
+      batchNumber,
+    })), { ordered: false });
     const batch = await CustomerBatch.create({
       ...identity,
       batchNumber,

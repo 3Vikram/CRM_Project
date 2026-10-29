@@ -5,6 +5,7 @@ import { AssetMovement } from '../models/AssetMovement.js';
 import { Product } from '../models/Product.js';
 import { ReturnedChallan } from '../models/ReturnedChallan.js';
 import { ReturnedChallanSequence } from '../models/ReturnedChallanSequence.js';
+import { inventoryCreatorFields, resolveInventoryCreatorNames } from './inventoryAuth.js';
 
 const router = express.Router();
 
@@ -134,7 +135,7 @@ router.get('/customers', async (_req, res) => {
 router.get('/', async (_req, res) => {
   try {
     const records = await ReturnedChallan.find().sort({ rcDate: -1, createdAt: -1 }).lean();
-    return res.json(records.map(normalizeRecord));
+    return res.json(await resolveInventoryCreatorNames(records.map(normalizeRecord)));
   } catch (error) {
     console.error('Error fetching returned challans:', error);
     return res.status(500).json({ error: 'Failed to fetch returned challans' });
@@ -148,7 +149,7 @@ router.get('/:id', async (req, res) => {
     }
     const record = await ReturnedChallan.findById(req.params.id).lean();
     if (!record) return res.status(404).json({ error: 'Returned challan not found' });
-    return res.json(normalizeRecord(record));
+    return res.json(await resolveInventoryCreatorNames(normalizeRecord(record)));
   } catch (error) {
     console.error('Error fetching returned challan:', error);
     return res.status(500).json({ error: 'Failed to fetch returned challan' });
@@ -167,7 +168,12 @@ router.post('/', async (req, res) => {
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
     const rcNumber = `RC-${year}-${String(sequence.value).padStart(6, '0')}`;
-    const record = await ReturnedChallan.create({ ...fields, items, rcNumber });
+    const record = await ReturnedChallan.create({
+      ...fields,
+      items,
+      rcNumber,
+      ...inventoryCreatorFields(req),
+    });
     return res.status(201).json(normalizeRecord(record.toObject()));
   } catch (error) {
     console.error('Error creating returned challan:', error);
@@ -187,7 +193,7 @@ router.put('/:id', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'Returned challan not found' });
     record.set({ ...fields, items });
     await record.save();
-    return res.json(normalizeRecord(record.toObject()));
+    return res.json(await resolveInventoryCreatorNames(normalizeRecord(record.toObject())));
   } catch (error) {
     console.error('Error updating returned challan:', error);
     return res.status(400).json({ error: error.message || 'Failed to update returned challan' });

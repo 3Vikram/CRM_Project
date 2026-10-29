@@ -95,7 +95,6 @@ export default function LeadFormPage() {
     try {
       const payload = {
         ...form,
-        createdBy: 'System',
         createdDate: new Date().toISOString(),
         leadStatus: 'New',
         leadScore: 0,

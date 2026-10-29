@@ -1,6 +1,6 @@
 const Supplier = require('../models/Supplier');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
-const { ownerScope, creatorFields } = require('../utils/accessScope');
+const { ownerScope, creatorFields, resolveCreatorNames } = require('../utils/accessScope');
 
 const getNextSupplierId = async () => {
   const suppliers = await Supplier.find({ supplierId: /^SL-\d+$/ }).select({ supplierId: 1 }).lean();
@@ -126,6 +126,7 @@ exports.getSuppliers = async (req, res) => {
       _id: 1,
       supplierId: 1,
       createdBy: 1,
+      createdById: 1,
       supplierName: 1,
       contactName: 1,
       emailId: 1,
@@ -143,7 +144,7 @@ exports.getSuppliers = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: suppliers.map(normalizeSupplierRecord),
+      data: await resolveCreatorNames(suppliers.map(normalizeSupplierRecord)),
       pagination: {
         total,
         page: pageNum,
@@ -187,7 +188,7 @@ exports.getSupplierById = async (req, res) => {
     if (!supplier) {
       return res.status(404).json({ success: false, message: 'Supplier not found' });
     }
-    res.status(200).json({ success: true, data: normalizeSupplierRecord(supplier) });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(normalizeSupplierRecord(supplier)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

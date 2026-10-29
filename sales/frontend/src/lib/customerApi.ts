@@ -32,6 +32,7 @@ export interface CustomerApiRecord {
   state?: string;
   gstNumber?: string;
   createdBy?: string;
+  createdById?: string;
 }
 
 export interface CustomerListResponse {
@@ -53,7 +54,7 @@ export interface CustomerPayload {
   phone: string;
   status: 'Active' | 'Inactive';
   notes: string;
-  createdBy: string;
+  createdBy?: string;
   accountType: string;
   contacts: Array<{
     contactType: string;

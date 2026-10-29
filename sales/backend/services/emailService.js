@@ -218,6 +218,7 @@ const sendCampaignEmails = async ({
         response: info.response || '',
         messageId: info.messageId || '',
         errorMessage: deliveryError,
+        deliveryStatus: status === 'Sent' ? 'Accepted by SMTP; final delivery is not confirmed.' : deliveryError,
       });
     } catch (error) {
       logger.error('mail-campaign.email.send.failed', {

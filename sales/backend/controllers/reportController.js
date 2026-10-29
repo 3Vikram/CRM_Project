@@ -5,7 +5,7 @@ const Lead = require('../models/Lead');
 const Contact = require('../models/Contact');
 const Activity = require('../models/Activity');
 const { DEFAULT_PAGE_SIZE, parsePagination, escapeRegex } = require('../utils/queryUtils');
-const { ownerScope } = require('../utils/accessScope');
+const { ownerScope, resolveCreatorNames } = require('../utils/accessScope');
 
 const normalizeNumber = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
@@ -122,7 +122,11 @@ exports.getReport = async (req, res) => {
 
     const scope = ownerScope(req);
     const opfQuery = buildOpfQuery({ createdBy, createdDate, customerName, product });
-    const opfRecords = (await OPF.find({ $and: [opfQuery, scope] }).select('createdBy createdDate customerName product quantity unitPrice vendorPrice revenue margin').sort({ createdDate: -1 }).lean()).map(enrichOpfRecord);
+    const rawOpfRecords = await OPF.find({ $and: [opfQuery, scope] })
+      .select('createdBy createdById createdDate customerName product quantity unitPrice vendorPrice revenue margin')
+      .sort({ createdDate: -1 })
+      .lean();
+    const opfRecords = (await resolveCreatorNames(rawOpfRecords)).map(enrichOpfRecord);
     const options = await reportOptions(opfRecords, req);
     let rows;
 
@@ -144,12 +148,17 @@ exports.getReport = async (req, res) => {
     } else if (reportKey === 'usages' || reportKey === 'usage') {
       const usageDate = dateRange(createdDate);
       const usageCreatedBy = createdBy && createdBy !== 'all' ? new RegExp(`^${escapeRegex(createdBy)}$`, 'i') : undefined;
-      const [employees, customers, contacts, leads, activities] = await Promise.all([
+      const [employees, customerRecords, contacts, leadRecords, activityRecords] = await Promise.all([
         Employee.find({}).select('employeeName fullName').lean(),
-        Customer.find({ $and: [{ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }, scope] }).select('createdBy').lean(),
+        Customer.find({ $and: [{ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }, scope] }).select('createdBy createdById').lean(),
         Contact.find(usageDate ? { createdAt: usageDate } : {}).select('createdAt').lean(),
-        Lead.find({ $and: [{ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdDate: usageDate } : {}) }, scope] }).select('createdBy').lean(),
-        Activity.find({ $and: [{ deletedAt: null, ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }, scope] }).select('createdBy').lean(),
+        Lead.find({ $and: [{ ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdDate: usageDate } : {}) }, scope] }).select('createdBy createdById').lean(),
+        Activity.find({ $and: [{ deletedAt: null, ...(usageCreatedBy ? { createdBy: usageCreatedBy } : {}), ...(usageDate ? { createdAt: usageDate } : {}) }, scope] }).select('createdBy createdById').lean(),
+      ]);
+      const [customers, leads, activities] = await Promise.all([
+        resolveCreatorNames(customerRecords),
+        resolveCreatorNames(leadRecords),
+        resolveCreatorNames(activityRecords),
       ]);
       const names = uniqueValues(
         (Object.keys(scope).length ? [String(req.user?.name || '').trim()] : employees.flatMap((employee) => [employee.employeeName, employee.fullName]))
@@ -194,18 +203,22 @@ exports.getRevenueMarginReport = async (req, res) => {
     const scope = ownerScope(req);
     const [records, optionRecords, employees, customers] = await Promise.all([
       OPF.find({ $and: [query, scope] })
-        .select('createdBy createdDate customerName product revenue margin quantity unitPrice vendorPrice')
+        .select('createdBy createdById createdDate customerName product revenue margin quantity unitPrice vendorPrice')
         .sort({ createdBy: 1, createdDate: -1 })
         .lean(),
       OPF.find({ $and: [{}, scope] })
-        .select('createdBy createdDate customerName product')
+        .select('createdBy createdById createdDate customerName product')
         .sort({ createdBy: 1 })
         .lean(),
       Employee.find({}).select('employeeName fullName').sort({ employeeName: 1 }).lean(),
       Customer.find({ $and: [{}, scope] }).select('companyName customerName').sort({ companyName: 1 }).lean(),
     ]);
 
-    const rows = records.map((record) => {
+    const [resolvedRecords, resolvedOptionRecords] = await Promise.all([
+      resolveCreatorNames(records),
+      resolveCreatorNames(optionRecords),
+    ]);
+    const rows = resolvedRecords.map((record) => {
       const quantity = normalizeNumber(record.quantity);
       const financials = calculateFinancials(record);
       const cost = quantity * normalizeNumber(record.vendorPrice);
@@ -226,7 +239,7 @@ exports.getRevenueMarginReport = async (req, res) => {
     const pagedRows = searchedRows.slice(skip, skip + limitNum);
 
     const unique = (values) => Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-    const createdDates = unique(optionRecords.map((record) => {
+    const createdDates = unique(resolvedOptionRecords.map((record) => {
       if (!record.createdDate) return '';
       const date = new Date(record.createdDate);
       return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
@@ -236,10 +249,10 @@ exports.getRevenueMarginReport = async (req, res) => {
       success: true,
       data: pagedRows,
       options: {
-        createdBy: unique((Object.keys(scope).length ? [String(req.user?.name || '').trim()] : employees.flatMap((employee) => [employee.employeeName, employee.fullName])).concat(optionRecords.map((record) => record.createdBy))),
+        createdBy: unique((Object.keys(scope).length ? [String(req.user?.name || '').trim()] : employees.flatMap((employee) => [employee.employeeName, employee.fullName])).concat(resolvedOptionRecords.map((record) => record.createdBy))),
         createdDates,
-        customerNames: unique(customers.flatMap((customer) => [customer.companyName, customer.customerName]).concat(optionRecords.map((record) => record.customerName))),
-        products: unique(optionRecords.map((record) => record.product)),
+        customerNames: unique(customers.flatMap((customer) => [customer.companyName, customer.customerName]).concat(resolvedOptionRecords.map((record) => record.customerName))),
+        products: unique(resolvedOptionRecords.map((record) => record.product)),
       },
       pagination: {
         total: searchedRows.length,

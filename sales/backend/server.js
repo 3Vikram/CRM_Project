@@ -207,7 +207,7 @@ const start = async () => {
   httpServer = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     const serverUrl = `http://0.0.0.0:${PORT}`;
-    const publicApiUrl = process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
+    const publicApiUrl = process.env.MAIL_TRACKING_BASE_URL || process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || serverUrl;
     runScheduledCampaigns(publicApiUrl);
     runScheduledRenewalReminders();
     campaignProcessingInterval = setInterval(() => {

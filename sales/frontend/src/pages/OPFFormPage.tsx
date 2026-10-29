@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { createOPF, fetchOPFById, updateOPF, type OPFRecord } from '@/lib/opfApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
+import { getStoredAuth } from '@/lib/auth'
 
 const approvalStatusOptions = ['Pending', 'Approved', 'Rejected', 'Under Review']
 
@@ -16,7 +17,7 @@ export default function OPFFormPage() {
 
   const [form, setForm] = useState({
     opfNo: '',
-    createdBy: window.localStorage.getItem('userName') || 'Admin',
+    createdBy: getStoredAuth()?.user.name || 'Admin',
     quotationNumber: '',
     customerId: '',
     customerName: '',
@@ -123,7 +124,7 @@ export default function OPFFormPage() {
     setIsLoading(true)
     try {
       const formData = new FormData()
-      Object.entries(form).forEach(([key, value]) => {
+      Object.entries(form).filter(([key]) => key !== 'createdBy').forEach(([key, value]) => {
         formData.append(key, String(value))
       })
 

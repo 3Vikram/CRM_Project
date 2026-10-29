@@ -207,6 +207,7 @@ const EmployeeSchema = new mongoose.Schema(
       trim: true,
       default: 'Admin',
     },
+    createdById: { type: String, trim: true, default: '', index: true },
     permissions: {
       type: permissionSchema,
       default: () => ({}),

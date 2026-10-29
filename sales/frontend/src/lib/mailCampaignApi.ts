@@ -116,6 +116,16 @@ export interface MailCampaignReportRow {
   clicks: number
 }
 
+export interface MailCampaignReportSummary {
+  totalRecipients: number
+  sentEmails: number
+  uniqueOpens: number
+  totalOpens: number
+  openRate: number
+  totalClicks: number
+  note?: string
+}
+
 export const getCampaigns = async (params?: Record<string, string | number>) => {
   const { data } = await api.get('/', { params })
   return data as MailCampaignListResponse
@@ -140,7 +150,7 @@ export const getCampaignPreview = async (id: string) => {
 
 export const getCampaignReport = async (id: string) => {
   const { data } = await api.get(`/${id}/report`)
-  return data as { success: boolean; data: MailCampaignReportRow[] }
+  return data as { success: boolean; summary: MailCampaignReportSummary; data: MailCampaignReportRow[] }
 }
 
 export const createCampaign = async (formData: FormData) => {

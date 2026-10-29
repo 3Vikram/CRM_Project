@@ -107,6 +107,11 @@ const AssetSchema = new mongoose.Schema(
       type: String,
       default: 'System',
     },
+    createdById: {
+      type: String,
+      default: '',
+      index: true,
+    },
     // Inward-specific fields
     inwardDate: {
       type: Date,

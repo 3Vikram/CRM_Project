@@ -1,6 +1,6 @@
 const CompanyProfile = require('../models/CompanyProfile');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
-const { creatorFields } = require('../utils/accessScope');
+const { creatorFields, resolveCreatorNames } = require('../utils/accessScope');
 
 const parsePayload = (body = {}) => {
   const payload = {};
@@ -84,6 +84,8 @@ exports.getCompanyProfiles = async (req, res) => {
       cin: 1,
       iec: 1,
       createdAt: 1,
+      createdBy: 1,
+      createdById: 1,
     };
     const sortOptions = normalizeSort(sortBy, sortOrder, ['directorName', 'directorDesignation', 'companyName', 'branchName', 'createdAt']);
 
@@ -94,7 +96,7 @@ exports.getCompanyProfiles = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: profiles,
+      data: await resolveCreatorNames(profiles),
       pagination: {
         total,
         page: pageNum,
@@ -113,7 +115,7 @@ exports.getCompanyProfileById = async (req, res) => {
     if (!companyProfile) {
       return res.status(404).json({ success: false, message: 'Company profile not found' });
     }
-    res.status(200).json({ success: true, data: companyProfile });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(companyProfile) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -122,13 +124,15 @@ exports.getCompanyProfileById = async (req, res) => {
 exports.createCompanyProfile = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
+    delete payload.createdBy;
+    delete payload.createdById;
     if (req.files) {
       if (req.files.companyLogo?.[0]) payload.companyLogo = mapFile(req.files.companyLogo[0]);
       if (req.files.documentLogo?.[0]) payload.documentLogo = mapFile(req.files.documentLogo[0]);
       if (req.files.documentHeader?.[0]) payload.documentHeader = mapFile(req.files.documentHeader[0]);
       if (req.files.documentFooter?.[0]) payload.documentFooter = mapFile(req.files.documentFooter[0]);
     }
-    payload.createdBy = creatorFields(req).createdBy;
+    Object.assign(payload, creatorFields(req));
 
     const companyProfile = await CompanyProfile.create(payload);
     res.status(201).json({ success: true, message: 'Company profile created successfully', data: companyProfile });
@@ -144,6 +148,8 @@ exports.createCompanyProfile = async (req, res) => {
 exports.updateCompanyProfile = async (req, res) => {
   try {
     const payload = parsePayload(req.body);
+    delete payload.createdBy;
+    delete payload.createdById;
     if (req.files) {
       if (req.files.companyLogo?.[0]) payload.companyLogo = mapFile(req.files.companyLogo[0]);
       if (req.files.documentLogo?.[0]) payload.documentLogo = mapFile(req.files.documentLogo[0]);
@@ -155,7 +161,7 @@ exports.updateCompanyProfile = async (req, res) => {
     if (!companyProfile) {
       return res.status(404).json({ success: false, message: 'Company profile not found' });
     }
-    res.status(200).json({ success: true, message: 'Company profile updated successfully', data: companyProfile });
+    res.status(200).json({ success: true, message: 'Company profile updated successfully', data: await resolveCreatorNames(companyProfile.toObject()) });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);

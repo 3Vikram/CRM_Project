@@ -16,7 +16,10 @@ const Supplier = require('../models/Supplier');
 const { buildEmployeeGroups } = require('./contactController');
 const { sendCampaignEmails } = require('../services/emailService');
 const logger = require('../utils/logger');
-const { creatorFields } = require('../utils/accessScope');
+const { creatorFields, resolveCreatorNames } = require('../utils/accessScope');
+
+const TRACKING_PIXEL = Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64');
+const ENGAGEMENT_LEAD_OPEN_THRESHOLD = 3;
 
 let Employee = null;
 try {
@@ -220,19 +223,34 @@ const createLeadId = async () => {
   return `LD-${counter.value}`;
 };
 
-const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
-  if (openCount < 2 && clickCount < 2) return null;
+const shouldCreateEngagementLead = ({ email, openCount, leadCreated = false }) => (
+  Boolean(String(email || '').trim()) &&
+  Number(openCount || 0) >= ENGAGEMENT_LEAD_OPEN_THRESHOLD &&
+  !leadCreated
+);
+exports.shouldCreateEngagementLead = shouldCreateEngagementLead;
 
+const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
   const email = String(log.recipientEmail || '').trim().toLowerCase();
+  if (!shouldCreateEngagementLead({ email, openCount, leadCreated: log.leadCreated })) {
+    return null;
+  }
+
   const previous = leadLocks.get(email) || Promise.resolve();
   const current = previous.then(async () => {
+    const claimedLog = await EmailLog.findOneAndUpdate(
+      { _id: log._id, leadCreated: { $ne: true } },
+      { $set: { leadCreated: true } },
+      { new: true },
+    ).lean();
+    if (!claimedLog) return null;
+
     const contact = await Contact.findOne({ email }).lean();
     const now = new Date();
     const leadValues = {
-      companyName: contact?.customerName || email,
-      contactPerson: contact?.contactName || email,
+      companyName: contact?.customerName || 'Not provided',
+      contactPerson: contact?.contactName || 'Not provided',
       designation: contact?.designation || '',
-      mobile: contact?.contactNumber || '0000000000',
       email,
       source: 'Mail Campaign',
       sourceOfLead: 'Mail Campaign',
@@ -254,9 +272,16 @@ const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
     if (lead) {
       await Lead.updateOne({ _id: lead._id }, {
         $set: {
-          ...leadValues,
           'engagement.emailOpens': openCount,
           'engagement.linkClicks': clickCount,
+          openCount,
+          emailOpenCount: openCount,
+          linkClicks: clickCount,
+          firstOpenedAt: log.firstOpenedAt || null,
+          lastOpenedAt: log.lastOpenedAt || null,
+          firstClickedAt: log.firstClickedAt || null,
+          lastClickedAt: log.lastClickedAt || null,
+          lastOpenTime: log.lastOpenedAt || now,
         },
       });
     } else {
@@ -264,14 +289,27 @@ const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
         lead = await Lead.create({ ...leadValues, leadId: await createLeadId() });
         created = true;
       } catch (error) {
-        if (error?.code !== 11000) throw error;
+        if (error?.code !== 11000) {
+          await EmailLog.updateOne({ _id: log._id }, { $set: { leadCreated: false, leadId: '' } });
+          throw error;
+        }
         lead = await Lead.findOne({ email }).select('_id leadId').lean();
-        if (!lead) throw error;
+        if (!lead) {
+          await EmailLog.updateOne({ _id: log._id }, { $set: { leadCreated: false, leadId: '' } });
+          throw error;
+        }
         await Lead.updateOne({ _id: lead._id }, {
           $set: {
-            ...leadValues,
             'engagement.emailOpens': openCount,
             'engagement.linkClicks': clickCount,
+            openCount,
+            emailOpenCount: openCount,
+            linkClicks: clickCount,
+            firstOpenedAt: log.firstOpenedAt || null,
+            lastOpenedAt: log.lastOpenedAt || null,
+            firstClickedAt: log.firstClickedAt || null,
+            lastClickedAt: log.lastClickedAt || null,
+            lastOpenTime: log.lastOpenedAt || now,
           },
         });
       }
@@ -283,7 +321,6 @@ const ensureEngagementLead = async ({ log, openCount, clickCount }) => {
     );
     logger.info('mail-campaign.engagement-lead.updated', {
       campaignId: log.campaignId,
-      recipientEmail: email,
       leadId: lead.leadId,
       created,
       openCount,
@@ -533,6 +570,7 @@ exports.getCampaigns = async (req, res) => {
       recipientCount: 1,
       status: 1,
       createdBy: 1,
+      createdById: 1,
       createdDate: 1,
       scheduledDate: 1,
       scheduledTime: 1,
@@ -554,20 +592,25 @@ exports.getCampaigns = async (req, res) => {
       { $group: {
         _id: '$campaignId',
         totalOpens: { $sum: { $ifNull: ['$openCount', 0] } },
-        uniqueOpens: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, 1, 0] } },
+        openedRecipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, { $ifNull: ['$recipientId', '$trackingId'] }, null] } },
         totalClicks: { $sum: { $ifNull: ['$clickCount', 0] } },
+      } },
+      { $project: {
+        totalOpens: 1,
+        totalClicks: 1,
+        uniqueOpens: { $size: { $setDifference: ['$openedRecipients', [null, '']] } },
       } },
     ]);
     const engagementByCampaign = new Map(engagementCounts.map((item) => [item._id, item]));
 
     res.status(200).json({
       success: true,
-      data: campaigns.map((campaign) => normalizeCampaign({
+      data: await resolveCreatorNames(campaigns.map((campaign) => normalizeCampaign({
         ...campaign,
         opens: engagementByCampaign.get(campaign.campaignId)?.totalOpens || 0,
         uniqueOpens: engagementByCampaign.get(campaign.campaignId)?.uniqueOpens || 0,
         clicks: engagementByCampaign.get(campaign.campaignId)?.totalClicks || 0,
-      })),
+      }))),
       pagination: {
         total,
         page: pageNum,
@@ -590,18 +633,18 @@ exports.getCampaignById = async (req, res) => {
         _id: null,
         opens: { $sum: { $ifNull: ['$openCount', 0] } },
         clicks: { $sum: { $ifNull: ['$clickCount', 0] } },
-        recipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, '$recipientEmail', null] } },
+        recipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, { $ifNull: ['$recipientId', '$trackingId'] }, null] } },
       } },
       { $project: { _id: 0, opens: 1, clicks: 1, uniqueOpens: { $size: { $setDifference: ['$recipients', [null]] } } } },
     ]);
     res.status(200).json({
       success: true,
-      data: normalizeCampaign({
+      data: await resolveCreatorNames(normalizeCampaign({
         ...campaign,
         opens: engagement?.opens || 0,
         uniqueOpens: engagement?.uniqueOpens || 0,
         clicks: engagement?.clicks || 0,
-      }),
+      })),
     });
   } catch (error) {
     respondToDatabaseError(res, error, 'Unable to load campaign.');
@@ -620,7 +663,6 @@ const buildPublicTrackingBaseUrl = (req) => {
   if (!normalizedBaseUrl || /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(normalizedBaseUrl)) {
     throw new Error('MAIL_TRACKING_BASE_URL or TRACKING_BASE_URL must be configured with a public URL before sending mail campaigns.');
   }
-
   let parsedBaseUrl;
   try {
     parsedBaseUrl = new URL(normalizedBaseUrl);
@@ -644,14 +686,24 @@ const checkTrackingUrlReachable = async (req) => {
     return { ok: false, message: error.message };
   }
   try {
-    const response = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(7000) });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return { ok: true, baseUrl };
+    const healthResponse = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(7000) });
+    if (!healthResponse.ok) throw new Error(`Health endpoint returned HTTP ${healthResponse.status}`);
+    const probeId = `tracking-probe-${crypto.randomBytes(12).toString('hex')}`;
+    const endpointUrl = buildTrackingPixelUrl(baseUrl, probeId);
+    const trackingResponse = await fetch(endpointUrl, { signal: AbortSignal.timeout(7000) });
+    const contentType = trackingResponse.headers.get('content-type') || '';
+    const body = Buffer.from(await trackingResponse.arrayBuffer());
+    if (!trackingResponse.ok) throw new Error(`Tracking endpoint returned HTTP ${trackingResponse.status}`);
+    if (!/^image\/(?:gif|png|jpeg|webp)(?:;|$)/i.test(contentType)) {
+      throw new Error(`Tracking endpoint returned ${contentType || 'no content type'}, not an image`);
+    }
+    if (!body.length) throw new Error('Tracking endpoint returned an empty image');
+    return { ok: true, baseUrl, endpointUrl };
   } catch (error) {
     logger.error('mail-campaign.tracking-url.unreachable', { baseUrl, message: error?.message });
     return {
       ok: false,
-      message: `The tracking address (${baseUrl}) cannot be reached from the internet, so email opens would not be counted. Start the tunnel, update TRACKING_BASE_URL in sales/backend/.env with the new address, restart the backend, and send again.`,
+      message: `Tracking verification failed for ${baseUrl}: ${error?.message || 'unknown error'}. Email sending can continue, but open tracking may not be recorded. Check the tunnel, the /api proxy, and MAIL_TRACKING_BASE_URL or TRACKING_BASE_URL, then restart the backend.`,
     };
   }
 };
@@ -744,7 +796,7 @@ const syncCampaignOpenCount = async (campaignId) => {
       _id: null,
       opens: { $sum: { $ifNull: ['$openCount', 0] } },
       clicks: { $sum: { $ifNull: ['$clickCount', 0] } },
-      openedRecipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, '$recipientEmail', null] } },
+      openedRecipients: { $addToSet: { $cond: [{ $gt: [{ $ifNull: ['$openCount', 0] }, 0] }, { $ifNull: ['$recipientId', '$trackingId'] }, null] } },
     } },
     { $project: {
       _id: 0,
@@ -783,13 +835,13 @@ exports.trackOpen = async (req, res) => {
   try {
     const log = await EmailLog.findOne({
       $or: [{ trackingId }, { trackingToken: trackingId }],
-    }).select('_id campaignId campaignName recipientEmail trackingId trackingToken openCount clickCount openedAt firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt leadCreated leadId').lean();
+    }).select('_id campaignId campaignName recipientEmail recipientId trackingId trackingToken openCount clickCount openedAt firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt leadCreated leadId').lean();
 
     if (!log) {
       logger.info('mail-campaign.tracking-id.not-found', { trackingId });
       console.log(`OPEN TRACKING NOT FOUND: trackingId=${trackingId}`);
       logger.info('mail-campaign.open-trace', { trackingId, emailLogFound: false });
-      return res.status(200).type('gif').send(Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64'));
+      return res.status(200).type('gif').send(TRACKING_PIXEL);
     }
 
     const now = new Date();
@@ -822,11 +874,13 @@ exports.trackOpen = async (req, res) => {
   }
 
   res.set({
+    'Content-Type': 'image/gif',
+    'Content-Length': String(TRACKING_PIXEL.length),
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     Pragma: 'no-cache',
     Expires: '0',
   });
-  res.type('gif').send(Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64'));
+  res.type('gif').send(TRACKING_PIXEL);
 };
 
 exports.getTrackingDiagnostic = async (req, res) => {
@@ -836,21 +890,27 @@ exports.getTrackingDiagnostic = async (req, res) => {
 
   const trackingId = String(req.params.trackingId || '').trim();
   const log = await EmailLog.findOne({ $or: [{ trackingId }, { trackingToken: trackingId }] })
-    .select('campaignId campaignName recipientEmail status trackingId trackingToken openCount openedAt clickedAt sentAt')
+    .select('campaignId status openCount openedAt firstOpenedAt lastOpenedAt clickedAt sentAt')
     .lean();
-  if (!log) return res.status(404).json({ success: false, found: false, trackingId });
+  const trackingIdFingerprint = crypto.createHash('sha256').update(trackingId).digest('hex').slice(0, 12);
+  if (!log) return res.status(404).json({
+    success: false,
+    found: false,
+    trackingIdFingerprint,
+  });
 
   const campaign = await MailCampaign.findOne({ campaignId: log.campaignId }).select('campaignId campaignName opens uniqueOpens clicks').lean();
   return res.status(200).json({
     success: true,
     found: true,
-    trackingId,
-    recipientEmail: log.recipientEmail,
+    trackingIdFingerprint,
     campaignId: log.campaignId,
     emailLog: {
       status: log.status,
       openCount: log.openCount || 0,
       openedAt: log.openedAt,
+      firstOpenedAt: log.firstOpenedAt,
+      lastOpenedAt: log.lastOpenedAt,
       clickedAt: log.clickedAt,
       sentAt: log.sentAt,
     },
@@ -898,19 +958,12 @@ exports.trackClick = async (req, res) => {
         } }],
         { new: true },
       ).lean();
-      await syncCampaignOpenCount(updatedLog.campaignId);
-      const leadResult = await ensureEngagementLead({
-        log: updatedLog,
-        openCount: updatedLog.openCount || 0,
-        clickCount: updatedLog.clickCount || 0,
-      });
       console.log('[TRACK CLICK]', {
         trackingId,
         recipient: updatedLog.recipientEmail,
         campaignId: updatedLog.campaignId,
         clickCount: updatedLog.clickCount,
         destination,
-        leadThresholdReached: Boolean(leadResult),
       });
     }
   } catch (error) {
@@ -926,7 +979,10 @@ exports.getCampaignReport = async (req, res) => {
     const logs = await EmailLog.find({ campaignId: campaign.campaignId }).sort({ sentAt: 1 }).lean();
     const sentLogs = logs.filter((log) => log.status === 'Sent');
     const totalOpens = logs.reduce((total, log) => total + Number(log.openCount || 0), 0);
-    const uniqueOpens = logs.filter((log) => Number(log.openCount || 0) > 0).length;
+    const uniqueOpenedRecipients = new Set(logs
+      .filter((log) => Number(log.openCount || 0) > 0)
+      .map((log) => log.recipientId || log.trackingId || log.recipientEmail));
+    const uniqueOpens = uniqueOpenedRecipients.size;
     const totalClicks = logs.reduce((total, log) => total + Number(log.clickCount || 0), 0);
     res.status(200).json({
       success: true,
@@ -937,6 +993,7 @@ exports.getCampaignReport = async (req, res) => {
         totalOpens,
         openRate: sentLogs.length ? Number(((uniqueOpens / sentLogs.length) * 100).toFixed(2)) : 0,
         totalClicks,
+        note: 'Open tracking is approximate. Mail clients may block, cache, or preload images.',
       },
       data: logs.map((log, index) => ({
         serialNumber: index + 1,
@@ -1063,6 +1120,7 @@ exports.createCampaign = async (req, res) => {
       attachments: (req.files?.attachments || []).map((file) => `/uploads/mail-campaigns/${file.filename}`),
       status: campaignStatus,
       createdBy: creatorFields(req).createdBy,
+      createdById: creatorFields(req).createdById,
       createdDate: req.body.createdDate || new Date().toISOString().split('T')[0],
       scheduledDate: req.body.scheduledDate || '',
       scheduledTime: req.body.scheduledTime || '',
@@ -1158,6 +1216,7 @@ exports.updateCampaign = async (req, res) => {
         : (req.body.attachments ? parseArrayField(req.body.attachments) : existing.attachments || []),
       status: campaignStatus,
       createdBy: existing.createdBy,
+      createdById: existing.createdById,
       createdDate: req.body.createdDate || existing.createdDate || new Date().toISOString().split('T')[0],
       scheduledDate: req.body.scheduledDate || existing.scheduledDate || '',
       scheduledTime: req.body.scheduledTime || existing.scheduledTime || '',
@@ -1177,6 +1236,7 @@ exports.updateCampaign = async (req, res) => {
     delete payload.createdBy;
     delete payload.createdById;
     payload.createdBy = existing.createdBy;
+    payload.createdById = existing.createdById;
     const campaign = await MailCampaign.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
     res.status(200).json({ success: true, message: 'Campaign updated successfully', data: normalizeCampaign(campaign.toObject()) });
   } catch (error) {
@@ -1333,7 +1393,7 @@ exports.sendCampaign = async (req, res) => {
     const existingLogs = await EmailLog.find({
       campaignId: campaign.campaignId,
       recipientEmail: { $in: normalizedRecipients.map((recipient) => recipient.toLowerCase()) },
-    }).select('recipientEmail status trackingId trackingToken').lean();
+    }).select('recipientEmail status recipientId trackingId trackingToken').lean();
     const existingLogByRecipient = new Map(existingLogs.map((log) => [String(log.recipientEmail).toLowerCase(), log]));
     const recipientsToSend = normalizedRecipients.filter((recipient) => existingLogByRecipient.get(recipient.toLowerCase())?.status !== 'Sent');
     if (!recipientsToSend.length) {
@@ -1357,7 +1417,9 @@ exports.sendCampaign = async (req, res) => {
     const trackingIds = new Map(
       recipientsToSend.map((recipient) => [
         String(recipient).trim().toLowerCase(),
-        existingLogByRecipient.get(String(recipient).trim().toLowerCase())?.trackingId || crypto.randomBytes(24).toString('hex'),
+        existingLogByRecipient.get(String(recipient).trim().toLowerCase())?.recipientId
+          || existingLogByRecipient.get(String(recipient).trim().toLowerCase())?.trackingId
+          || crypto.randomBytes(24).toString('hex'),
       ])
     );
     const trackingUrlIsLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(trackingBaseUrl);
@@ -1383,6 +1445,7 @@ exports.sendCampaign = async (req, res) => {
         sentAt: new Date(),
         errorMessage: '',
         senderEmail: process.env.EMAIL_USER || process.env.SMTP_USER || '',
+        recipientId: trackingId,
         trackingId,
         trackingToken: trackingId,
       };
@@ -1457,9 +1520,11 @@ exports.sendCampaign = async (req, res) => {
       {
         $set: {
           status: item.status,
+          deliveryStatus: item.deliveryStatus || (item.status === 'Sent' ? 'Accepted by SMTP; final delivery is not confirmed.' : 'Not accepted by SMTP.'),
           sentAt: new Date(),
           errorMessage: item.errorMessage || '',
           trackingId: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
+          recipientId: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
           trackingToken: trackingIds.get(String(item.recipientEmail).trim().toLowerCase()),
         },
       }
@@ -1520,7 +1585,15 @@ exports.sendCampaign = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: groupId ? 'Campaign group sent successfully.' : (campaign.status === 'Sent' ? 'Campaign Sent Successfully' : campaign.status === 'Partially Sent' ? 'Campaign Partially Sent' : 'Campaign Failed'),
+      message: groupId
+        ? (campaign.status === 'Sent'
+          ? 'Campaign group accepted by SMTP; final delivery is not confirmed.'
+          : 'Campaign group partially accepted by SMTP; check the delivery report.')
+        : (campaign.status === 'Sent'
+          ? 'Campaign accepted by SMTP; final delivery is not confirmed.'
+          : campaign.status === 'Partially Sent'
+            ? 'Campaign partially accepted by SMTP; check the delivery report.'
+            : 'Campaign failed to send.'),
       data: {
         campaignId: campaign.campaignId,
         groupId: groupId || null,

@@ -20,6 +20,7 @@ const ReturnedChallanSchema = new mongoose.Schema(
   {
     rcNumber: { type: String, required: true, unique: true, trim: true },
     createdBy: { type: String, default: 'System', trim: true },
+    createdById: { type: String, default: '', trim: true, index: true },
     customerName: { type: String, required: true, trim: true },
     contactPerson: { type: String, default: '', trim: true },
     rcDate: { type: Date, required: true },

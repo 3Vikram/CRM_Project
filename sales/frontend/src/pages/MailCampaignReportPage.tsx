@@ -3,17 +3,21 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getCampaignReport, type MailCampaignReportRow } from '@/lib/mailCampaignApi'
+import { getCampaignReport, type MailCampaignReportRow, type MailCampaignReportSummary } from '@/lib/mailCampaignApi'
 
 export default function MailCampaignReportPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const [rows, setRows] = useState<MailCampaignReportRow[]>([])
+  const [summary, setSummary] = useState<MailCampaignReportSummary | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!id) return
-    void getCampaignReport(id).then((response) => setRows(response.data || [])).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign report.'))
+    void getCampaignReport(id).then((response) => {
+      setRows(response.data || [])
+      setSummary(response.summary || null)
+    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign report.'))
   }, [id])
 
   const cell = 'border border-[#E5E7EB] px-3 py-2.5 align-middle'
@@ -23,6 +27,13 @@ export default function MailCampaignReportPage() {
       <div className="rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
         <h1 className="crm-page-heading">Mail Campaign Report</h1>
         {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+        {summary ? <div className="mb-4 grid gap-3 sm:grid-cols-4">
+          <div className="rounded-lg bg-[#FAF8F2] p-3"><div className="text-xs text-gray-500">Total opens</div><div className="text-xl font-semibold">{summary.totalOpens}</div></div>
+          <div className="rounded-lg bg-[#FAF8F2] p-3"><div className="text-xs text-gray-500">Unique opens</div><div className="text-xl font-semibold">{summary.uniqueOpens}</div></div>
+          <div className="rounded-lg bg-[#FAF8F2] p-3"><div className="text-xs text-gray-500">Open rate</div><div className="text-xl font-semibold">{summary.openRate}%</div></div>
+          <div className="rounded-lg bg-[#FAF8F2] p-3"><div className="text-xs text-gray-500">Accepted by SMTP</div><div className="text-xl font-semibold">{summary.sentEmails}</div></div>
+        </div> : null}
+        {summary?.note ? <p className="mb-4 text-xs text-gray-500">{summary.note}</p> : null}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
             <thead><tr className="bg-[#F2EFE8] text-left text-xs font-semibold uppercase tracking-wider text-gray-700">

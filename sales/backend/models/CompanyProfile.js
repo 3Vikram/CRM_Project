@@ -57,6 +57,7 @@ const CompanyProfileSchema = new mongoose.Schema(
     enquiryFormat: { type: String, trim: true, required: [true, 'Enquiry Format is required'] },
     challanFormat: { type: String, trim: true, required: [true, 'Challan Format is required'] },
     createdBy: { type: String, trim: true, default: 'Admin' },
+    createdById: { type: String, trim: true, default: '', index: true },
   },
   { timestamps: true }
 );

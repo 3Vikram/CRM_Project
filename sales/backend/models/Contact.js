@@ -42,6 +42,8 @@ const ContactSchema = new mongoose.Schema(
     employeeId: { type: String, trim: true, default: '' },
     employeeEmail: { type: String, trim: true, lowercase: true, default: '' },
     employeeName: { type: String, trim: true, default: '' },
+    createdBy: { type: String, trim: true, default: '' },
+    createdById: { type: String, trim: true, default: '', index: true },
     batchName: { type: String, trim: true, default: '' },
     batchNumber: { type: Number, min: 1, default: null },
     batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerBatch', default: null },

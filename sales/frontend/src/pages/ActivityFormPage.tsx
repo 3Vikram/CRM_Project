@@ -5,6 +5,7 @@ import { Toast } from '@/components/toast';
 import { createActivity, fetchActivityById, updateActivity } from '@/lib/activityApi';
 import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi';
 import { fetchProductsForSuppliers } from '@/lib/supplierApi';
+import { getStoredAuth } from '@/lib/auth';
 
 const activityTypeOptions = ['Meeting', 'Call', 'Email', 'Demo', 'Site Visit', 'Follow-up', 'Support', 'Other'];
 const responseOptions = ['Positive', 'Negative', 'Pending', 'No Response'];
@@ -40,12 +41,18 @@ const initialState = {
   status: 'Open',
 };
 
+const createInitialState = () => ({
+  ...initialState,
+  createdBy: getStoredAuth()?.user.name || 'Admin',
+  lastModifiedBy: getStoredAuth()?.user.name || 'Admin',
+});
+
 export default function ActivityFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
   const isEditMode = Boolean(id);
-  const [form, setForm] = useState(initialState);
+  const [form, setForm] = useState(createInitialState);
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([]);
   const [products, setProducts] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -188,14 +195,14 @@ export default function ActivityFormPage() {
 
     setSaving(true);
     try {
+      const { createdBy: _createdBy, ...activityFields } = form;
       const payload = {
-        ...form,
+        ...activityFields,
         customerName: form.customerName.trim(),
         company: form.company || form.customerName || '',
         contactPerson: form.contactPerson.trim(),
         email: form.email.trim(),
         mobileNo: form.mobileNo.trim(),
-        createdBy: form.createdBy || 'Admin',
         lastModifiedBy: form.lastModifiedBy || 'Admin',
       };
 
@@ -234,6 +241,10 @@ export default function ActivityFormPage() {
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-gray-700">Created By</span>
+            <input value={form.createdBy} readOnly className="w-full rounded-lg border border-[#EFECE5] bg-gray-100 px-3 py-2.5 text-sm" />
+          </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Customer / Partner Name <span className="required-asterisk">*</span></span>
             <input list="customer-options" value={form.customerName} onChange={handleCustomerSelect} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
@@ -337,7 +348,7 @@ export default function ActivityFormPage() {
           <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B] disabled:opacity-70">
             <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Submit'}
           </button>
-          <button type="button" onClick={() => setForm(initialState)} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
+          <button type="button" onClick={() => setForm(createInitialState())} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
             <RotateCcw className="h-4 w-4" /> Reset
           </button>
         </div>

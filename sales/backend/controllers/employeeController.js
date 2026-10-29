@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const Employee = require('../models/Employee');
 const Counter = require('../models/Counter');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
-const { creatorFields } = require('../utils/accessScope');
+const { creatorFields, resolveCreatorNames } = require('../utils/accessScope');
 
 const permissionModules = [
   'customers', 'contacts', 'leads', 'activities', 'mailCampaign', 'suppliers',
@@ -86,6 +86,7 @@ const normaliseEmployeePayload = (body = {}) => {
     address: payload.address ? String(payload.address).trim() : '',
     notes: payload.notes ? String(payload.notes).trim() : '',
     createdBy: payload.createdBy ? String(payload.createdBy).trim() : 'Admin',
+    createdById: payload.createdById ? String(payload.createdById).trim() : '',
     permissions: normalizePermissionBlock(payload.permissions || defaultPermissions()),
   };
 
@@ -139,6 +140,7 @@ const serializeEmployee = (employee) => {
     address: source.address || '',
     notes: source.notes || '',
     createdBy: source.createdBy || 'Admin',
+    createdById: source.createdById || '',
     crudOption: Array.isArray(source.crudOption) ? source.crudOption : [],
     modulesOption: Array.isArray(source.modulesOption) ? source.modulesOption : [],
     permissions: normalizePermissionBlock(source.permissions || defaultPermissions()),
@@ -186,7 +188,7 @@ exports.getEmployees = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: employees.map(serializeEmployee),
+      data: await resolveCreatorNames(employees.map(serializeEmployee)),
       pagination: {
         total,
         page: pageNum,
@@ -206,7 +208,7 @@ exports.getEmployeeById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Employee not found.' });
     }
 
-    res.status(200).json({ success: true, data: serializeEmployee(employee) });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(serializeEmployee(employee)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || 'Unable to load employee.' });
   }
@@ -218,7 +220,7 @@ exports.createEmployee = async (req, res) => {
       ? req.body
       : { ...req.body, crudOption: [], modulesOption: [], permissions: defaultPermissions() };
     const payload = normaliseEmployeePayload(employeeInput);
-    payload.createdBy = creatorFields(req).createdBy;
+    Object.assign(payload, creatorFields(req));
     if (!payload.employeeName || !payload.email) {
       return res.status(400).json({ success: false, message: 'Employee name and email are required.' });
     }

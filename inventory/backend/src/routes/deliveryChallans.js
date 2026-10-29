@@ -2,6 +2,7 @@ import express from 'express';
 import { Asset } from '../models/Asset.js';
 import { AssetMovement } from '../models/AssetMovement.js';
 import { DeliveryChallan } from '../models/DeliveryChallan.js';
+import { inventoryCreatorFields, resolveInventoryCreatorNames } from './inventoryAuth.js';
 
 const router = express.Router();
 
@@ -149,11 +150,11 @@ router.get('/customers', async (_req, res) => {
 router.get('/', async (_req, res) => {
   try {
     const challans = await DeliveryChallan.find().sort({ createdAt: -1 }).limit(25).lean();
-    res.json(challans.map((challan) => ({
+    res.json(await resolveInventoryCreatorNames(challans.map((challan) => ({
       ...challan,
       id: challan._id.toString(),
       items: challan.items || [],
-    })));
+    }))));
   } catch (error) {
     console.error('Error fetching delivery challans:', error);
     res.status(500).json({ error: 'Failed to fetch delivery challans' });
@@ -167,11 +168,11 @@ router.get('/:id', async (req, res) => {
     }
     const challan = await DeliveryChallan.findById(req.params.id).lean();
     if (!challan) return res.status(404).json({ error: 'Delivery challan not found' });
-    return res.json({
+    return res.json(await resolveInventoryCreatorNames({
       ...challan,
       id: challan._id.toString(),
       items: challan.items || [],
-    });
+    }));
   } catch (error) {
     console.error('Error fetching delivery challan:', error);
     return res.status(500).json({ error: 'Failed to fetch delivery challan' });
@@ -190,6 +191,7 @@ router.post('/', async (req, res) => {
       challanNumber,
       ...fields,
       items: validatedItems,
+      ...inventoryCreatorFields(req),
     });
 
     res.status(201).json({
@@ -217,10 +219,10 @@ router.put('/:id', async (req, res) => {
 
     challan.set({ ...fields, items });
     await challan.save();
-    return res.json({
+    return res.json(await resolveInventoryCreatorNames({
       ...challan.toObject(),
       id: challan._id.toString(),
-    });
+    }));
   } catch (error) {
     console.error('Error updating delivery challan:', error);
     return res.status(400).json({

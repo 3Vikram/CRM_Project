@@ -185,7 +185,7 @@ export default function FunnelFormPage() {
       const payload: Partial<LeadRecord> = {
         companyName: form.customerName,
         contactPerson: form.contactPerson,
-        ...(isEditing ? {} : { createdBy: 'System', createdDate: new Date().toISOString(), sourceOfLead: 'Manual' }),
+        ...(isEditing ? {} : { createdDate: new Date().toISOString(), sourceOfLead: 'Manual' }),
         leadStatus: finalStage,
         priority: 'Medium',
         customerRequirements: form.detailsOfRequirement,

@@ -22,9 +22,36 @@ const ownerScope = (req, { idField = 'createdById', nameField = 'createdBy', ext
   return clauses.length ? { $or: clauses } : { _id: null };
 };
 
-const creatorFields = (req) => ({
-  createdBy: String(req.user?.name || 'Admin').trim() || 'Admin',
-  createdById: String(req.user?.id || '').trim(),
-});
+const creatorFields = (req) => {
+  const createdBy = String(req.user?.name || '').trim();
+  const createdById = String(req.user?.id || '').trim();
+  if (!createdBy || !createdById) {
+    throw new Error('Authenticated creator identity is unavailable.');
+  }
+  return { createdBy, createdById };
+};
 
-module.exports = { hasFullAccess, ownerScope, creatorFields };
+const resolveCreatorNames = async (records) => {
+  const rows = Array.isArray(records) ? records : [records];
+  const employeeIds = [...new Set(rows
+    .map((record) => String(record?.createdById || '').trim())
+    .filter((id) => /^[a-f\d]{24}$/i.test(id)))];
+  if (!employeeIds.length) return records;
+
+  const Employee = require('../models/Employee');
+  const employees = await Employee.find({ _id: { $in: employeeIds } })
+    .select('employeeName fullName')
+    .lean();
+  const namesById = new Map(employees.map((employee) => [
+    String(employee._id),
+    String(employee.employeeName || employee.fullName || '').trim(),
+  ]));
+  const resolved = rows.map((record) => {
+    const employeeName = namesById.get(String(record?.createdById || '').trim());
+    if (!employeeName) return record;
+    return { ...record, createdBy: employeeName };
+  });
+  return Array.isArray(records) ? resolved : resolved[0];
+};
+
+module.exports = { hasFullAccess, ownerScope, creatorFields, resolveCreatorNames };

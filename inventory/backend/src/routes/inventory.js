@@ -1,6 +1,7 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
 import { Asset } from '../models/Asset.js';
+import { inventoryCreatorFields, resolveInventoryCreatorNames } from './inventoryAuth.js'
 import { AssetMovement } from '../models/AssetMovement.js';
 import { AssetIdSequence } from '../models/AssetIdSequence.js';
 
@@ -330,6 +331,7 @@ const toAssetPayload = (asset) => {
     description: productDescription,
     productDescription,
     createdBy: asset.createdBy,
+    createdById: asset.createdById || '',
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
     supplierId: asset.supplierId || '',
@@ -599,10 +601,18 @@ router.get('/overview', async (req, res) => {
       status: asset.status || 'available',
       createdAt: asset.createdAt,
     }));
+    const assetsWithCreatorNames = await resolveInventoryCreatorNames(formattedAssets);
 
-    const recentInward = await AssetMovement.find({ type: 'INWARD' }).sort({ createdAt: -1 }).limit(5).lean();
-    const recentRentals = await AssetMovement.find({ type: 'RENT_OUT' }).sort({ createdAt: -1 }).limit(5).lean();
-    const recentSales = await AssetMovement.find({ type: { $in: ['SOLD', 'SOLD_OUT'] } }).sort({ createdAt: -1 }).limit(5).lean();
+    const [recentInwardRecords, recentRentalRecords, recentSalesRecords] = await Promise.all([
+      AssetMovement.find({ type: 'INWARD' }).sort({ createdAt: -1 }).limit(5).lean(),
+      AssetMovement.find({ type: 'RENT_OUT' }).sort({ createdAt: -1 }).limit(5).lean(),
+      AssetMovement.find({ type: { $in: ['SOLD', 'SOLD_OUT'] } }).sort({ createdAt: -1 }).limit(5).lean(),
+    ]);
+    const [recentInward, recentRentals, recentSales] = await Promise.all([
+      resolveInventoryCreatorNames(recentInwardRecords, { idField: 'performedById', nameField: 'performedBy' }),
+      resolveInventoryCreatorNames(recentRentalRecords, { idField: 'performedById', nameField: 'performedBy' }),
+      resolveInventoryCreatorNames(recentSalesRecords, { idField: 'performedById', nameField: 'performedBy' }),
+    ]);
 
     res.json({
       summary: {
@@ -673,7 +683,7 @@ router.get('/movements', async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate({ path: 'assetId', select: 'assetId vendorName location invoiceNumber' })
-      .select('assetId assetName type quantity createdAt performedBy reference');
+      .select('assetId assetName type quantity createdAt performedBy performedById reference');
 
     const formattedMovements = movements.map((m) => {
       const assetDoc = m.assetId;
@@ -688,10 +698,11 @@ router.get('/movements', async (req, res) => {
         invoiceNumber: assetDoc?.invoiceNumber || m.reference || '',
         location: assetDoc?.location || '',
         createdBy: m.performedBy || 'System',
+        createdById: m.performedById || '',
       };
     });
 
-    res.json(formattedMovements);
+    res.json(await resolveInventoryCreatorNames(formattedMovements));
   } catch (error) {
     console.error('Error fetching movements:', error);
     res.status(500).json({ error: 'Failed to fetch movements' });
@@ -816,10 +827,10 @@ router.get('/assets', async (req, res) => {
       return toAssetPayload(asset);
     }));
     
-    console.log('Formatted response:', formattedAssets.length, 'assets');
+    console.log('Formatted response:', assetsWithCreatorNames.length, 'assets');
     console.log('=== END GET /assets ===\n');
     
-    res.json(formattedAssets);
+    res.json(assetsWithCreatorNames);
   } catch (error) {
     console.error('Error fetching assets:', error);
     res.status(500).json({ error: 'Failed to fetch assets' });
@@ -829,6 +840,7 @@ router.get('/assets', async (req, res) => {
 // POST /api/inventory/assets/bulk - Create one asset per serial number.
 router.post('/assets/bulk', async (req, res) => {
   try {
+    const creator = inventoryCreatorFields(req);
     const { serialNumbers, ...common } = req.body || {};
     const serials = Array.isArray(serialNumbers)
       ? serialNumbers.map((serial) => String(serial ?? '')).filter((serial) => serial.trim().length > 0)
@@ -899,7 +911,7 @@ router.post('/assets/bulk', async (req, res) => {
       vendorName: supplierName,
       invoiceNumber,
       inwardType: common.inwardType || 'Purchase',
-      createdBy: common.createdBy || 'System',
+      ...creator,
       bulkUploadId: `BULK-${randomUUID()}`,
     };
     const assets = [];
@@ -922,7 +934,8 @@ router.post('/assets/bulk', async (req, res) => {
           type: 'INWARD',
           quantity: 1,
           description: `${asset.inwardType || 'Purchase'} from ${asset.vendorName || 'System'}${asset.invoiceNumber ? ` (Invoice: ${asset.invoiceNumber})` : ''}`,
-          performedBy: asset.createdBy || 'System',
+          performedBy: creator.createdBy,
+          performedById: creator.createdById,
           reference: asset.invoiceNumber || '',
         }).save();
         movements.push(movement);
@@ -961,7 +974,6 @@ router.post('/assets', async (req, res) => {
       purchaseDate,
       warrantyExpiry,
       description,
-      createdBy,
       inwardDate,
       invoiceNumber,
       vendorName,
@@ -978,6 +990,7 @@ router.post('/assets', async (req, res) => {
       gst,
     } = req.body;
 
+    const { createdBy, createdById } = inventoryCreatorFields(req);
     const isInwardSubmission = mode === 'inward';
     const assetName = String(productName || name || '').trim();
     const invoiceDateValue = inwardDate || purchaseDate || new Date().toISOString().split('T')[0];
@@ -1049,6 +1062,7 @@ router.post('/assets', async (req, res) => {
         quantity: assetQuantity,
         description: `${existingAsset.inwardType} from ${existingAsset.vendorName || 'System'}${invoiceNumber ? ` (Invoice: ${invoiceNumber})` : ''}`,
         performedBy: createdBy || 'System',
+        performedById: createdById,
         reference: invoiceNumber || '',
       });
       await movement.save();
@@ -1086,6 +1100,7 @@ router.post('/assets', async (req, res) => {
       invoiceNumber: String(invoiceNumber || '').trim(),
       inwardType: inwardType || 'Purchase',
       createdBy: createdBy || 'System',
+      createdById,
     });
 
     const savedAsset = await asset.save();
@@ -1099,6 +1114,7 @@ router.post('/assets', async (req, res) => {
       quantity: assetQuantity,
       description: `${savedAsset.inwardType || 'Purchase'} from ${savedAsset.vendorName || 'System'}${savedAsset.invoiceNumber ? ` (Invoice: ${savedAsset.invoiceNumber})` : ''}`,
       performedBy: createdBy || 'System',
+      performedById: createdById,
       reference: savedAsset.invoiceNumber || '',
     });
     await movement.save();
@@ -1118,7 +1134,10 @@ router.post('/inward', async (req, res) => {
     const payload = { ...req.body };
     const response = await fetch(`${process.env.BASE_URL || 'http://localhost:5000'}/api/inventory/assets`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: req.get('authorization') || '',
+      },
       body: JSON.stringify(payload),
     });
 
@@ -1148,7 +1167,6 @@ router.post('/outward', async (req, res) => {
       documentNumber,
       invoiceNumber,
       remarks,
-      performedBy,
       outwardDate,
       rentStartDate,
       rentEndDate,
@@ -1158,6 +1176,7 @@ router.post('/outward', async (req, res) => {
       productModel,
       price,
     } = req.body;
+    const movementCreator = inventoryCreatorFields(req);
 
     const outwardQuantity = Number(quantity) || 0;
 
@@ -1280,7 +1299,8 @@ router.post('/outward', async (req, res) => {
       remarks: String(remarks || ''),
       movementDate: outwardDate ? new Date(outwardDate) : new Date(),
       description: `Outward ${String(outwardType)} for ${String(customerName).trim()}`,
-      performedBy: performedBy || 'System',
+      performedBy: movementCreator.createdBy,
+      performedById: movementCreator.createdById,
       reference: String(invoiceNumber || ''),
     });
     await movement.save();
@@ -1308,7 +1328,8 @@ router.post('/return', async (req, res) => {
   try {
     console.log('\n=== RETURN REQUEST ===');
     console.log('Body:', req.body);
-    const { assetId, customerName, supplierName, supplier, quantity, remarks, performedBy, returnDate, rentEndDate } = req.body;
+    const { assetId, customerName, supplierName, supplier, quantity, remarks, returnDate, rentEndDate } = req.body;
+    const movementCreator = inventoryCreatorFields(req);
     const returnQuantity = Number(quantity) || 1;
     const selectedSupplier = String(supplierName || supplier || '').trim();
     const returnDateValue = String(returnDate || '').trim();
@@ -1383,7 +1404,8 @@ router.post('/return', async (req, res) => {
         movementDate: returnDateValue ? new Date(returnDateValue) : new Date(),
         remarks: String(remarks || 'Rental returned to stock'),
         description: 'Rental return processed',
-        performedBy: performedBy || 'System',
+        performedBy: movementCreator.createdBy,
+        performedById: movementCreator.createdById,
         reference: '',
       });
       await movement.save();
@@ -1459,7 +1481,8 @@ router.post('/return', async (req, res) => {
       movementDate: returnDateValue ? new Date(returnDateValue) : new Date(),
       remarks: String(remarks || `Returned to supplier ${selectedSupplier}`),
       description: `Returned to supplier ${selectedSupplier}`,
-      performedBy: performedBy || 'System',
+      performedBy: movementCreator.createdBy,
+      performedById: movementCreator.createdById,
       reference: '',
     });
     await movement.save();
@@ -1606,10 +1629,10 @@ router.get('/assets/:id', async (req, res) => {
       await ensureAssetId(asset);
     }
     
-    res.json({
+    res.json(await resolveInventoryCreatorNames({
       ...toAssetPayload(asset),
       availableQuantity: asset.availableQuantity ?? asset.quantity,
-    });
+    }));
   } catch (error) {
     console.error('Error fetching asset:', error);
     res.status(500).json({ error: 'Failed to fetch asset' });
@@ -1619,6 +1642,7 @@ router.get('/assets/:id', async (req, res) => {
 // PUT /api/inventory/assets/:id - Update asset
 router.put('/assets/:id', async (req, res) => {
   try {
+    const movementCreator = inventoryCreatorFields(req);
     const {
       name,
       category,
@@ -1880,7 +1904,8 @@ router.put('/assets/:id', async (req, res) => {
                 : String(asset.customerId || '').trim(),
             remarks: String(req.body.remarks || ''),
             description: `Status changed from ${from} to ${to}`,
-            performedBy: req.body.performedBy || 'System',
+            performedBy: movementCreator.createdBy,
+            performedById: movementCreator.createdById,
             reference: invoiceNumber || '',
           });
           await movement.save();

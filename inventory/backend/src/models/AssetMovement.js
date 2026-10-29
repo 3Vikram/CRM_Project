@@ -93,6 +93,11 @@ const AssetMovementSchema = new mongoose.Schema(
       type: String,
       default: 'Admin',
     },
+    performedById: {
+      type: String,
+      default: '',
+      index: true,
+    },
     reference: {
       type: String,
       default: '',

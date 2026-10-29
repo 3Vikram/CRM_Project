@@ -49,6 +49,37 @@ const isValidToken = (token, secret) => Boolean(getTokenClaims(token, secret));
 const configured = ({ email, password, secret }) =>
   Boolean(email && password && secret && secret.length >= 32);
 
+export const inventoryCreatorFields = (req) => {
+  const createdBy = String(req.inventoryUser?.name || '').trim();
+  const createdById = String(req.inventoryUser?.id || '').trim();
+  if (!createdBy || !createdById) {
+    throw new Error('Authenticated Inventory creator identity is unavailable.');
+  }
+  return { createdBy, createdById };
+};
+
+export const resolveInventoryCreatorNames = async (
+  records,
+  { idField = 'createdById', nameField = 'createdBy' } = {}
+) => {
+  const rows = Array.isArray(records) ? records : [records];
+  const employeeIds = [...new Set(rows
+    .map((record) => String(record?.[idField] || '').trim())
+    .filter((id) => /^[a-f\d]{24}$/i.test(id)))];
+  if (!employeeIds.length) return records;
+
+  const employees = await InventoryEmployee.find({ _id: { $in: employeeIds } })
+    .select('employeeName')
+    .lean();
+  const namesById = new Map(employees.map((employee) => [String(employee._id), employee.employeeName]));
+  const resolved = rows.map((record) => {
+    const source = record?.toObject ? record.toObject() : record;
+    const employeeName = namesById.get(String(source?.[idField] || '').trim());
+    return employeeName ? { ...source, [nameField]: employeeName } : source;
+  });
+  return Array.isArray(records) ? resolved : resolved[0];
+};
+
 export function requireInventoryAdmin(req, res, next) {
   const config = getAuthConfig();
   if (!configured(config)) {
@@ -88,11 +119,24 @@ export async function requireInventoryAuth(req, res, next) {
       if (!employee?.isActive) {
         return res.status(401).json({ error: 'Inventory sign-in required.' });
       }
+      req.inventoryUser = {
+        id: employee.id,
+        name: employee.employeeName,
+        email: employee.email,
+        role: 'employee',
+      };
     } catch {
       return res.status(500).json({ error: 'Unable to verify Inventory session.' });
     }
-  } else if (claims.role && claims.role !== 'admin') {
+  } else if (claims.role !== 'admin') {
     return res.status(401).json({ error: 'Inventory sign-in required.' });
+  } else {
+    req.inventoryUser = {
+      id: 'admin',
+      name: 'Admin',
+      email: claims.email || config.email,
+      role: 'admin',
+    };
   }
 
   return next();

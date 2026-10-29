@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuthHeaders } from './apiAuth';
 
 const API_BASE_URL = '/api';
 
@@ -31,6 +32,7 @@ export interface ActivityRecord {
   reminder: string;
   status: string;
   createdBy: string;
+  createdById?: string;
   lastModifiedBy: string;
   createdAt?: string;
   updatedAt?: string;
@@ -53,6 +55,7 @@ export async function fetchActivities(params: {
   limit?: number;
   status?: string;
   createdBy?: string;
+  createdById?: string;
   customerName?: string;
   activityDatePreset?: string;
   followUpPreset?: string;
@@ -61,7 +64,7 @@ export async function fetchActivities(params: {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 } = {}) {
-  const response = await axios.get(`${API_BASE_URL}/activities`, { params });
+  const response = await axios.get(`${API_BASE_URL}/activities`, { params, headers: getAuthHeaders() });
   return response.data as ActivityListResponse;
 }
 

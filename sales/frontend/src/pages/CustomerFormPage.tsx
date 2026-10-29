@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Country, State, City } from 'country-state-city'
 import Select from 'react-select'
+import { getStoredAuth } from '@/lib/auth'
 import {
   createCustomer,
   fetchCustomerById,
@@ -169,7 +170,7 @@ const emptyForm: CustomerFormState = {
   billingEmail: '',
   status: 'Active',
   accountType: 'Individual',
-  createdBy: 'Admin',
+  createdBy: getStoredAuth()?.user.name || 'Admin',
   notes: '',
 
   contacts: [
@@ -193,7 +194,10 @@ export default function CustomerFormPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [form, setForm] = useState<CustomerFormState>(emptyForm)
+  const [form, setForm] = useState<CustomerFormState>(() => ({
+    ...emptyForm,
+    createdBy: getStoredAuth()?.user.name || 'Admin',
+  }))
   const [activeSection, setActiveSection] =
     useState<SectionKey | null>('company')
 
@@ -517,6 +521,7 @@ export default function CustomerFormPage() {
   const resetForm = () => {
     setForm({
       ...emptyForm,
+      createdBy: getStoredAuth()?.user.name || 'Admin',
 
       contacts: [
         {
@@ -617,7 +622,6 @@ export default function CustomerFormPage() {
       status: form.status,
       notes: form.notes,
       state: form.state,
-      createdBy: form.createdBy,
       accountType: form.accountType,
 
       contacts: form.contacts.map((contact) => ({
@@ -742,6 +746,9 @@ export default function CustomerFormPage() {
           }
         >
           <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Created By">
+              <input value={form.createdBy} readOnly className="crm-input bg-gray-100" />
+            </Field>
             <Field
               label="Company Name"
               required

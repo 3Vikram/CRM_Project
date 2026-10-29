@@ -3,7 +3,7 @@ const Lead = require('../models/Lead');
 const CompanyProfile = require('../models/CompanyProfile');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 const { sendQuotationEmail } = require('../services/emailService');
-const { ownerScope, creatorFields } = require('../utils/accessScope');
+const { ownerScope, creatorFields, resolveCreatorNames } = require('../utils/accessScope');
 
 const PRIORITY_BY_SCORE = (score) => {
   if (score > 80) return 'High';
@@ -223,7 +223,7 @@ exports.getLeads = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: leads,
+      data: await resolveCreatorNames(leads),
       pagination: {
         total,
         page: pageNum,
@@ -240,7 +240,7 @@ exports.getLeadById = async (req, res) => {
   try {
     const lead = await Lead.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).select({ __v: 0 }).lean();
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
-    res.status(200).json({ success: true, data: lead });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(lead) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -2,7 +2,7 @@ const OPF = require('../models/OPF');
 const CompanyProfile = require('../models/CompanyProfile');
 const { sendQuotationEmail } = require('../services/emailService');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
-const { ownerScope, creatorFields } = require('../utils/accessScope');
+const { ownerScope, creatorFields, resolveCreatorNames } = require('../utils/accessScope');
 
 const calculateFinancialYear = (date = new Date()) => {
   const year = date.getFullYear();
@@ -157,7 +157,7 @@ exports.getOPFs = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: enrichedRecords,
+      data: await resolveCreatorNames(enrichedRecords),
       pagination: {
         total,
         page: pageNum,
@@ -176,7 +176,7 @@ exports.getInventoryOPFOptions = async (req, res) => {
     if (req.params.id) {
       const opf = await OPF.findById(req.params.id).select(fields).lean();
       if (!opf) return res.status(404).json({ success: false, message: 'OPF not found.' });
-      return res.status(200).json({ success: true, data: opf });
+      return res.status(200).json({ success: true, data: await resolveCreatorNames(opf) });
     }
 
     const { page, limit, skip } = parsePagination(req.query);
@@ -206,7 +206,7 @@ exports.getOPFById = async (req, res) => {
   try {
     const opf = await OPF.findOne({ $and: [{ _id: req.params.id }, ownerScope(req)] }).lean();
     if (!opf) return res.status(404).json({ success: false, message: 'OPF not found' });
-    res.status(200).json({ success: true, data: enrichOPFFinancials(opf) });
+    res.status(200).json({ success: true, data: await resolveCreatorNames(enrichOPFFinancials(opf)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

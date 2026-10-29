@@ -7,8 +7,8 @@ import { PermissionGate } from '@/sales/components/PermissionGate';
 import { fetchCustomers } from '@/sales/lib/customerApi';
 import { downloadExcelReport } from '@/lib/downloadExcelReport';
 import { toExcelDate } from '@/sales/lib/excelFormat';
+import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi';
 
-const createdByOptions = ['Admin', 'Anaya Patel', 'Rahul Sharma', 'Rhea Shah', 'Maya Nair', 'System'];
 const dateOptions = [
   { value: 'All', label: 'All' },
   { value: 'today', label: 'Today' },
@@ -39,6 +39,13 @@ export default function ActivityPage() {
   const [followUpPreset, setFollowUpPreset] = useState('All');
   const [toast, setToast] = useState<string | null>(null);
   const [customerOptions, setCustomerOptions] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeesError, setEmployeesError] = useState('');
+  const selectedEmployee = createdBy.startsWith('employee:')
+    ? employees.find((employee) => `employee:${employee._id}` === createdBy)
+    : undefined;
+  const selectedEmployeeName = selectedEmployee?.employeeName || selectedEmployee?.fullName || '';
 
   const loadActivities = useCallback(async () => {
     setLoading(true);
@@ -46,7 +53,8 @@ export default function ActivityPage() {
       const response = await fetchActivities({
         page,
         limit,
-        createdBy: createdBy !== 'All' ? createdBy : '',
+        createdBy: selectedEmployeeName || (createdBy !== 'All' && !createdBy.startsWith('employee:') ? createdBy : ''),
+        createdById: createdBy.startsWith('employee:') ? createdBy.slice('employee:'.length) : '',
         customerName: customerName !== 'All' ? customerName : '',
         followUpPreset: followUpPreset !== 'All' ? followUpPreset : '',
         sortBy: 'createdAt',
@@ -62,9 +70,23 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, createdBy, customerName, followUpPreset]);
+  }, [page, limit, createdBy, selectedEmployeeName, customerName, followUpPreset]);
 
   useEffect(() => {
+    const loadEmployees = async () => {
+      setEmployeesLoading(true);
+      setEmployeesError('');
+      try {
+        const response = await fetchEmployees({ limit: 500 });
+        setEmployees(response.data || []);
+      } catch {
+        setEmployees([]);
+        setEmployeesError('Unable to load employees.');
+      } finally {
+        setEmployeesLoading(false);
+      }
+    };
+
     const loadCustomers = async () => {
       try {
         const response = await fetchCustomers({ limit: 500 });
@@ -78,6 +100,7 @@ export default function ActivityPage() {
     };
 
     void loadCustomers();
+    void loadEmployees();
   }, []);
 
   useEffect(() => {
@@ -202,9 +225,18 @@ export default function ActivityPage() {
         <div className="grid gap-3 xl:grid-cols-3">
           <label className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
-            <select value={createdBy} onChange={(event) => setCreatedBy(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
-              {['All', ...createdByOptions].map((option) => <option key={option} value={option}>{option}</option>)}
+            <select value={createdBy} onChange={(event) => { setPage(1); setCreatedBy(event.target.value); }} disabled={employeesLoading} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm disabled:bg-gray-50">
+              <option value="All">All</option>
+              <option value="Admin">Admin</option>
+              {employees.map((employee) => {
+                const fullName = employee.employeeName || employee.fullName;
+                return fullName ? <option key={employee._id} value={`employee:${employee._id}`}>{fullName}</option> : null;
+              })}
+              <option value="System">System</option>
             </select>
+            {employeesLoading ? <span className="text-xs text-gray-500">Loading employees...</span> : null}
+            {!employeesLoading && employeesError ? <span className="text-xs text-red-600">{employeesError}</span> : null}
+            {!employeesLoading && !employeesError && !employees.length ? <span className="text-xs text-gray-500">No employees found.</span> : null}
           </label>
 
           <label className="space-y-2">
