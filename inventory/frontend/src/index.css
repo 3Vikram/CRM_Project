@@ -228,6 +228,13 @@ aside a {
   text-transform: uppercase;
 }
 
+.sales-module-typography table thead,
+.sales-module-typography table thead tr,
+.sales-module-typography table thead th {
+  background-color: #EDE7F6 !important;
+  color: #17233B !important;
+}
+
 .customer-form textarea.crm-input {
   padding: 10px 12px;
   min-height: 88px;

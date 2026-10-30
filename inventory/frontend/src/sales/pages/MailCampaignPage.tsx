@@ -63,6 +63,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   }, [statusFilter])
 
   const tableCellClass = 'border border-[#E5E7EB] px-3 py-2.5 align-middle'
+  const tableHeaderCellClass = `${tableCellClass} bg-[#EDE7F6] text-[#17233B]`
   const formatDate = (value?: string) => {
     if (!value) return '—'
     const date = new Date(value)
@@ -193,16 +194,16 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
           ) : (
           <table className="w-full min-w-[900px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
             <thead>
-              <tr className="bg-[#F2EFE8] text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                <th className={`${tableCellClass} w-[7%] text-center`}>Sl No.</th>
-                <th className={`${tableCellClass} w-[12%]`}>Campaign ID</th>
-                <th className={`${tableCellClass} w-[30%]`}>Campaign Name</th>
-                <th className={`${tableCellClass} w-[15%]`}>Date</th>
-                <th className={`${tableCellClass} w-[9%] text-center`}>View Template</th>
-                <th className={`${tableCellClass} w-[9%] text-center`}>View Report</th>
-                <th className={`${tableCellClass} w-[7%] text-center`}>Opens (Total)</th>
-                <th className={`${tableCellClass} w-[6%] text-center`}>Clicks (Total)</th>
-                <th className={`${tableCellClass} w-[8%] text-center`}>Delete</th>
+              <tr className="text-left text-xs font-semibold uppercase tracking-wider">
+                <th className={`${tableHeaderCellClass} w-[7%] text-center`}>Sl No.</th>
+                <th className={`${tableHeaderCellClass} w-[12%]`}>Campaign ID</th>
+                <th className={`${tableHeaderCellClass} w-[30%]`}>Campaign Name</th>
+                <th className={`${tableHeaderCellClass} w-[15%]`}>Date</th>
+                <th className={`${tableHeaderCellClass} w-[9%] text-center`}>View Template</th>
+                <th className={`${tableHeaderCellClass} w-[9%] text-center`}>View Report</th>
+                <th className={`${tableHeaderCellClass} w-[7%] text-center`}>Opens (Total)</th>
+                <th className={`${tableHeaderCellClass} w-[6%] text-center`}>Clicks (Total)</th>
+                <th className={`${tableHeaderCellClass} w-[8%] text-center`}>Delete</th>
               </tr>
             </thead>
             <tbody>

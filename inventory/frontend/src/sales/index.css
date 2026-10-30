@@ -203,6 +203,13 @@
     font-size: 18px;
   }
 
+  .sales-module-typography table thead,
+  .sales-module-typography table thead tr,
+  .sales-module-typography table thead th {
+    background-color: #EDE7F6 !important;
+    color: #17233B !important;
+  }
+
   .dashboard-label {
     letter-spacing: 0px !important;
   }

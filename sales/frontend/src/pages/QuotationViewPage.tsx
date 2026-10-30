@@ -527,6 +527,10 @@ export default function QuotationViewPage() {
         .q-table thead th {
           border-top: 1px solid #000000;
         }
+        .quotation-view-shell .quotation-frame .q-table thead th {
+          background-color: #EDE7F6 !important;
+          color: #17233B !important;
+        }
         .quotation-view-shell .quotation-frame .quotation-products-table th {
           font-weight: bold !important;
         }

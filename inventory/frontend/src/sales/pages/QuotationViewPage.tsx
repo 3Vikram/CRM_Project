@@ -534,8 +534,8 @@ export default function QuotationViewPage() {
         .quotation-view-shell .quotation-frame .q-table thead th,
         .quotation-view-shell .quotation-frame .q-table thead th * {
           border-top: 1px solid #173B5E;
-          background: #173B5E;
-          color: #FFFFFF !important;
+          background: #EDE7F6;
+          color: #17233B !important;
         }
         .q-table tbody tr:nth-child(even) td {
           background: #F4F8FB;

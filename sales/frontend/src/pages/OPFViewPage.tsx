@@ -324,7 +324,7 @@ export default function OPFViewPage() {
         .opf-web-card .opf-web-title { margin:28px 0 5px; font-size:13px; line-height:16px; font-weight:bold; }
         .opf-web-card .opf-web-table { width:100%; border-collapse:collapse; }
         .opf-web-card .opf-web-table th, .opf-web-card .opf-web-table td { border:1px solid #333; padding:6px 7px; text-align:left; vertical-align:top; font-size:12px; line-height:17px; color:#555; background:#fafafa; }
-        .opf-web-card .opf-web-table th { font-weight:bold; color:#212121; background:#fff; }
+        .opf-web-card .opf-web-table th { font-weight:bold; color:#17233B; background:#EDE7F6; }
         .opf-web-card .opf-web-table .opf-total td { font-weight:bold; }
         .opf-web-card .opf-web-table b { font-weight:normal; }
         .opf-web-card .opf-web-table td div { font-size:12px; line-height:17px; }
