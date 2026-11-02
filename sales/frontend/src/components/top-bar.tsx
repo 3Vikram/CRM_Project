@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import synovLogo from "../assets.png";
 import { clearStoredAuth } from '@/lib/auth'
 
 interface TopBarProps {
@@ -46,11 +45,6 @@ export function TopBar({
   return (
     <div className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b border-[#E7E3DA] bg-[#F0EEE7] px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <img
-          src={synovLogo}
-          alt="Synov IT Services logo"
-          className="h-10 w-auto object-contain"
-        />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold tracking-wide text-[#1F1D1A]">Synov IT Services</div>
         </div>

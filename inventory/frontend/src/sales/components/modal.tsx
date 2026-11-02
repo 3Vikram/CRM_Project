@@ -70,7 +70,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
           }`}
           style={{
             marginTop: '4.5rem',
-            maxHeight: 'calc(100vh - 4.5rem - 30px)',
+            maxHeight: 'calc(100vh / var(--sales-ui-scale) - 4.5rem - 30px)',
           }}
         >
           <div className="flex items-center justify-between border-b border-[#EFECE5] bg-white px-6 py-4">
@@ -84,7 +84,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
             </button>
           </div>
 
-          <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-6">{children}</div>
+          <div className="max-h-[calc(100vh/var(--sales-ui-scale)-12rem)] overflow-y-auto p-6">{children}</div>
 
           {footer && (
             <div className="sticky bottom-0 border-t border-[#EFECE5] bg-white px-6 py-4">{footer}</div>

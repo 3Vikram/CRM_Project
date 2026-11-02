@@ -1,28 +1,31 @@
 'use client'
 
-import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
+  Activity,
+  Building2,
   Contact,
-  Package2,
-  Zap,
+  FileText,
+  LayoutDashboard,
   Mail,
   Package,
-  Activity,
-  ShoppingCart,
-  Truck,
-  FileText,
-  Building2,
+  Package2,
+  Users,
   UserCheck,
+  Zap,
 } from 'lucide-react'
 import { hasPermission } from '@/sales/lib/permissions'
 
-export function Sidebar() {
-  const { pathname } = useLocation()
-  const [isExpanded, setIsExpanded] = useState(false)
+interface SidebarProps {
+  isExpanded: boolean
+  isMobileOpen: boolean
+  onToggle: () => void
+  onClose: () => void
+}
 
+export function Sidebar({ isExpanded, isMobileOpen, onToggle, onClose }: SidebarProps) {
+  const { pathname } = useLocation()
+  const showLabels = isExpanded || isMobileOpen
   const menuItems = [
     { href: '/sales/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
     { href: '/sales/contacts', label: 'Contact', icon: Contact, permission: 'contacts' },
@@ -48,46 +51,41 @@ export function Sidebar() {
   ]
 
   return (
-    <div
-      className={`flex h-full flex-col overflow-hidden border-r border-[#E7E3DA] bg-[#F0EEE7] transition-[width] duration-300 ease-in-out shrink-0 ${
-        isExpanded ? 'w-60' : 'w-[72px]'
-      }`}
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
-    >
-      {/* Navigation */}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:#CEC9BD_transparent] [scrollbar-gutter:stable]">
-        <div className="px-2 py-6">
-          <div className={`mb-4 px-3 text-xs font-semibold uppercase tracking-wider text-[#6B6657] transition-all duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
-            SALES
-          </div>
-          <nav className="space-y-1">
-            {menuItems.filter((item) => hasPermission(item.permission)).map((item) => {
-              const Icon = item.icon
-              const isActive =
-                pathname === item.href || pathname.startsWith(item.href + '/')
-              return (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-all duration-200 ${
-                    isActive
-                      ? 'bg-[#F7F5F2] text-[#1F1D1A]'
-                      : 'text-[#6B6657] hover:bg-[#E7E3DA] hover:text-[#1F1D1A]'
-                  }`}
-                >
-                  <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[#1F1D1A]' : 'text-[#6B6657]'}`} />
-                  <span className={`text-sm transition-all duration-300 ${isExpanded ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0 overflow-hidden'}`}>
-                    {item.label}
-                  </span>
-                </Link>
-              )
-            })}
-          </nav>
+    <>
+      {isMobileOpen ? <button type="button" aria-label="Close navigation" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/50 md:hidden" /> : null}
+      <aside className={`fixed inset-y-0 left-0 z-40 flex h-[calc(100vh/var(--sales-ui-scale))] shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#17233B] text-slate-200 shadow-xl transition-all duration-200 md:relative md:inset-y-auto md:z-auto md:shadow-none ${isMobileOpen ? 'w-60 translate-x-0' : '-translate-x-full md:translate-x-0'} ${isExpanded ? 'md:w-60' : 'md:w-[72px]'}`}>
+        <div className="relative flex h-[72px] shrink-0 items-center justify-center border-b border-white/10 px-3">
+          <Link
+            to="/sales/dashboard"
+            className={`select-none text-center ${showLabels ? 'text-[30px]! tracking-[0.16em] pl-[0.22em]' : 'text-[28px]! tracking-normal'} font-bold uppercase text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60`}
+          >
+            {showLabels ? 'SYNOV' : 'S'}
+          </Link>
+          <button type="button" onClick={onToggle} aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'} className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white md:inline-flex">
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
         </div>
-      </div>
-
-      
-    </div>
+        <div className={`px-4 pt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 ${showLabels ? 'opacity-100' : 'sr-only'}`}>Sales</div>
+        <nav aria-label="Sales navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-4 [scrollbar-color:#475569_transparent] [scrollbar-width:thin]">
+          {menuItems.filter((item) => hasPermission(item.permission)).map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                onClick={onClose}
+                aria-current={isActive ? 'page' : undefined}
+                title={!showLabels ? item.label : undefined}
+                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? 'bg-[#EDE7F6] text-[#17233B] shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
+              >
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className={showLabels ? 'truncate' : 'sr-only md:hidden'}>{item.label}</span>
+              </Link>
+            )
+          })}
+        </nav>
+      </aside>
+    </>
   )
 }

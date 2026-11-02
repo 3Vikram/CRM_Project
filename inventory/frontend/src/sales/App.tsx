@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import { Sidebar } from '@/sales/components/sidebar'
 import { TopBar } from '@/sales/components/top-bar'
 import { getStoredAuth } from '@/sales/lib/auth'
@@ -81,6 +82,8 @@ function AccessDeniedPage() {
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const session = getStoredAuth()
   const loggedIn = typeof window !== 'undefined' && Boolean(session?.token)
 
@@ -92,10 +95,21 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
   const canView = !requiredPermission || hasPermission(requiredPermission)
 
   return (
-    <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
-      <TopBar />
-      <div className="mt-16 flex h-[calc(100vh-4rem)] overflow-hidden">
-        <Sidebar />
+    <div className="sales-module-typography flex h-screen overflow-hidden bg-[#F8F7F3]">
+      <Sidebar
+        isExpanded={sidebarExpanded}
+        isMobileOpen={mobileSidebarOpen}
+        onToggle={() => setSidebarExpanded((expanded) => !expanded)}
+        onClose={() => setMobileSidebarOpen(false)}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar onMenuClick={() => {
+          if (window.matchMedia('(max-width: 767px)').matches) {
+            setMobileSidebarOpen((open) => !open)
+          } else {
+            setSidebarExpanded((expanded) => !expanded)
+          }
+        }} />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">{canView ? children : <AccessDeniedPage />}</main>
       </div>
     </div>

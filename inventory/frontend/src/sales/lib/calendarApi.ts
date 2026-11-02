@@ -8,6 +8,7 @@ export interface CalendarApiEvent {
   module: string
   date: string
   time: string
+  endTime?: string
   customerName?: string
   contactName?: string
   assignedTo?: string
@@ -18,6 +19,8 @@ export interface CalendarApiEvent {
   referenceModule?: string
   sourceField?: string
   eventType?: string
+  amount?: number | string | null
+  amountCurrency?: string
   color?: string
 }
 

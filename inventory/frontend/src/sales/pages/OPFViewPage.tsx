@@ -423,7 +423,7 @@ export default function OPFViewPage() {
   )
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="flex min-h-full items-center justify-center">
       {styles}
       <div className="flex items-center gap-3 text-gray-700" role="status">
         <Loader className="h-5 w-5 animate-spin" />

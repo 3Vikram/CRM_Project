@@ -29,6 +29,8 @@ const { getInventoryOPFOptions } = require('./controllers/opfController');
 const employeeRoutes = require('./routes/employeeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const Activity = require('./models/Activity');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
 const { processScheduledRenewalReminders } = require('./services/renewalReminderService');
@@ -70,6 +72,8 @@ app.get('/api/opf/inventory-options/:id', inventoryAuthMiddleware, getInventoryO
 app.use('/api/opf', authMiddleware, requirePermission('opf'), opfRoutes);
 app.use('/api/employees', authMiddleware, employeeRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', authMiddleware, requirePermission('dashboard'), dashboardRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/reports', authMiddleware, requirePermission('reports'), reportRoutes);
 app.use('/api/locations', authMiddleware, locationRoutes);
 

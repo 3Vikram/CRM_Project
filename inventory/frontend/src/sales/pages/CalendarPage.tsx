@@ -7,21 +7,29 @@ import {
   ArrowLeft,
   BellRing,
   CalendarDays,
+  BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Download,
+  FileText,
+  Filter,
+  ListTodo,
+  Mail,
   MapPin,
+  Phone,
   Plus,
   RefreshCw,
-  Search,
+  RotateCcw,
+  UserRound,
   Users,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { Modal } from '@/sales/components/modal'
 import { completeCalendarEvent, deleteCalendarEvent, fetchCalendarEvents, type CalendarApiEvent } from '@/sales/lib/calendarApi'
 
-type ModuleFilter =
+type CalendarModule =
   | 'All'
   | 'Leads'
   | 'Customers'
@@ -32,6 +40,7 @@ type ModuleFilter =
   | 'Meetings'
   | 'Calls'
   | 'Tasks'
+  | 'OPF'
 
 type EventPriority = 'Low' | 'Medium' | 'High'
 type DashboardDrawerKey = 'today-events' | 'upcoming-events' | 'overdue-activities' | 'meetings-today'
@@ -39,8 +48,8 @@ type DashboardDrawerKey = 'today-events' | 'upcoming-events' | 'overdue-activiti
 type CalendarEvent = {
   id: string
   title: string
-  category: 'Mail Campaign' | 'Lead Follow-up' | 'Customer Meeting' | 'Quotation Reminder' | 'High Priority' | 'Completed Activity'
-  module: ModuleFilter extends 'All' ? never : Exclude<ModuleFilter, 'All'>
+  category: 'Mail Campaign' | 'Lead Follow-up' | 'Customer Meeting' | 'Quotation Reminder' | 'High Priority' | 'Completed Activity' | 'Scheduled Activity'
+  module: Exclude<CalendarModule, 'All'>
   description: string
   customer?: string
   lead?: string
@@ -58,9 +67,11 @@ type CalendarEvent = {
   eventType?: string
   sourceField?: string
   color?: string
+  amount?: number | string | null
+  amountCurrency?: string
 }
 
-const filterOptions: ModuleFilter[] = [
+const moduleOptions: CalendarModule[] = [
   'All',
   'Leads',
   'Customers',
@@ -71,6 +82,7 @@ const filterOptions: ModuleFilter[] = [
   'Meetings',
   'Calls',
   'Tasks',
+  'OPF',
 ]
 
 const moduleColorMap: Record<CalendarEvent['category'], string> = {
@@ -80,9 +92,61 @@ const moduleColorMap: Record<CalendarEvent['category'], string> = {
   'Quotation Reminder': 'bg-violet-100 text-violet-700 border-violet-200',
   'High Priority': 'bg-red-100 text-red-700 border-red-200',
   'Completed Activity': 'bg-slate-200 text-slate-700 border-slate-300',
+  'Scheduled Activity': 'bg-sky-100 text-sky-700 border-sky-200',
 }
 
-const today = new Date()
+const getMonthEventPresentation = (event: CalendarEvent): { label: string; Icon: LucideIcon; classes: string } => {
+  const type = `${event.eventType || ''} ${event.title}`.toLowerCase()
+  if (event.module === 'Funnels') {
+    return { label: 'Funnel', Icon: Filter, classes: 'border-l-orange-500 bg-orange-50 text-orange-900' }
+  }
+  if (event.module === 'Quotations' || type.includes('quotation')) {
+    return { label: 'Quotation', Icon: FileText, classes: 'border-l-violet-500 bg-violet-50 text-violet-900' }
+  }
+  if (event.module === 'Leads') {
+    return { label: 'Lead', Icon: UserRound, classes: 'border-l-sky-500 bg-sky-50 text-sky-900' }
+  }
+  if (type.includes('renewal')) {
+    return { label: 'Renewal', Icon: RotateCcw, classes: 'border-l-amber-500 bg-amber-50 text-amber-900' }
+  }
+  if (event.module === 'OPF') {
+    return { label: 'OPF', Icon: BriefcaseBusiness, classes: 'border-l-orange-500 bg-orange-50 text-orange-900' }
+  }
+  if (type.includes('meeting')) {
+    return { label: 'Meeting', Icon: CalendarDays, classes: 'border-l-emerald-500 bg-emerald-50 text-emerald-900' }
+  }
+  if (type.includes('call') || type.includes('callback')) {
+    return { label: 'Call', Icon: Phone, classes: 'border-l-cyan-500 bg-cyan-50 text-cyan-900' }
+  }
+  if (type.includes('task') || type.includes('next action')) {
+    return { label: 'Task', Icon: ListTodo, classes: 'border-l-indigo-500 bg-indigo-50 text-indigo-900' }
+  }
+  if (event.module === 'Mail Campaigns') {
+    return { label: 'Mail Campaign', Icon: Mail, classes: 'border-l-pink-500 bg-pink-50 text-pink-900' }
+  }
+  if (event.module === 'Activities') {
+    return { label: event.eventType || 'Activity', Icon: Clock3, classes: 'border-l-slate-500 bg-slate-50 text-slate-900' }
+  }
+  return { label: event.eventType || event.module, Icon: BriefcaseBusiness, classes: 'border-l-teal-500 bg-teal-50 text-teal-900' }
+}
+
+const formatEventAmount = (amount: CalendarEvent['amount'], currency?: string) => {
+  if (amount === null || amount === undefined || amount === '') return ''
+  if (typeof amount === 'number' && Number.isFinite(amount)) {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount)
+  }
+  const raw = String(amount).trim()
+  if (!raw) return ''
+  const numeric = Number(raw.replace(/[,\s]/g, ''))
+  if (Number.isFinite(numeric) && /^[A-Z]{3}$/.test(currency || '')) {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency!, maximumFractionDigits: 0 }).format(numeric)
+  }
+  return raw
+}
 
 const formatDate = (value: Date) => {
   const year = value.getFullYear()
@@ -105,6 +169,11 @@ const getMonthLabel = (value: Date) =>
 
 const startOfMonth = (value: Date) => new Date(value.getFullYear(), value.getMonth(), 1)
 const endOfMonth = (value: Date) => new Date(value.getFullYear(), value.getMonth() + 1, 0)
+const startOfWeek = (value: Date) => {
+  const start = new Date(value.getFullYear(), value.getMonth(), value.getDate())
+  start.setDate(start.getDate() - start.getDay())
+  return start
+}
 
 const getCalendarDays = (monthDate: Date) => {
   const monthStart = startOfMonth(monthDate)
@@ -149,14 +218,17 @@ const getDashboardDrawerTitle: Record<DashboardDrawerKey, string> = {
   'meetings-today': 'Meetings Today',
 }
 
+const csvCell = (value: string | undefined) => `"${String(value || '').replace(/"/g, '""')}"`
+
 export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [isLoadingEvents, setIsLoadingEvents] = useState(true)
-  const [selectedFilter, setSelectedFilter] = useState<ModuleFilter>('All')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [today, setToday] = useState(() => new Date())
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedView, setSelectedView] = useState<'Month' | 'Week' | 'Day' | 'Agenda'>('Month')
-  const [searchTerm, setSearchTerm] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [eventPendingDeletion, setEventPendingDeletion] = useState<CalendarEvent | null>(null)
   const [isEventActionLoading, setIsEventActionLoading] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -165,10 +237,15 @@ export default function CalendarPage() {
   const [isDrawerClosing, setIsDrawerClosing] = useState(false)
   const navigate = useNavigate()
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setToday(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
-    module: 'Meetings' as Exclude<ModuleFilter, 'All'>,
+    module: 'Meetings' as Exclude<CalendarModule, 'All'>,
     customer: '',
     lead: '',
     contact: '',
@@ -184,15 +261,17 @@ export default function CalendarPage() {
     type: 'Meeting' as 'Meeting' | 'Call' | 'Task' | 'Reminder' | 'Demo' | 'Site Visit' | 'Personal Event' | 'Holiday',
   })
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (refresh = false) => {
       try {
-        setIsLoadingEvents(true)
+        if (refresh) setIsRefreshing(true)
+        else setIsLoadingEvents(true)
+        setActionError(null)
         const data = await fetchCalendarEvents()
         const mappedEvents: CalendarEvent[] = data.map((event: CalendarApiEvent) => ({
           id: event.id,
           title: event.title,
-          category: event.module === 'Mail Campaigns' ? 'Mail Campaign' : event.module === 'Leads' ? 'Lead Follow-up' : event.module === 'Customers' ? 'Customer Meeting' : event.module === 'Quotations' ? 'Quotation Reminder' : event.priority === 'High' ? 'High Priority' : 'Completed Activity',
-          module: (event.referenceModule || event.module || 'Activities') as Exclude<ModuleFilter, 'All'>,
+          category: event.eventType === 'Mail Campaign' ? 'Mail Campaign' : event.eventType === 'Meeting' ? 'Customer Meeting' : event.module === 'Leads' ? 'Lead Follow-up' : event.module === 'Quotations' || event.module === 'OPF' ? 'Quotation Reminder' : event.status === 'Completed' ? 'Completed Activity' : event.priority === 'High' ? 'High Priority' : 'Scheduled Activity',
+          module: (event.module || 'Activities') as Exclude<CalendarModule, 'All'>,
           description: event.description || `${event.title} scheduled in ${event.module}.`,
           customer: event.customerName || undefined,
           lead: event.contactName || event.customerName || undefined,
@@ -201,7 +280,7 @@ export default function CalendarPage() {
           status: (event.status || 'Pending') as 'Pending' | 'Completed' | 'In Progress',
           date: event.date,
           time: event.time,
-          endTime: event.time,
+          endTime: event.endTime || '',
           location: undefined,
           reminderBefore: undefined,
           notes: event.description || '',
@@ -210,15 +289,17 @@ export default function CalendarPage() {
           eventType: event.eventType,
           sourceField: event.sourceField,
           color: event.color,
+          amount: event.amount,
+          amountCurrency: event.amountCurrency,
         }))
 
         setEvents(mappedEvents)
       } catch (error) {
         console.error('Unable to load calendar events', error)
-        setActionError('Unable to load calendar events.')
-        setEvents([])
+        setActionError('Unable to refresh calendar activities. Please try again.')
       } finally {
         setIsLoadingEvents(false)
+        setIsRefreshing(false)
       }
   }, [])
 
@@ -234,31 +315,19 @@ export default function CalendarPage() {
     }
   }, [actionError])
 
-  const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
-      const matchesFilter = selectedFilter === 'All' || event.module === selectedFilter || (selectedFilter === 'Meetings' && event.eventType === 'Meeting') || (selectedFilter === 'Calls' && event.eventType === 'Call') || (selectedFilter === 'Tasks' && event.eventType === 'Task')
-      const query = searchTerm.trim().toLowerCase()
-      const matchesSearch =
-        !query ||
-        [event.title, event.customer, event.lead, event.description, event.assignedTo, event.referenceModule]
-          .filter(Boolean)
-          .some((value) => (value ?? '').toLowerCase().includes(query))
-
-      return matchesFilter && matchesSearch
-    })
-  }, [events, searchTerm, selectedFilter])
+  const filteredEvents = events
 
   const todaysEvents = useMemo(
     () =>
       filteredEvents.filter((event) => isSameDay(new Date(`${event.date}T${event.time}:00`), today)),
-    [filteredEvents],
+    [filteredEvents, today],
   )
 
   const summaryCards = useMemo(() => {
     const todaysCount = filteredEvents.filter((event) => isSameDay(getEventDateTime(event), today)).length
-    const upcomingCount = filteredEvents.filter((event) => getEventDateTime(event) > today).length
+    const upcomingCount = filteredEvents.filter((event) => event.date > formatDate(today)).length
     const overdueCount = filteredEvents.filter(
-      (event) => getEventDateTime(event) < today && event.status !== 'Completed',
+      (event) => event.date < formatDate(today) && event.status !== 'Completed',
     ).length
     const meetingsTodayCount = filteredEvents.filter(
       (event) =>
@@ -300,7 +369,7 @@ export default function CalendarPage() {
         accent: 'bg-emerald-100 text-emerald-700',
       },
     ]
-  }, [filteredEvents])
+  }, [filteredEvents, today])
 
   const monthDays = useMemo(() => getCalendarDays(currentDate), [currentDate])
 
@@ -310,7 +379,7 @@ export default function CalendarPage() {
         .filter((event) => isSameDay(new Date(`${event.date}T${event.time}:00`), today))
         .sort((a, b) => a.time.localeCompare(b.time))
         .slice(0, 6),
-    [filteredEvents],
+    [filteredEvents, today],
   )
 
   const sidebarEvents = useMemo(() => {
@@ -351,15 +420,28 @@ export default function CalendarPage() {
         }),
       },
     ]
-  }, [filteredEvents])
+  }, [filteredEvents, today])
 
   const eventListForAgenda = useMemo(
     () => [...filteredEvents].sort((a, b) => new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime()),
     [filteredEvents],
   )
 
+  const visibleCalendarDays = useMemo(() => {
+    if (selectedView === 'Day') return [new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())]
+    if (selectedView === 'Week') return Array.from({ length: 7 }, (_, index) => addDays(startOfWeek(currentDate), index))
+    return []
+  }, [currentDate, selectedView])
+
   const monthCellEvents = (day: Date) =>
-    filteredEvents.filter((event) => isSameDay(new Date(`${event.date}T${event.time}:00`), day))
+    filteredEvents
+      .filter((event) => event.date === formatDate(day))
+      .sort((a, b) => a.time.localeCompare(b.time) || a.title.localeCompare(b.title))
+
+  const expandedDateEvents = useMemo(
+    () => expandedDate ? events.filter((event) => event.date === expandedDate).sort((a, b) => a.time.localeCompare(b.time) || a.title.localeCompare(b.title)) : [],
+    [expandedDate, events],
+  )
 
   const openDashboardDrawer = (key: DashboardDrawerKey) => {
     setSelectedEvent(null)
@@ -378,12 +460,14 @@ export default function CalendarPage() {
   const getModuleRoute = (event: CalendarEvent, mode: 'open' | 'edit') => {
     const id = event.referenceId
     if (!id) throw new Error('This calendar event has no source record ID.')
+    if (event.module === 'Quotations') return `/sales/quotations/view/${id}`
     if (event.referenceModule === 'Leads') return mode === 'edit' ? `/sales/leads/edit/${id}` : `/sales/leads/${id}`
     if (event.referenceModule === 'Activities') return `/sales/activities/edit/${id}`
     if (event.referenceModule === 'Customers') return `/customers/edit/${id}`
     if (event.referenceModule === 'Contacts') return `/sales/contacts/edit/${id}`
     if (event.referenceModule === 'Mail Campaigns') return mode === 'edit' ? `/sales/mail-campaign/edit/${id}` : `/sales/mail-campaign/view/${id}`
     if (event.referenceModule === 'Suppliers') return `/sales/suppliers/edit/${id}`
+    if (event.referenceModule === 'OPF') return `/sales/opf/${id}`
     throw new Error(`No route is configured for ${event.referenceModule || event.module}.`)
   }
 
@@ -439,18 +523,19 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
-    if (!selectedEvent && !dashboardDrawer) return
+    if (!selectedEvent && !dashboardDrawer && !expandedDate) return
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        closeDrawer()
+        if (expandedDate) setExpandedDate(null)
+        else closeDrawer()
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selectedEvent, dashboardDrawer])
+  }, [selectedEvent, dashboardDrawer, expandedDate])
 
   useEffect(() => {
     if (!selectedEvent && !dashboardDrawer) return
@@ -461,7 +546,51 @@ export default function CalendarPage() {
     }
   }, [selectedEvent, dashboardDrawer])
 
-  const goToToday = () => setCurrentDate(new Date(today))
+  const goToToday = () => setCurrentDate(new Date(today.getFullYear(), today.getMonth(), today.getDate()))
+
+  const navigateCalendarDate = (direction: -1 | 1) => {
+    const next = new Date(currentDate)
+    if (selectedView === 'Day') next.setDate(next.getDate() + direction)
+    else if (selectedView === 'Week') next.setDate(next.getDate() + direction * 7)
+    else next.setMonth(next.getMonth() + direction)
+    setCurrentDate(next)
+  }
+
+  const handleExportCalendar = () => {
+    try {
+      if (!events.length) {
+        setActionError('There are no calendar activities to export.')
+        return
+      }
+      const headers = ['Title', 'Event Type', 'Module', 'Date', 'Start Time', 'End Time', 'Description', 'Status', 'Customer', 'Contact', 'Assigned Employee', 'Priority']
+      const rows = events.map((event) => [
+        event.title,
+        event.eventType,
+        event.module,
+        event.date,
+        event.time,
+        event.endTime,
+        event.description,
+        event.status,
+        event.customer,
+        event.lead,
+        event.assignedTo,
+        event.priority,
+      ].map(csvCell).join(','))
+      const blob = new Blob([`\uFEFF${headers.map(csvCell).join(',')}\r\n${rows.join('\r\n')}`], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'Sales_Calendar_Activities.csv'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Unable to export calendar activities:', error)
+      setActionError('Unable to export calendar activities. Please try again.')
+    }
+  }
 
   const handleSubmitEvent = () => {
     if (!newEvent.title.trim()) return
@@ -497,7 +626,6 @@ export default function CalendarPage() {
     setEvents((prev) => [nextEvent, ...prev])
     setIsAddEventOpen(false)
     setCurrentDate(new Date(`${newEvent.date}T00:00:00`))
-    setSelectedFilter('All')
     setNewEvent({
       title: '',
       description: '',
@@ -528,29 +656,33 @@ export default function CalendarPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {[
-            { label: '+ Add Event', primary: true, onClick: () => setIsAddEventOpen(true) },
+            { label: 'Add Event', primary: true, onClick: () => setIsAddEventOpen(true) },
             { label: 'Today', primary: false, onClick: goToToday },
-            { label: 'Refresh', primary: false, onClick: () => setCurrentDate(new Date(currentDate)) },
-            { label: 'Export Calendar', primary: false, onClick: () => null },
+            { label: 'Refresh', primary: false, onClick: () => void loadEvents(true) },
+            { label: 'Export Calendar', primary: false, onClick: handleExportCalendar },
           ].map((action) => (
             <button
               key={action.label}
               type="button"
               onClick={action.onClick}
+              disabled={action.label === 'Refresh' && isRefreshing}
               className={
                 action.primary
                   ? 'rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[#1E293B]'
                   : 'rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#F2EFE8]'
               }
             >
-              {action.label === 'Refresh' ? <RefreshCw className="mr-2 inline h-4 w-4" /> : null}
+              {action.label === 'Refresh' ? <RefreshCw className={`mr-2 inline h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> : null}
               {action.label === 'Export Calendar' ? <Download className="mr-2 inline h-4 w-4" /> : null}
-              {action.label === '+ Add Event' ? <Plus className="mr-2 inline h-4 w-4" /> : null}
-              {action.label}
+              {action.label === 'Add Event' ? <Plus className="mr-2 inline h-4 w-4" /> : null}
+              {isRefreshing && action.label === 'Refresh' ? 'Refreshing...' : action.label}
             </button>
           ))}
         </div>
       </div>
+
+      {actionError ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{actionError}</div> : null}
+      {isLoadingEvents && events.length === 0 ? <div role="status" className="rounded-lg border border-[#EFECE5] bg-white px-4 py-6 text-center text-sm text-gray-500">Loading calendar activities...</div> : null}
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map(({ key, title, count, icon: Icon, subtitle, accent }) => (
@@ -574,55 +706,32 @@ export default function CalendarPage() {
         ))}
       </div>
 
-      <div className="rounded-xl border border-[#EFECE5] bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            {filterOptions.map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setSelectedFilter(filter)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                  selectedFilter === filter
-                    ? 'bg-[#111827] text-white'
-                    : 'border border-[#EFECE5] bg-[#F8F7F3] text-gray-700 hover:bg-[#F2EFE8]'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative w-full max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search calendar"
-              className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] py-2 pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-[#CEC9BD] focus:outline-none"
-            />
-          </div>
-        </div>
-      </div>
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-xl border border-[#EFECE5] bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 border-b border-[#EFECE5] pb-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
+                onClick={() => navigateCalendarDate(-1)}
                 className="rounded-lg border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]"
-                aria-label="Previous month"
+                aria-label={`Previous ${selectedView === 'Day' ? 'day' : selectedView === 'Week' ? 'week' : 'month'}`}
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <div className="text-2xl font-serif font-bold text-gray-900">{getMonthLabel(currentDate)}</div>
+              <div className="text-2xl font-serif font-bold text-gray-900">
+                {selectedView === 'Month'
+                  ? getMonthLabel(currentDate)
+                  : selectedView === 'Day'
+                    ? formatDisplayDate(formatDate(currentDate))
+                    : selectedView === 'Week'
+                      ? `${formatDisplayDate(formatDate(visibleCalendarDays[0]))} - ${formatDisplayDate(formatDate(visibleCalendarDays[6]))}`
+                      : 'All Activities'}
+              </div>
               <button
                 type="button"
-                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
+                onClick={() => navigateCalendarDate(1)}
                 className="rounded-lg border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]"
-                aria-label="Next month"
+                aria-label={`Next ${selectedView === 'Day' ? 'day' : selectedView === 'Week' ? 'week' : 'month'}`}
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -664,29 +773,47 @@ export default function CalendarPage() {
 
                   return (
                     <div
-                      key={`${day.toISOString()}-${day.getDate()}`}
-                      className={`min-h-[120px] border-r border-b border-[#EFECE5] p-2 text-left last:border-r-0 ${
+                      key={formatDate(day)}
+                      className={`min-h-[176px] overflow-hidden border-r border-b border-[#EFECE5] p-1.5 text-left last:border-r-0 sm:p-2 ${
                         !isCurrentMonth ? 'bg-[#FBFAF7] text-gray-400' : 'bg-white'
                       } ${isToday ? 'ring-1 ring-inset ring-[#111827]' : ''}`}
                     >
-                      <div className={`mb-2 text-right text-sm ${isToday ? 'font-bold text-[#111827]' : 'font-medium text-gray-700'}`}>
+                      <div className={`mb-1.5 text-right text-xs ${isToday ? 'font-bold text-[#111827]' : 'font-medium text-gray-700'}`}>
                         {day.getDate()}
                       </div>
 
-                      <div className="space-y-1">
-                        {eventsForDay.slice(0, 3).map((event) => (
+                      <div className="space-y-1 overflow-hidden">
+                        {eventsForDay.slice(0, 2).map((event) => {
+                          const presentation = getMonthEventPresentation(event)
+                          const amount = formatEventAmount(event.amount, event.amountCurrency)
+                          return (
+                            <button
+                              key={event.id}
+                              type="button"
+                              title={`${presentation.label}: ${event.title}${event.customer ? ` · ${event.customer}` : ''}${amount ? ` · ${amount}` : ''}`}
+                              onClick={() => setSelectedEvent(event)}
+                              className={`block w-full min-w-0 overflow-hidden rounded-r border border-transparent border-l-[3px] px-1.5 py-1 text-left text-[9px] leading-tight transition hover:brightness-95 sm:text-[10px] ${presentation.classes}`}
+                            >
+                              <span className="flex min-w-0 items-center gap-1 font-semibold">
+                                <presentation.Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                <span className="truncate">{presentation.label}: {event.title}</span>
+                                <span className="ml-auto shrink-0 font-normal opacity-75">{event.time}</span>
+                              </span>
+                              {event.customer ? <span className="mt-0.5 block truncate pl-4">{event.customer}</span> : null}
+                              {amount ? <span className="mt-0.5 block truncate pl-4 font-semibold">{amount}</span> : null}
+                            </button>
+                          )
+                        })}
+                        {eventsForDay.length > 2 ? (
                           <button
-                            key={event.id}
                             type="button"
-                            onClick={() => setSelectedEvent(event)}
-                            className={`w-full rounded px-2 py-1 text-left text-[10px] font-medium ${moduleColorMap[event.category]}`}
+                            onClick={() => setExpandedDate(formatDate(day))}
+                            className="w-full truncate px-1 text-left text-[10px] font-semibold text-blue-700 hover:underline"
+                            aria-label={`Show ${eventsForDay.length - 2} more activities on ${formatDisplayDate(formatDate(day))}`}
                           >
-                            {event.title}
+                            +{eventsForDay.length - 2} more
                           </button>
-                        ))}
-                        {eventsForDay.length > 3 && (
-                          <div className="px-1 text-[10px] font-medium text-gray-500">+{eventsForDay.length - 3} more</div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   )
@@ -697,7 +824,7 @@ export default function CalendarPage() {
 
           {selectedView === 'Agenda' && (
             <div className="mt-5 space-y-4">
-              {eventListForAgenda.map((event) => (
+              {eventListForAgenda.length ? eventListForAgenda.map((event) => (
                 <button
                   key={event.id}
                   type="button"
@@ -713,23 +840,32 @@ export default function CalendarPage() {
                     <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${priorityMap[event.priority]}`}>{event.priority}</span>
                   </div>
                 </button>
-              ))}
+              )) : <div className="rounded-lg border border-dashed border-[#EFECE5] p-8 text-center text-sm text-gray-500">No calendar activities found.</div>}
             </div>
           )}
 
           {selectedView !== 'Month' && selectedView !== 'Agenda' && (
-            <div className="mt-5 space-y-4 rounded-lg border border-[#EFECE5] bg-[#FAF8F2] p-4">
-              <div className="text-sm font-medium text-gray-600">{selectedView} view</div>
-              <div className="space-y-3">
-                {filteredEvents.slice(0, 6).map((event) => (
-                  <div key={event.id} className="rounded-lg border border-[#EFECE5] bg-white p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium text-gray-900">{event.title}</div>
-                      <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${moduleColorMap[event.category]}`}>{event.category}</span>
-                    </div>
-                    <div className="mt-2 text-xs text-gray-500">{formatDisplayDate(event.date)} • {event.time}</div>
-                  </div>
-                ))}
+            <div className="mt-5 overflow-x-auto">
+              <div className={`grid min-w-[700px] ${selectedView === 'Week' ? 'grid-cols-7' : 'grid-cols-1'} rounded-lg border border-[#EFECE5]`}>
+                {visibleCalendarDays.map((day) => {
+                  const dayEvents = monthCellEvents(day).sort((a, b) => a.time.localeCompare(b.time))
+                  return (
+                    <section key={formatDate(day)} className={`min-h-[320px] border-r border-[#EFECE5] last:border-r-0 ${isSameDay(day, today) ? 'bg-[#FAF8F2]' : 'bg-white'}`}>
+                      <div className={`border-b border-[#EFECE5] px-3 py-3 text-center ${isSameDay(day, today) ? 'font-bold text-[#111827]' : 'font-semibold text-gray-700'}`}>
+                        <div className="text-xs uppercase tracking-wide text-gray-500">{new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(day)}</div>
+                        <div className="mt-1 text-sm">{formatDisplayDate(formatDate(day))}</div>
+                      </div>
+                      <div className="space-y-2 p-2">
+                        {dayEvents.length ? dayEvents.map((event) => (
+                          <button key={event.id} type="button" onClick={() => setSelectedEvent(event)} className={`w-full rounded-md border p-2 text-left ${moduleColorMap[event.category]}`}>
+                            <span className="block text-xs font-semibold">{event.time}{event.endTime ? ` - ${event.endTime}` : ''}</span>
+                            <span className="mt-1 block truncate text-xs">{event.title}</span>
+                          </button>
+                        )) : <div className="py-4 text-center text-xs text-gray-400">No activities</div>}
+                      </div>
+                    </section>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -801,7 +937,7 @@ export default function CalendarPage() {
           onClick={closeDrawer}
         >
           <div
-            className={`fixed right-0 top-[calc(4rem+20px)] z-50 h-[calc(100vh-4rem-20px)] w-full max-w-[480px] border-l border-[#EFECE5] bg-white shadow-2xl transition-transform duration-300 ease-out md:w-[70%] ${
+            className={`fixed right-0 top-[calc((4rem+20px)/var(--sales-ui-scale))] z-50 h-[calc(100vh/var(--sales-ui-scale)-(4rem+20px)/var(--sales-ui-scale))] w-full max-w-[480px] border-l border-[#EFECE5] bg-white shadow-2xl transition-transform duration-300 ease-out md:w-[70%] ${
               isDrawerClosing ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'
             }`}
             onClick={(event) => event.stopPropagation()}
@@ -887,7 +1023,7 @@ export default function CalendarPage() {
                       <div className="flex flex-col gap-2 pt-2">
                         <button type="button" onClick={handleOpenModule} className="rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Open Module</button>
                         <button type="button" onClick={handleEditEvent} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700">Edit Event</button>
-                        <button type="button" onClick={() => void handleMarkComplete()} disabled={isEventActionLoading || selectedEvent.status === 'Completed'} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">{selectedEvent.status === 'Completed' ? 'Completed' : 'Mark Complete'}</button>
+                        {selectedEvent.referenceModule !== 'OPF' && <button type="button" onClick={() => void handleMarkComplete()} disabled={isEventActionLoading || selectedEvent.status === 'Completed'} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50">{selectedEvent.status === 'Completed' ? 'Completed' : 'Mark Complete'}</button>}
                         <button type="button" onClick={() => setEventPendingDeletion(selectedEvent)} className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700">Delete</button>
                       </div>
                     </div>
@@ -1073,6 +1209,64 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {expandedDate && (
+        <div
+          className="fixed inset-0 z-[55] flex items-center justify-center bg-black/35 px-4 py-6"
+          onClick={() => setExpandedDate(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-day-events-title"
+            className="flex max-h-[calc(85vh/var(--sales-ui-scale))] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[#EFECE5] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center justify-between border-b border-[#EFECE5] px-4 py-3">
+              <div>
+                <h2 id="calendar-day-events-title" className="text-base font-semibold text-gray-900">
+                  Activities on {formatDisplayDate(expandedDate)}
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500">{expandedDateEvents.length} scheduled activities</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpandedDate(null)}
+                className="rounded-lg p-2 text-gray-500 transition hover:bg-[#F2EFE8]"
+                aria-label="Close activities for date"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </header>
+            <div className="space-y-2 overflow-y-auto p-3">
+              {expandedDateEvents.map((event) => {
+                const presentation = getMonthEventPresentation(event)
+                const amount = formatEventAmount(event.amount, event.amountCurrency)
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => {
+                      setExpandedDate(null)
+                      setSelectedEvent(event)
+                    }}
+                    className={`block w-full rounded-r-lg border border-transparent border-l-4 p-3 text-left transition hover:brightness-95 ${presentation.classes}`}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-semibold">
+                      <presentation.Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{presentation.label}: {event.title}</span>
+                      <span className="ml-auto shrink-0 text-xs font-medium">{event.time}</span>
+                    </span>
+                    <span className="mt-1 block pl-6 text-xs">{event.customer || 'No related customer'}</span>
+                    {amount ? <span className="mt-1 block pl-6 text-xs font-semibold">{amount}</span> : null}
+                    <span className="mt-1 block pl-6 text-xs opacity-75">{event.module} · {event.status}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
       {eventPendingDeletion && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={() => !isEventActionLoading && setEventPendingDeletion(null)}>
           <div role="dialog" aria-modal="true" aria-labelledby="delete-event-title" className="w-full max-w-md rounded-lg bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -1088,8 +1282,6 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
-
-      {actionError && <div className="fixed bottom-5 right-5 z-[70] max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg">{actionError}</div>}
 
       <Modal
         isOpen={isAddEventOpen}
@@ -1131,11 +1323,11 @@ export default function CalendarPage() {
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Related Module</label>
               <select
                 value={newEvent.module}
-                onChange={(event) => setNewEvent((current) => ({ ...current, module: event.target.value as Exclude<ModuleFilter, 'All'> }))}
+                onChange={(event) => setNewEvent((current) => ({ ...current, module: event.target.value as Exclude<CalendarModule, 'All'> }))}
                 className="w-full rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
               >
-                {filterOptions.filter((filter) => filter !== 'All').map((filter) => (
-                  <option key={filter} value={filter}>{filter}</option>
+                {moduleOptions.filter((option) => option !== 'All').map((option) => (
+                  <option key={option} value={option}>{option}</option>
                 ))}
               </select>
             </div>

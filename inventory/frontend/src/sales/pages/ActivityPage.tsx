@@ -344,7 +344,7 @@ export default function ActivityPage() {
 
       {selectedActivity && (
         <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setSelectedActivity(null)}>
-          <div className="fixed right-0 top-[calc(4rem+20px)] z-50 h-[calc(100vh-4rem-20px)] w-full max-w-[520px] overflow-y-auto border-l border-[#EFECE5] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="fixed right-0 top-[calc((4rem+20px)/var(--sales-ui-scale))] z-50 h-[calc(100vh/var(--sales-ui-scale)-(4rem+20px)/var(--sales-ui-scale))] w-full max-w-[520px] overflow-y-auto border-l border-[#EFECE5] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#EFECE5] bg-white px-4 py-3">
               <button type="button" onClick={() => setSelectedActivity(null)} className="inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 transition hover:bg-[#F2EFE8]">
                 <ArrowLeft className="h-4 w-4" /> Back
