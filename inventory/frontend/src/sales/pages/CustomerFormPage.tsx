@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, ChevronRight, Plus, RefreshCcw, Save, Upload } from 'lucide-react'
+import { ArrowLeft, Plus, RefreshCcw, Save, Upload } from 'lucide-react'
 import { Country, State, City } from 'country-state-city'
 import Select from 'react-select'
 import {
@@ -41,6 +41,7 @@ interface DocumentItem {
 
 interface CustomerFormState {
   companyName: string
+  industry: string
   state: string
   gstNumber: string
   billingAddressLine: string
@@ -76,8 +77,26 @@ interface SelectOption {
 }
 
 type SectionKey = 'company' | 'billing' | 'contact' | 'documents'
+const FORM_STEPS: Array<{ key: SectionKey; title: string }> = [
+  { key: 'company', title: 'Company Information' },
+  { key: 'billing', title: 'Billing Address' },
+  { key: 'contact', title: 'Contact Information' },
+  { key: 'documents', title: 'Documents' },
+]
 
 const contactTypeOptions = ['Accounts', 'Production', 'Marketing', 'Finance', 'Management']
+const natureOfBusinessOptions = [
+  'Auto',
+  'Education',
+  'Fashion/ clothing',
+  'Govt',
+  'Hardware Seller',
+  'IT',
+  'ITES',
+  'Manufacturing',
+  'Realestate',
+  'Reseller',
+]
 
 const selectStyles = {
   control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
@@ -108,6 +127,7 @@ const filterByInput = (option: { label: string }, inputValue: string) => {
 
 const emptyForm: CustomerFormState = {
   companyName: '',
+  industry: '',
   state: '',
   gstNumber: '',
   billingAddressLine: '',
@@ -140,7 +160,9 @@ export default function CustomerFormPage() {
   const isEditing = Boolean(id)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<CustomerFormState>(emptyForm)
-  const [activeSection, setActiveSection] = useState<SectionKey | null>('company')
+  const [activeSection, setActiveSection] = useState<SectionKey>('company')
+  const [savedShippingAddress, setSavedShippingAddress] = useState<CustomerApiRecord['shipToAddress'] | null>(null)
+  const [savedShipToSameAsBilling, setSavedShipToSameAsBilling] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [countries, setCountries] = useState<LocationOption[]>([])
@@ -234,6 +256,7 @@ export default function CustomerFormPage() {
         const primaryContact = customer.contacts?.[0]
         setForm({
           companyName: customer.companyName || customer.customerName || '',
+          industry: customer.industry || '',
           state: customer.state || '',
           gstNumber: customer.gstNumber || '',
           billingAddressLine: customer.billToAddress?.addressLine1 || '',
@@ -257,6 +280,8 @@ export default function CustomerFormPage() {
           })),
           documents: [],
         })
+        setSavedShippingAddress(customer.shipToAddress || null)
+        setSavedShipToSameAsBilling(customer.shipToSameAsBilling ?? true)
       } catch (error) {
         console.error(error)
       }
@@ -397,6 +422,7 @@ export default function CustomerFormPage() {
 
     const payload: CustomerPayload = {
       companyName: form.companyName,
+      industry: form.industry,
       customerName: form.companyName,
       email: form.billingEmail,
       phone: form.billingContactNumber,
@@ -420,8 +446,15 @@ export default function CustomerFormPage() {
         city: form.billingCity,
         pincode: form.billingPinCode,
       },
-      shipToSameAsBilling: true,
-      shipToAddress: {
+      shipToSameAsBilling: isEditing ? savedShipToSameAsBilling : true,
+      shipToAddress: isEditing && savedShippingAddress ? {
+        addressLine1: savedShippingAddress.addressLine1 || '',
+        area: savedShippingAddress.area || '',
+        country: savedShippingAddress.country || '',
+        state: savedShippingAddress.state || '',
+        city: savedShippingAddress.city || '',
+        pincode: savedShippingAddress.pincode || '',
+      } : {
         addressLine1: form.billingAddressLine,
         area: form.billingArea,
         country: form.billingCountry,
@@ -472,14 +505,48 @@ export default function CustomerFormPage() {
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div>
         ) : null}
 
-        <SectionCard
+        <div className="grid grid-cols-4 gap-2">
+          {FORM_STEPS.map((step, index) => {
+            const isActive = activeSection === step.key
+            const isComplete = FORM_STEPS.findIndex((item) => item.key === activeSection) > index
+            return (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => setActiveSection(step.key)}
+                aria-current={isActive ? 'step' : undefined}
+                className={`flex min-h-[76px] min-w-0 items-center gap-1.5 rounded-lg border px-2 py-2 text-left transition sm:gap-3 sm:px-4 sm:py-3 ${isActive ? 'border-[#111827] bg-[#111827] text-white shadow-sm' : isComplete ? 'border-emerald-200 bg-emerald-50 text-slate-800' : 'border-[#EFECE5] bg-[#F8F7F3] text-slate-700 hover:bg-[#F2EFE8]'}`}
+              >
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${isActive ? 'bg-white text-[#111827]' : isComplete ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600'}`}>
+                  {index + 1}
+                </span>
+                <span className="min-w-0 text-[10px] font-semibold leading-tight sm:text-sm">{step.title}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {activeSection === 'company' && <SectionCard
           title="Company Information"
-          isOpen={activeSection === 'company'}
-          onToggle={() => setActiveSection((current) => (current === 'company' ? null : 'company'))}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Company Name" required>
               <input value={form.companyName} onChange={(event) => handleFieldChange('companyName', event.target.value)} placeholder="Company Name" className="crm-input form-control" />
+            </Field>
+            <Field label="Nature of Business">
+              <select
+                value={form.industry}
+                onChange={(event) => handleFieldChange('industry', event.target.value)}
+                className="crm-input form-select"
+              >
+                <option value="">Select Nature of Business...</option>
+                {form.industry && !natureOfBusinessOptions.includes(form.industry) ? (
+                  <option value={form.industry}>{form.industry}</option>
+                ) : null}
+                {natureOfBusinessOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </Field>
             <Field label="State" required>
               <Select
@@ -516,12 +583,10 @@ export default function CustomerFormPage() {
               </select>
             </Field>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard
+        {activeSection === 'billing' && <SectionCard
           title="Billing Address"
-          isOpen={activeSection === 'billing'}
-          onToggle={() => setActiveSection((current) => (current === 'billing' ? null : 'billing'))}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Address Line" required>
@@ -600,12 +665,10 @@ export default function CustomerFormPage() {
               <input type="email" value={form.billingEmail} onChange={(event) => handleFieldChange('billingEmail', event.target.value)} placeholder="Email" className="crm-input form-control" />
             </Field>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard
+        {activeSection === 'contact' && <SectionCard
           title="Contact Information"
-          isOpen={activeSection === 'contact'}
-          onToggle={() => setActiveSection((current) => (current === 'contact' ? null : 'contact'))}
         >
           <div className="space-y-4">
             {form.contacts.map((contact, index) => (
@@ -645,12 +708,10 @@ export default function CustomerFormPage() {
               Add Contact
             </button>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard
+        {activeSection === 'documents' && <SectionCard
           title="Documents"
-          isOpen={activeSection === 'documents'}
-          onToggle={() => setActiveSection((current) => (current === 'documents' ? null : 'documents'))}
         >
           <div className="space-y-3">
             <div className="flex items-center gap-3">
@@ -671,9 +732,20 @@ export default function CustomerFormPage() {
               </div>
             ) : null}
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <div className="flex items-center justify-end gap-3 border-t border-[#EFECE5] pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFECE5] pt-4">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setActiveSection(FORM_STEPS[Math.max(0, FORM_STEPS.findIndex((step) => step.key === activeSection) - 1)].key)} disabled={activeSection === FORM_STEPS[0].key} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+              Previous
+            </button>
+            {activeSection !== FORM_STEPS[FORM_STEPS.length - 1].key ? (
+              <button type="button" onClick={() => setActiveSection(FORM_STEPS[Math.min(FORM_STEPS.length - 1, FORM_STEPS.findIndex((step) => step.key === activeSection) + 1)].key)} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-[#F2EFE8]">
+                Next
+              </button>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-end gap-3">
           <button type="button" onClick={resetForm} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-semibold text-slate-700">
             <RefreshCcw className="h-4 w-4" />
             Reset
@@ -682,6 +754,7 @@ export default function CustomerFormPage() {
             <Save className="h-4 w-4" />
             {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Submit'}
           </button>
+          </div>
         </div>
       </form>
     </div>
@@ -690,22 +763,17 @@ export default function CustomerFormPage() {
 
 function SectionCard({
   title,
-  isOpen,
-  onToggle,
   children,
 }: {
   title: string
-  isOpen: boolean
-  onToggle: () => void
   children: React.ReactNode
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[#EFECE5] bg-white">
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between bg-[#F8F7F3] px-4 py-3 text-left">
+      <div className="flex w-full items-center bg-[#F8F7F3] px-4 py-3">
         <span className="text-sm font-semibold text-slate-800">{title}</span>
-        {isOpen ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
-      </button>
-      {isOpen ? <div className="p-4">{children}</div> : null}
+      </div>
+      <div className="p-4">{children}</div>
     </div>
   )
 }

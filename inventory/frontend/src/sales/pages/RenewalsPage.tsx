@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Eye, Pencil, RefreshCw } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { fetchOPFs, type OPFRecord } from '@/sales/lib/opfApi'
 import { fetchCustomers } from '@/sales/lib/customerApi'
 import { SearchableSelect } from '@/sales/components/SearchableSelect'
@@ -89,6 +89,8 @@ const formatCurrency = (value?: number | string) => {
 
 export default function RenewalsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedRecordId = searchParams.get('recordId')
   const [opfs, setOpfs] = useState<RenewalOPFRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -158,17 +160,24 @@ export default function RenewalsPage() {
 
   const eligibleRenewals = useMemo(() => opfs
     .map((opf) => ({ opf, days: daysUntilRenewal(opf.renewalDate as string) }))
-    .filter(({ opf, days }) => !isResolvedRenewal(opf) && days <= 90), [opfs, todayKey])
+    .filter(({ opf, days }) => selectedRecordId
+      ? opf._id === selectedRecordId || opf.opfNo === selectedRecordId
+      : !isResolvedRenewal(opf) && days <= 90), [opfs, selectedRecordId, todayKey])
 
-  const renewalRows = useMemo(() => eligibleRenewals
-    .filter(({ opf }) => createdByFilter === 'All' || (opf.createdBy || 'Admin') === createdByFilter)
-    .filter(({ opf }) => customerFilter === 'All' || (opf.customerName || '') === customerFilter)
-    .filter(({ opf }) => isInDueDateRange(opf.renewalDate as string, dueDateFilter))
-    .filter(({ opf }) => statusFilter === 'All' || getRecordStatus(opf) === statusFilter)
-    .sort((left, right) => {
+  const renewalRows = useMemo(() => {
+    const records = selectedRecordId
+      ? eligibleRenewals.filter(({ opf }) => opf._id === selectedRecordId || opf.opfNo === selectedRecordId)
+      : eligibleRenewals
+        .filter(({ opf }) => createdByFilter === 'All' || (opf.createdBy || 'Admin') === createdByFilter)
+        .filter(({ opf }) => customerFilter === 'All' || (opf.customerName || '') === customerFilter)
+        .filter(({ opf }) => isInDueDateRange(opf.renewalDate as string, dueDateFilter))
+        .filter(({ opf }) => statusFilter === 'All' || getRecordStatus(opf) === statusFilter)
+
+    return records.sort((left, right) => {
       const difference = left.days - right.days
       return (sortOrder === 'asc' ? difference : -difference) || left.opf._id.localeCompare(right.opf._id)
-    }), [eligibleRenewals, createdByFilter, dueDateFilter, customerFilter, statusFilter, sortOrder])
+    })
+  }, [eligibleRenewals, selectedRecordId, createdByFilter, dueDateFilter, customerFilter, statusFilter, sortOrder])
 
   const createdByOptions = useMemo(() => ['All', ...Array.from(new Set(eligibleRenewals.map(({ opf }) => opf.createdBy || 'Admin'))).sort()], [eligibleRenewals])
 
@@ -179,9 +188,16 @@ export default function RenewalsPage() {
           <h1 className="crm-page-heading">Renewals</h1>
           <p className="mt-1 text-sm text-slate-500">{eligibleRenewals.length} unresolved renewal{eligibleRenewals.length === 1 ? '' : 's'} in the 90-day window, including overdue items</p>
         </div>
-        <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedRecordId ? (
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+              Show all renewals
+            </button>
+          ) : null}
+          <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

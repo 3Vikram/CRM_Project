@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ChevronLeft,
   ChevronRight,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { Toast } from '@/sales/components/toast'
 import { fetchCustomers } from '@/sales/lib/customerApi'
-import { deleteLead, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
+import { deleteLead, fetchLeadById, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
 
@@ -58,6 +58,8 @@ const getAccountTypeByCompany = (companyName: string | undefined, customerMap: R
 
 export default function FunnelPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedRecordId = searchParams.get('recordId')
   const [funnels, setFunnels] = useState<LeadRecord[]>([])
   const [customers, setCustomers] = useState<Array<{ companyName?: string; customerName?: string; accountType?: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -78,12 +80,16 @@ export default function FunnelPage() {
     const loadPageData = async () => {
       setIsLoading(true)
       try {
-        const [leadResponse, customerResponse] = await Promise.all([
+        const [leadResponse, customerResponse, selectedLead] = await Promise.all([
           fetchLeads({ limit: 1000 }),
           fetchCustomers({ limit: 1000, fresh: true }),
+          selectedRecordId ? fetchLeadById(selectedRecordId) : Promise.resolve(null),
         ])
 
         const funnelRecords = (leadResponse.data || []).filter((lead) => lead.quotationId || lead.leadStatus)
+        if (selectedLead && !funnelRecords.some((lead) => lead._id === selectedLead._id)) {
+          funnelRecords.unshift(selectedLead)
+        }
         setFunnels(funnelRecords)
         setCustomers(customerResponse.data || [])
       } catch (error) {
@@ -94,7 +100,7 @@ export default function FunnelPage() {
     }
 
     void loadPageData()
-  }, [])
+  }, [selectedRecordId])
 
   const customerAccountMap = useMemo(() => {
     return customers.reduce<Record<string, string>>((acc, customer) => {
@@ -129,6 +135,7 @@ export default function FunnelPage() {
 
   const filteredFunnels = useMemo(() => {
     return funnels.filter((row) => {
+      if (selectedRecordId) return row._id === selectedRecordId || row.quotationId === selectedRecordId || row.leadId === selectedRecordId
       if (createdBy !== 'all' && (row.createdBy || 'System') !== createdBy) return false
       if (createdDate !== 'all' && formatDate(row.createdDate) !== createdDate) return false
       if (expectedClosure !== 'all') {
@@ -154,7 +161,7 @@ export default function FunnelPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(search))
     })
-  }, [funnels, createdBy, createdDate, expectedClosure, customerName, stageFilter, accountTypeFilter, searchQuery, customerAccountMap])
+  }, [funnels, selectedRecordId, createdBy, createdDate, expectedClosure, customerName, stageFilter, accountTypeFilter, searchQuery, customerAccountMap])
 
   const pageCount = Math.max(1, Math.ceil(filteredFunnels.length / entriesPerPage))
   const pageData = filteredFunnels.slice((page - 1) * entriesPerPage, page * entriesPerPage)
@@ -162,6 +169,10 @@ export default function FunnelPage() {
   useEffect(() => {
     setPage((currentPage) => Math.min(currentPage, pageCount))
   }, [pageCount])
+
+  useEffect(() => {
+    setPage(1)
+  }, [selectedRecordId])
 
   const confirmDelete = async () => {
     if (!pendingDeleteId) return
@@ -259,14 +270,21 @@ export default function FunnelPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <h1 className="crm-page-heading">Funnel Dashboard</h1>
-        <button
-          type="button"
-          onClick={() => navigate('/sales/funnels/new')}
-          className="inline-flex items-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f2937]"
-        >
-          <Plus className="h-4 w-4" />
-          Generate New
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedRecordId ? (
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-md border border-[#D9D4CA] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+              Show all funnels
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => navigate('/sales/funnels/new')}
+            className="inline-flex items-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f2937]"
+          >
+            <Plus className="h-4 w-4" />
+            Generate New
+          </button>
+        </div>
       </div>
 
       <div className="h-px w-full bg-[#DAD4C7]" />

@@ -156,6 +156,114 @@ aside a {
   font-size: 1rem !important;
 }
 
+.sales-page-content {
+  font-size: 17px;
+}
+
+.sales-page-content :where(.text-xs):not(thead *):not(th *) {
+  font-size: calc(1rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-sm):not(thead *):not(th *) {
+  font-size: calc(1.0625rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-base):not(thead *):not(th *) {
+  font-size: calc(1.1875rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-lg):not(thead *):not(th *) {
+  font-size: calc(1.3125rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-xl):not(thead *):not(th *) {
+  font-size: calc(1.5rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-2xl):not(thead *):not(th *) {
+  font-size: calc(1.75rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-3xl):not(thead *):not(th *) {
+  font-size: calc(1.875rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-4xl):not(thead *):not(th *) {
+  font-size: calc(2.25rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-5xl):not(thead *):not(th *) {
+  font-size: calc(3rem + 1px) !important;
+}
+
+.sales-page-content :where(.text-6xl):not(thead *):not(th *) {
+  font-size: calc(3.75rem + 1px) !important;
+}
+
+.sales-page-content .crm-page-heading {
+  font-size: calc(2.25rem + 1px) !important;
+}
+
+.sales-page-content :where([class*="text-[10px]"]):not(thead *):not(th *) {
+  font-size: 11px !important;
+}
+
+.sales-page-content :where([class*="text-[11px]"]):not(thead *):not(th *) {
+  font-size: 12px !important;
+}
+
+.sales-page-content :where([class*="text-[12px]"]):not(thead *):not(th *) {
+  font-size: 13px !important;
+}
+
+.sales-page-content :where([class*="text-[13px]"]):not(thead *):not(th *) {
+  font-size: 14px !important;
+}
+
+.sales-page-content :where([class*="text-[16px]"]):not(thead *):not(th *) {
+  font-size: 17px !important;
+}
+
+.sales-page-content :where([class*="text-[18px]"]):not(thead *):not(th *) {
+  font-size: 19px !important;
+}
+
+.sales-page-content table thead {
+  font-size: 16px !important;
+}
+
+.sales-page-content nav a:not([class*="text-"]),
+.sales-page-content aside a:not([class*="text-"]) {
+  font-size: 17px !important;
+}
+
+.sales-page-content .MuiInputBase-root,
+.sales-page-content .MuiInputBase-input,
+.sales-page-content .MuiInputLabel-root,
+.sales-page-content .MuiFormLabel-root,
+.sales-page-content .MuiSelect-select,
+.sales-page-content .MuiMenuItem-root {
+  font-size: calc(1.125rem + 1px) !important;
+}
+
+.sales-page-content .MuiButton-root {
+  font-size: calc(1.0625rem + 1px) !important;
+}
+
+.sales-page-content .MuiDataGrid-cell,
+.sales-page-content table td,
+.sales-page-content .MuiDialogTitle-root,
+.sales-page-content .MuiDialogContent-root,
+.sales-page-content .MuiDialogActions-root,
+.sales-page-content .MuiPaginationItem-root,
+.sales-page-content .MuiFormHelperText-root {
+  font-size: calc(1rem + 1px) !important;
+}
+
+.sales-module-typography nav[aria-label="Sales navigation"] a {
+  font-size: 1.0625rem !important;
+}
+
 .customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .customer-form textarea.crm-input,
 .customer-form select.crm-input {

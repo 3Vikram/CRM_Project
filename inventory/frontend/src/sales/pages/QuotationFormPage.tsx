@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { RefreshCcw } from 'lucide-react'
 import { Toast } from '@/sales/components/toast'
 import { createLead } from '@/sales/lib/leadApi'
@@ -77,6 +77,8 @@ const initialForm = {
 
 export default function QuotationFormPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const conversionCustomer = (location.state as { customer?: { _id?: string; id?: string; companyName?: string; customerName?: string; contactPerson?: string; email?: string; mobile?: string; phone?: string; contacts?: CustomerApiRecord['contacts'] } } | null)?.customer
   const { type } = useParams<{ type?: string }>()
   const quotationType: 'rent' | 'sold' = type === 'sold' ? 'sold' : 'rent'
   const [form, setForm] = useState(initialForm)
@@ -106,14 +108,45 @@ export default function QuotationFormPage() {
     const loadCustomers = async () => {
       try {
         const response = await fetchCustomers({ limit: 100, fresh: true })
-        setCustomers(response.data || [])
+        setCustomers((current) => {
+          const records = response.data || []
+          if (!conversionCustomer) return records
+          const selectedId = conversionCustomer._id || conversionCustomer.id || ''
+          if (!selectedId || records.some((customer) => customer._id === selectedId)) return records
+          return [{
+            _id: selectedId,
+            companyName: conversionCustomer.companyName || conversionCustomer.customerName || '',
+            customerName: conversionCustomer.companyName || conversionCustomer.customerName || '',
+            email: conversionCustomer.email || '',
+            phone: conversionCustomer.mobile || conversionCustomer.phone || '',
+            contacts: conversionCustomer.contacts || [],
+          }, ...records]
+        })
       } catch (error) {
         console.error('Unable to load quotation customers:', error)
         setToast('Unable to load customers')
       }
     }
     void loadCustomers()
-  }, [])
+  }, [conversionCustomer])
+
+  useEffect(() => {
+    if (!conversionCustomer) return
+    const id = conversionCustomer._id || conversionCustomer.id || ''
+    const companyName = conversionCustomer.companyName || conversionCustomer.customerName || ''
+    const contact = conversionCustomer.contacts?.[0]
+    setCustomers((current) => current.some((customer) => customer._id === id)
+      ? current
+      : [{ _id: id, companyName, customerName: companyName, email: conversionCustomer.email || '', phone: conversionCustomer.mobile || conversionCustomer.phone || '', contacts: conversionCustomer.contacts || [] }, ...current])
+    setForm((current) => ({
+      ...current,
+      customerId: id,
+      customerName: companyName,
+      contactPerson: contact?.name || conversionCustomer.contactPerson || '',
+      email: contact?.email || conversionCustomer.email || '',
+      mobile: contact?.phone || conversionCustomer.mobile || conversionCustomer.phone || '',
+    }))
+  }, [conversionCustomer])
 
   useEffect(() => {
     const loadInventoryProducts = async () => {

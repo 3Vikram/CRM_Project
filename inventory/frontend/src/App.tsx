@@ -96,6 +96,7 @@ const getSalesRoutePermission = (pathname: string): { moduleName: string; action
     ['/sales/calendar', 'calendar'],
     ['/sales/mail-campaign', 'mailCampaign'],
     ['/sales/quotations', 'quotations'],
+    ['/sales/quotation', 'quotations'],
     ['/sales/opf', 'opf'],
     ['/sales/funnels', 'funnels'],
     ['/sales/renewals', 'renewals'],
@@ -165,7 +166,9 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
         </div>
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">
           <div style={{ zoom: isDashboard ? 1 : SALES_UI_SCALE }}>
-            {canView ? children : <SalesAccessDeniedPage />}
+            {canView
+              ? isDashboard ? children : <div className="sales-page-content">{children}</div>
+              : <SalesAccessDeniedPage />}
           </div>
         </main>
       </div>
@@ -222,6 +225,7 @@ function SalesRoutes() {
     ['/sales/company-profiles/new', page(<CompanyProfileFormPage />)],
     ['/sales/company-profiles/edit/:id', page(<CompanyProfileFormPage />)],
     ['/sales/quotations', page(<QuotationTypeSelectPage />)],
+    ['/sales/quotation', page(<QuotationDashboardPage />)],
     ['/sales/quotations/new/:type', page(<QuotationFormPage />)],
     ['/sales/quotations/view/:id', page(<QuotationViewPage />)],
     ['/sales/quotations/edit/:id', page(<QuotationEditPage />)],

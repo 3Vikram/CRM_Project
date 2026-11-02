@@ -168,6 +168,12 @@ exports.getCustomers = async (req, res) => {
       phone: 1,
       status: 1,
       accountType: 1,
+      industry: 1,
+      assignedEmployees: 1,
+      approvalStatus: 1,
+      approvedBy: 1,
+      approvedAt: 1,
+      approval: 1,
       createdBy: 1,
       createdById: 1,
       createdAt: 1,
@@ -215,6 +221,28 @@ exports.getCustomers = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getCustomerSummary = async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const scope = customerScope(req);
+    const count = (criteria = {}) => Customer.countDocuments(
+      Object.keys(scope).length ? { $and: [criteria, scope] } : criteria
+    );
+
+    const [total, active, inactive, newThisMonth] = await Promise.all([
+      count(),
+      count({ status: 'Active' }),
+      count({ status: 'Inactive' }),
+      count({ createdAt: { $gte: startOfMonth, $lte: now } }),
+    ]);
+
+    return res.status(200).json({ success: true, data: { total, active, inactive, newThisMonth } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 

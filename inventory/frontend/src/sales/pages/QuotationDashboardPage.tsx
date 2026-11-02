@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Download,
   Eye,
@@ -51,7 +51,10 @@ const getUniqueValues = (items: Array<string | undefined>) =>
 export default function QuotationDashboardPage() {
   const navigate = useNavigate()
   const { type } = useParams<{ type?: string }>()
-  const quotationType: 'rent' | 'sold' = type === 'sold' ? 'sold' : 'rent'
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedRecordId = searchParams.get('recordId')
+  const queryType = searchParams.get('type')
+  const quotationType: 'rent' | 'sold' = (type || queryType) === 'sold' ? 'sold' : 'rent'
   const [quotations, setQuotations] = useState<LeadRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +105,9 @@ export default function QuotationDashboardPage() {
 
   const filteredQuotations = useMemo(() => {
     return quotations.filter((quote) => {
+      if (selectedRecordId) {
+        return quote._id === selectedRecordId || quote.quotationId === selectedRecordId || quote.leadId === selectedRecordId
+      }
       if (createdBy !== 'all' && (quote.createdBy || 'System') !== createdBy) return false
       if (createdDate !== 'all' && formatDate(quote.createdDate) !== createdDate) return false
       if (expectedClosure !== 'all') {
@@ -122,7 +128,7 @@ export default function QuotationDashboardPage() {
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(search))
     })
-  }, [quotations, createdBy, createdDate, expectedClosure, customerName, searchQuery])
+  }, [quotations, selectedRecordId, createdBy, createdDate, expectedClosure, customerName, searchQuery])
 
   const pageCount = Math.max(1, Math.ceil(filteredQuotations.length / entriesPerPage))
   const pageData = filteredQuotations.slice((page - 1) * entriesPerPage, page * entriesPerPage)
@@ -195,9 +201,16 @@ export default function QuotationDashboardPage() {
           </button>
           <h1 className="crm-page-heading">{quotationType === 'sold' ? 'Sold Quotation Dashboard' : 'Rent Quotation Dashboard'}</h1>
         </div>
-        <PermissionGate moduleName="quotations" action="create">
-          <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
-        </PermissionGate>
+        <div className="flex items-center gap-3">
+          {selectedRecordId ? (
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+              Show all quotations
+            </button>
+          ) : null}
+          <PermissionGate moduleName="quotations" action="create">
+            <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
+          </PermissionGate>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

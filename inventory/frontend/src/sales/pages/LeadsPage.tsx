@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Search,
   Plus,
@@ -28,7 +28,7 @@ import { StatCard } from '@/sales/components/stat-card'
 import { LeadDetailsDrawer } from '@/sales/components/LeadDetailsDrawer'
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { Toast } from '@/sales/components/toast'
-import { fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/sales/lib/leadApi'
+import { fetchLeadById, fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/sales/lib/leadApi'
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { clearApiCache } from '@/sales/lib/apiCache'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
@@ -64,6 +64,8 @@ export default function LeadsPage({
 }: LeadsPageProps) {
   console.log('LeadsPage Started')
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedRecordId = searchParams.get('recordId')
   const [leads, setLeads] = useState<LeadRecord[]>([])
   const visibleLeads = leads
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null)
@@ -93,17 +95,30 @@ export default function LeadsPage({
   const loadLeads = useCallback(async () => {
     setIsLoading(true)
     try {
+      if (selectedRecordId) {
+        const selectedLead = await fetchLeadById(selectedRecordId)
+        const selectedLeads = selectedLead ? [selectedLead] : []
+        setLeads(selectedLeads)
+        setTotalPages(1)
+        setTotalCount(selectedLeads.length)
+        setPage(1)
+        return
+      }
       const params = { page, limit, search: searchQuery, assignedTo: assignedFilter === 'all' ? '' : assignedFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
       const response = await fetchLeads(params)
       setLeads(response.data)
       setTotalPages(response.pagination.totalPages)
       setTotalCount(response.pagination.total || 0)
     } catch {
+      if (selectedRecordId) {
+        setLeads([])
+        setTotalCount(0)
+      }
       setToast('Unable to load leads')
     } finally {
       setIsLoading(false)
     }
-  }, [assignedFilter, limit, page, searchQuery, sourceFilter])
+  }, [assignedFilter, limit, page, searchQuery, selectedRecordId, sourceFilter])
 
   useEffect(() => { void loadLeads() }, [loadLeads])
 
@@ -325,6 +340,11 @@ export default function LeadsPage({
           <h1 className="crm-page-heading">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {selectedRecordId ? (
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+              Show all leads
+            </button>
+          ) : null}
           {showAddButton && <PermissionGate moduleName="leads" action="create">
             <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> {addButtonLabel}

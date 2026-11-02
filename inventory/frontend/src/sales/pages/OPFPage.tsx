@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Download,
   Eye,
@@ -13,7 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { Toast } from '@/sales/components/toast'
-import { fetchOPFs, deleteOPF, type OPFRecord } from '@/sales/lib/opfApi'
+import { fetchOPFById, fetchOPFs, deleteOPF, type OPFRecord } from '@/sales/lib/opfApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
@@ -45,6 +45,8 @@ const getRenewalDate = (item: { renewalDate?: string; amcRenewalDate?: string })
 
 export default function OPFPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedRecordId = searchParams.get('recordId')
   const [opfData, setOPFData] = useState<OPFRecord[]>([])
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -73,7 +75,14 @@ export default function OPFPage() {
       setIsLoading(true)
       try {
         const response = await fetchOPFs({ limit: 1000 })
-        setOPFData(response.data || [])
+        const records = response.data || []
+        if (selectedRecordId) {
+          const selectedRecord = await fetchOPFById(selectedRecordId)
+          if (selectedRecord && !records.some((item) => item._id === selectedRecord._id)) {
+            records.unshift(selectedRecord)
+          }
+        }
+        setOPFData(records)
       } catch (error) {
         setToast(error instanceof Error ? error.message : 'Failed to load OPF records')
       } finally {
@@ -83,7 +92,7 @@ export default function OPFPage() {
 
     void loadCustomers()
     void loadOPFs()
-  }, [])
+  }, [selectedRecordId])
 
   const filterOptions = useMemo(() => {
     const createdByOptions = getUniqueValues(opfData.map((item) => item.createdBy))
@@ -108,6 +117,7 @@ export default function OPFPage() {
 
   const filteredOPFs = useMemo(() => {
     return opfData.filter((item) => {
+      if (selectedRecordId) return item._id === selectedRecordId || item.opfNo === selectedRecordId
       if (createdBy !== 'all' && (item.createdBy || 'Admin') !== createdBy) return false
       if (createdDate !== 'all' && formatDate(item.createdDate) !== createdDate) return false
       if (renewalDate !== 'all' && formatDate(getRenewalDate(item)) !== renewalDate) return false
@@ -122,7 +132,7 @@ export default function OPFPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(search))
     })
-  }, [opfData, createdBy, createdDate, renewalDate, customerName, approvalStatus, product, searchQuery])
+  }, [opfData, selectedRecordId, createdBy, createdDate, renewalDate, customerName, approvalStatus, product, searchQuery])
 
   const pageCount = Math.max(1, Math.ceil(filteredOPFs.length / entriesPerPage))
   const pageData = filteredOPFs.slice((page - 1) * entriesPerPage, page * entriesPerPage)
@@ -186,13 +196,20 @@ export default function OPFPage() {
         <div>
           <h1 className="crm-page-heading">OPF</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/sales/opf/new')}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
-        >
-          <Plus className="h-4 w-4" /> GENERATE NEW
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedRecordId ? (
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+              Show all OPFs
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => navigate('/sales/opf/new')}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
+          >
+            <Plus className="h-4 w-4" /> GENERATE NEW
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 grid-cols-6">

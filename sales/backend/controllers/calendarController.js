@@ -17,6 +17,7 @@ const moduleColors = {
   Activities: 'gray',
   Quotations: 'purple',
   Funnels: 'red',
+  OPF: 'orange',
   Suppliers: 'slate',
   Meetings: 'darkblue',
   Calls: 'orange',
@@ -123,12 +124,15 @@ const buildCalendarEvent = ({
   sourceField,
   amount,
   amountCurrency,
+  recordLabel,
+  targetId,
+  quotationType,
 }) => {
   const normalizedDate = toISODate(date);
   if (!normalizedDate || isCancelled(status) || isCancelled(calendarStatus)) return null;
 
   const event = {
-    id: referenceId ? `${referenceModule || module}:${referenceId}:${sourceField || eventType || title}:${normalizedDate}:${time || '09:00'}` : `${module}:${title}:${normalizedDate}:${time || '09:00'}`,
+    id: referenceId ? `${referenceModule || module}:${referenceId}:${targetId || referenceId}:${sourceField || eventType || title}:${normalizedDate}:${time || '09:00'}` : `${module}:${title}:${normalizedDate}:${time || '09:00'}`,
     title: toDisplayTitle(title),
     module,
     date: normalizedDate,
@@ -142,6 +146,9 @@ const buildCalendarEvent = ({
     description: description || formatDescription({ title, module, customerName, contactName, assignedTo, date: normalizedDate, time: normalizeTime(time || '09:00') }),
     referenceId: referenceId || '',
     referenceModule: referenceModule || module,
+    targetId: targetId || referenceId || '',
+    recordLabel: recordLabel || '',
+    quotationType: quotationType || '',
     eventType: eventType || 'Schedule',
     sourceField: sourceField || '',
     amount: amount ?? null,
@@ -247,14 +254,20 @@ const collectLeadEvents = (lead) => {
       sourceField: 'quotationDetails.expectedClosure',
       amount: lead.quotationDetails?.value ?? lead.quotationDetails?.revenue,
       amountCurrency: lead.quotationDetails?.currency,
+      recordLabel: lead.quotationId || lead.leadId || '',
+      quotationType: lead.quotationType,
     },
   ];
 
   return candidates
     .filter((candidate) => candidate.value)
     .map((candidate) => buildCalendarEvent({
-      title: candidate.title,
-      module: candidate.module,
+      title: candidate.sourceField === 'quotationDetails.expectedClosure' && !lead.quotationId
+        ? 'Funnel Expected Closure'
+        : candidate.title,
+      module: candidate.sourceField === 'quotationDetails.expectedClosure' && !lead.quotationId
+        ? 'Funnels'
+        : candidate.module,
       date: candidate.value,
       time: candidate.time,
       endTime: candidate.endTime,
@@ -266,6 +279,9 @@ const collectLeadEvents = (lead) => {
       description: candidate.description,
       referenceId: lead._id?.toString?.() || lead.leadId || '',
       referenceModule: 'Leads',
+      targetId: lead._id?.toString?.() || lead.leadId || '',
+      recordLabel: candidate.recordLabel || lead.leadId || '',
+      quotationType: candidate.quotationType || lead.quotationType,
       eventType: candidate.eventType,
       sourceField: candidate.sourceField,
       amount: candidate.amount,
@@ -305,6 +321,7 @@ const collectCustomerEvents = (customer) => {
         sourceField: candidate.key,
         referenceId: customer._id?.toString?.() || '',
         referenceModule: 'Customers',
+        recordLabel: customer.customerId || customer._id?.toString?.() || '',
         eventType: candidate.type,
       });
     })
@@ -342,6 +359,7 @@ const collectContactEvents = (contact) => {
         sourceField: candidate.key,
         referenceId: contact._id?.toString?.() || '',
         referenceModule: 'Contacts',
+        recordLabel: contact.contactId || contact._id?.toString?.() || '',
         eventType: candidate.type,
       });
     })
@@ -412,7 +430,7 @@ const collectSupplierEvents = (supplier) => {
     .filter(Boolean);
 };
 
-const collectOPFEvents = (opf) => {
+const collectOPFEvents = (opf, linkedLead) => {
   if (!opf) return [];
   const candidates = [
     { key: 'startDate', title: 'OPF Start Date', type: 'OPF', module: 'OPF' },
@@ -420,12 +438,21 @@ const collectOPFEvents = (opf) => {
     { key: 'eta', title: 'OPF Delivery ETA', type: 'Delivery', module: 'OPF' },
     { key: 'customerPODate', title: 'Customer PO Date', type: 'Purchase Order', module: 'OPF' },
     { key: 'renewalDate', title: 'OPF Renewal', type: 'Renewal', module: 'OPF' },
-    { key: 'renewalReminderDate', title: 'OPF Renewal Reminder', type: 'Reminder', module: 'OPF' },
+    { key: 'renewalReminderDate', title: 'Renewal Follow-up', type: 'Follow-up', module: 'OPF' },
     { key: 'amcRenewalDate', title: 'AMC Renewal', type: 'Renewal', module: 'OPF' },
+    {
+      key: 'quotationDetails.expectedClosure',
+      value: linkedLead?.quotationDetails?.expectedClosure,
+      title: 'OPF Expected Closure',
+      type: 'Expected Closure',
+      module: 'OPF',
+      sourceModule: 'Leads',
+      sourceId: linkedLead?._id?.toString?.(),
+    },
   ];
 
   return candidates.map((candidate) => {
-    const dateValue = opf[candidate.key];
+    const dateValue = candidate.value || opf[candidate.key];
     if (!dateValue) return null;
     return buildCalendarEvent({
       title: candidate.title,
@@ -440,8 +467,12 @@ const collectOPFEvents = (opf) => {
       status: opf.approvalStatus || 'Pending',
       description: `${candidate.title} for OPF ${opf.opfNo || ''}${opf.customerName ? ` · ${opf.customerName}` : ''}.`,
       sourceField: candidate.key,
-      referenceId: opf._id?.toString?.() || '',
-      referenceModule: 'OPF',
+      referenceId: candidate.sourceId || opf._id?.toString?.() || '',
+      referenceModule: candidate.sourceModule || 'OPF',
+      targetId: opf._id?.toString?.() || '',
+      recordLabel: opf.opfNo || '',
+      amount: opf.revenue ?? (Number(opf.quantity || 0) * Number(opf.unitPrice || 0)),
+      amountCurrency: opf.vendorCurrency || 'INR',
       eventType: candidate.type,
     });
   }).filter(Boolean);
@@ -459,6 +490,9 @@ exports.getCalendarEvents = async (req, res) => {
       OPF.find({ $and: [{}, ownerScope(req)] }).lean(),
     ]);
 
+    const leadsByQuotationId = new Map(
+      leads.filter((lead) => lead.quotationId).map((lead) => [String(lead.quotationId), lead]),
+    );
     const mergedEvents = [
       ...leads.flatMap(collectLeadEvents),
       ...customers.flatMap(collectCustomerEvents),
@@ -471,7 +505,7 @@ exports.getCalendarEvents = async (req, res) => {
           { date: activity.followUpDate, sourceField: 'followUpDate' },
         ].filter((entry) => entry.date);
         return dates.map(({ date, sourceField }) => buildCalendarEvent({
-          title: activity.activityType || 'Activity',
+          title: sourceField === 'followUpDate' ? 'Customer Follow-up' : activity.activityType || 'Activity',
           module: 'Activities',
           date,
           time: activity[`${sourceField === 'activityDate' ? 'activity' : 'followUp'}Time`] || '09:00',
@@ -486,29 +520,18 @@ exports.getCalendarEvents = async (req, res) => {
           sourceField,
           referenceId: activity._id?.toString?.() || '',
           referenceModule: 'Activities',
+          recordLabel: activity.activityId || '',
           eventType: activity.activityType || 'Activity',
         })).filter(Boolean);
       }),
-      ...opfs.flatMap(collectOPFEvents),
+      ...opfs.flatMap((opf) => collectOPFEvents(opf, leadsByQuotationId.get(String(opf.quotationNumber || opf.quotationId || '')))),
     ]
       .filter(Boolean)
       .filter((event, index, allEvents) => {
-        const duplicateKey = [
-          event.date,
-          event.time,
-          event.eventType.toLowerCase(),
-          event.title.toLowerCase(),
-          event.customerName.trim().toLowerCase(),
-          event.contactName.trim().toLowerCase(),
-        ].join('|');
-        return allEvents.findIndex((candidate) => [
-          candidate.date,
-          candidate.time,
-          candidate.eventType.toLowerCase(),
-          candidate.title.toLowerCase(),
-          candidate.customerName.trim().toLowerCase(),
-          candidate.contactName.trim().toLowerCase(),
-        ].join('|') === duplicateKey) === index;
+        const duplicateKey = [event.referenceModule, event.referenceId, event.targetId, event.module, event.sourceField, event.date, event.time].join('|');
+        return allEvents.findIndex((candidate) =>
+          [candidate.referenceModule, candidate.referenceId, candidate.targetId, candidate.module, candidate.sourceField, candidate.date, candidate.time].join('|') === duplicateKey,
+        ) === index;
       })
       .sort((a, b) => {
         const dateDiff = new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime();
