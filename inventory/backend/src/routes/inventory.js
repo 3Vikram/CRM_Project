@@ -601,7 +601,7 @@ router.get('/overview', async (req, res) => {
       status: asset.status || 'available',
       createdAt: asset.createdAt,
     }));
-    const assetsWithCreatorNames = await resolveInventoryCreatorNames(formattedAssets);
+    const recentAssetsWithCreatorNames = await resolveInventoryCreatorNames(recentAssets);
 
     const [recentInwardRecords, recentRentalRecords, recentSalesRecords] = await Promise.all([
       AssetMovement.find({ type: 'INWARD' }).sort({ createdAt: -1 }).limit(5).lean(),
@@ -622,7 +622,7 @@ router.get('/overview', async (req, res) => {
         soldOut: soldOutCount,
         returned: returnedCount,
       },
-      recentAssets,
+      recentAssets: recentAssetsWithCreatorNames,
       recentInward: recentInward.map(formatOverviewMovement),
       recentRentals: recentRentals.map(formatOverviewMovement),
       recentSales: recentSales.map(formatOverviewMovement),
@@ -826,6 +826,7 @@ router.get('/assets', async (req, res) => {
       }
       return toAssetPayload(asset);
     }));
+    const assetsWithCreatorNames = await resolveInventoryCreatorNames(formattedAssets);
     
     console.log('Formatted response:', assetsWithCreatorNames.length, 'assets');
     console.log('=== END GET /assets ===\n');
