@@ -5,11 +5,11 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal } from '@/sales/components/modal'
 import { Toast } from '@/sales/components/toast'
+import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 import { deleteCustomer, fetchCustomerSummary, fetchCustomers, type CustomerApiRecord, type CustomerSummary } from '@/sales/lib/customerApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
-import { ACCOUNT_TYPE_OPTIONS } from '@/sales/lib/accountTypes'
 import {
   Search,
   Plus,
@@ -28,13 +28,11 @@ import {
   Trash2,
   MoreVertical,
   BarChart3,
-  Filter,
   Users,
   UserCheck,
   UserX,
   CalendarDays,
   Funnel,
-  X,
 } from 'lucide-react'
 
 interface Customer {
@@ -81,7 +79,6 @@ export default function CustomersPage() {
   const [pendingDeleteCustomer, setPendingDeleteCustomer] = useState<Customer | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false)
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false)
   const [activeMenu, setActiveMenu] = useState<{ customer: Customer; top: number; left: number; width: number } | null>(null)
   const searchTimeoutRef = useRef<number | null>(null)
@@ -190,8 +187,23 @@ export default function CustomersPage() {
     return () => document.removeEventListener('pointerdown', closeWhenOutside)
   }, [activeMenu])
 
-  const createdByOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.createdBy).filter(Boolean))).sort(), [customers])
-  const accountTypeOptions = ACCOUNT_TYPE_OPTIONS
+  const createdByOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.createdBy).filter((value): value is string => Boolean(value)))).sort(), [customers])
+  const accountTypeOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.accountType).filter((value): value is string => Boolean(value)))).sort(), [customers])
+  const customerFilterFields = [
+    { key: 'createdBy', label: 'Created By', type: 'select' as const, options: createdByOptions },
+    { key: 'createdDate', label: 'Created Date', type: 'date' as const },
+    { key: 'accountType', label: 'Account Type', type: 'select' as const, options: accountTypeOptions },
+  ]
+  const customerFilterValues = {
+    createdBy: createdByFilter === 'all' ? '' : createdByFilter,
+    createdDate: createdDateFilter === 'all' ? '' : createdDateFilter,
+    accountType: accountTypeFilter === 'all' ? '' : accountTypeFilter,
+  }
+  const applyCustomerFilters = (values: PageFilterValues) => {
+    setCreatedByFilter(values.createdBy || 'all')
+    setCreatedDateFilter(values.createdDate || 'all')
+    setAccountTypeFilter(values.accountType || 'all')
+  }
   const summaryText = useMemo(() => {
     if (totalCount === 0) return 'Showing 0 to 0 of 0 entries'
     return `Showing ${(page - 1) * pageSize + 1} to ${Math.min(page * pageSize, totalCount)} of ${totalCount} entries`
@@ -310,9 +322,7 @@ export default function CustomersPage() {
           <button type="button" onClick={() => setIsAnalyticsOpen((value) => !value)} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
             <BarChart3 className="h-4 w-4 text-blue-600" /> Analytics
           </button>
-          <button type="button" onClick={() => setIsFiltersOpen((value) => !value)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium shadow-sm ${isFiltersOpen ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-[#E8EAF0] bg-white text-gray-700 hover:bg-gray-50'}`}>
-            <Filter className="h-4 w-4" /> Filters
-          </button>
+          <PageFilters fields={customerFilterFields} values={customerFilterValues} onApply={applyCustomerFilters} onClear={() => applyCustomerFilters({})} />
           <button type="button" onClick={() => void handleDownloadReport()} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
             <Download className="h-4 w-4" /> Download Report
           </button>
@@ -369,29 +379,6 @@ export default function CustomersPage() {
             <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search customers..." className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100" />
           </label>
         </div>
-
-        {isFiltersOpen ? (
-          <div className="grid gap-3 border-b border-slate-100 bg-slate-50/70 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Created By
-              <select className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-700" value={createdByFilter} onChange={(event) => setCreatedByFilter(event.target.value)}>
-                <option value="all">All</option>{createdByOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Created Date
-              <select className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-700" value={createdDateFilter} onChange={(event) => setCreatedDateFilter(event.target.value)}>
-                <option value="all">All dates</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="last7days">Last 7 Days</option><option value="last30days">Last 30 Days</option><option value="thismonth">This Month</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Account Type
-              <select className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-slate-700" value={accountTypeFilter} onChange={(event) => setAccountTypeFilter(event.target.value)}>
-                <option value="all">All account types</option>{accountTypeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </label>
-            <button type="button" onClick={() => { setCreatedByFilter('all'); setCreatedDateFilter('all'); setAccountTypeFilter('all') }} className="inline-flex items-center gap-2 self-end text-sm font-medium text-slate-600 hover:text-slate-900 sm:col-span-2 xl:col-span-3">
-              <X className="h-4 w-4" /> Clear filters
-            </button>
-          </div>
-        ) : null}
 
         <div className="overflow-x-auto">
           <table className="sales-data-table w-full min-w-[1080px] border-collapse">

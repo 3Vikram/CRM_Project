@@ -20,6 +20,7 @@ import { fetchCustomers } from '@/sales/lib/customerApi'
 import { deleteLead, fetchLeadById, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -28,6 +29,14 @@ const formatDate = (value?: string | null) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleDateString('en-GB')
+}
+
+const getDateFilterValue = (value?: string | null) => {
+  if (!value) return ''
+  const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePrefix) return datePrefix
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
 }
 
 const getProductNames = (products?: any[]) => {
@@ -51,6 +60,28 @@ const calculateGrandTotal = (products?: any[]) => {
 const getUniqueValues = (items: Array<string | undefined>) =>
   Array.from(new Set(items.filter(Boolean) as string[])).sort()
 
+const fetchAllLeads = async (params: NonNullable<Parameters<typeof fetchLeads>[0]> = {}) => {
+  const firstPage = await fetchLeads({ ...params, page: 1, limit: 1000 })
+  const records = [...firstPage.data]
+  const totalPages = firstPage.pagination.totalPages || 1
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchLeads({ ...params, page, limit: 1000 })
+    records.push(...response.data)
+  }
+  return records
+}
+
+const fetchAllCustomers = async () => {
+  const firstPage = await fetchCustomers({ page: 1, limit: 1000, fresh: true })
+  const records = [...(firstPage.data || [])]
+  const totalPages = firstPage.pagination?.totalPages || 1
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchCustomers({ page, limit: 1000, fresh: true })
+    records.push(...(response.data || []))
+  }
+  return records
+}
+
 const getAccountTypeByCompany = (companyName: string | undefined, customerMap: Record<string, string>) => {
   if (!companyName) return '-'
   return customerMap[companyName] || '-'
@@ -66,12 +97,7 @@ export default function FunnelPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [createdBy, setCreatedBy] = useState('all')
-  const [createdDate, setCreatedDate] = useState('all')
-  const [expectedClosure, setExpectedClosure] = useState('all')
-  const [customerName, setCustomerName] = useState('all')
-  const [stageFilter, setStageFilter] = useState('all')
-  const [accountTypeFilter, setAccountTypeFilter] = useState('all')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
@@ -80,18 +106,18 @@ export default function FunnelPage() {
     const loadPageData = async () => {
       setIsLoading(true)
       try {
-        const [leadResponse, customerResponse, selectedLead] = await Promise.all([
-          fetchLeads({ limit: 1000 }),
-          fetchCustomers({ limit: 1000, fresh: true }),
+        const [leadRecords, customerRecords, selectedLead] = await Promise.all([
+          fetchAllLeads(),
+          fetchAllCustomers(),
           selectedRecordId ? fetchLeadById(selectedRecordId) : Promise.resolve(null),
         ])
 
-        const funnelRecords = (leadResponse.data || []).filter((lead) => lead.quotationId || lead.leadStatus)
+        const funnelRecords = leadRecords.filter((lead) => lead.quotationId || lead.leadStatus)
         if (selectedLead && !funnelRecords.some((lead) => lead._id === selectedLead._id)) {
           funnelRecords.unshift(selectedLead)
         }
         setFunnels(funnelRecords)
-        setCustomers(customerResponse.data || [])
+        setCustomers(customerRecords)
       } catch (error) {
         setToast(error instanceof Error ? error.message : 'Failed to load funnel data')
       } finally {
@@ -112,39 +138,39 @@ export default function FunnelPage() {
 
   const filterOptions = useMemo(() => {
     const createdByOptions = getUniqueValues(funnels.map((row) => row.createdBy || 'System'))
-    const createdDateOptions = getUniqueValues(funnels.map((row) => formatDate(row.createdDate)))
-    const expectedClosureOptions = getUniqueValues(
-      funnels.map((row) => {
-        const value = row.quotationDetails?.expectedClosure
-        return value ? formatDate(value) : undefined
-      })
-    )
     const customerNameOptions = getUniqueValues(funnels.map((row) => row.companyName))
     const stageOptions = getUniqueValues(funnels.map((row) => row.leadStatus || 'New'))
     const accountTypeOptions = getUniqueValues(customers.map((customer) => customer.accountType || undefined))
 
     return {
       createdByOptions,
-      createdDateOptions,
-      expectedClosureOptions,
       customerNameOptions,
       stageOptions,
       accountTypeOptions,
     }
   }, [funnels, customers])
 
+  const filterFields: PageFilterField[] = [
+    { key: 'createdBy', label: 'Created By', type: 'select', options: filterOptions.createdByOptions },
+    { key: 'createdDate', label: 'Created Date', type: 'date' },
+    { key: 'expectedClosure', label: 'Expected Closure', type: 'date' },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: filterOptions.customerNameOptions },
+    { key: 'stage', label: 'Stage', type: 'select', options: filterOptions.stageOptions },
+    { key: 'accountType', label: 'Account Type', type: 'select', options: filterOptions.accountTypeOptions },
+  ]
+
   const filteredFunnels = useMemo(() => {
     return funnels.filter((row) => {
       if (selectedRecordId) return row._id === selectedRecordId || row.quotationId === selectedRecordId || row.leadId === selectedRecordId
-      if (createdBy !== 'all' && (row.createdBy || 'System') !== createdBy) return false
-      if (createdDate !== 'all' && formatDate(row.createdDate) !== createdDate) return false
-      if (expectedClosure !== 'all') {
+      if (filters.createdBy && (row.createdBy || 'System') !== filters.createdBy) return false
+      if (filters.createdDate && getDateFilterValue(row.createdDate) !== filters.createdDate) return false
+      if (filters.expectedClosure) {
         const target = row.quotationDetails?.expectedClosure
-        if (formatDate(target) !== expectedClosure) return false
+        if (getDateFilterValue(target) !== filters.expectedClosure) return false
       }
-      if (customerName !== 'all' && (row.companyName || '') !== customerName) return false
-      if (stageFilter !== 'all' && (row.leadStatus || 'New') !== stageFilter) return false
-      if (accountTypeFilter !== 'all' && getAccountTypeByCompany(row.companyName, customerAccountMap) !== accountTypeFilter) return false
+      if (filters.customerName && (row.companyName || '') !== filters.customerName) return false
+      if (filters.stage && (row.leadStatus || 'New') !== filters.stage) return false
+      if (filters.accountType && getAccountTypeByCompany(row.companyName, customerAccountMap) !== filters.accountType) return false
 
       if (!searchQuery.trim()) return true
 
@@ -161,7 +187,7 @@ export default function FunnelPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(search))
     })
-  }, [funnels, selectedRecordId, createdBy, createdDate, expectedClosure, customerName, stageFilter, accountTypeFilter, searchQuery, customerAccountMap])
+  }, [funnels, selectedRecordId, filters, searchQuery, customerAccountMap])
 
   const pageCount = Math.max(1, Math.ceil(filteredFunnels.length / entriesPerPage))
   const pageData = filteredFunnels.slice((page - 1) * entriesPerPage, page * entriesPerPage)
@@ -271,6 +297,12 @@ export default function FunnelPage() {
       <div className="flex items-center justify-between gap-4">
         <h1 className="crm-page-heading">Funnel Dashboard</h1>
         <div className="flex items-center gap-3">
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(nextFilters) => { setFilters(nextFilters); setPage(1) }}
+            onClear={() => { setFilters({}); setPage(1) }}
+          />
           {selectedRecordId ? (
             <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-md border border-[#D9D4CA] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all funnels
@@ -288,92 +320,6 @@ export default function FunnelPage() {
       </div>
 
       <div className="h-px w-full bg-[#DAD4C7]" />
-
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <label className="space-y-1.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Created By</span>
-          <select
-            value={createdBy}
-            onChange={(event) => { setCreatedBy(event.target.value); setPage(1) }}
-            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
-          >
-            <option value="all">All</option>
-            {filterOptions.createdByOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Created Date</span>
-          <select
-            value={createdDate}
-            onChange={(event) => { setCreatedDate(event.target.value); setPage(1) }}
-            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
-          >
-            <option value="all">All</option>
-            {filterOptions.createdDateOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Expected Closure</span>
-          <select
-            value={expectedClosure}
-            onChange={(event) => { setExpectedClosure(event.target.value); setPage(1) }}
-            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
-          >
-            <option value="all">All</option>
-            {filterOptions.expectedClosureOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Customer Name</span>
-          <select
-            value={customerName}
-            onChange={(event) => { setCustomerName(event.target.value); setPage(1) }}
-            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
-          >
-            <option value="all">All</option>
-            {filterOptions.customerNameOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Stage</span>
-          <select
-            value={stageFilter}
-            onChange={(event) => { setStageFilter(event.target.value); setPage(1) }}
-            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
-          >
-            <option value="all">All</option>
-            {filterOptions.stageOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Account Type</span>
-          <select
-            value={accountTypeFilter}
-            onChange={(event) => { setAccountTypeFilter(event.target.value); setPage(1) }}
-            className="w-full rounded-md border border-[#D9D4CA] bg-white px-2.5 py-2 text-[13px] text-gray-700 outline-none focus:border-[#B9B1A0]"
-          >
-            <option value="all">All</option>
-            {filterOptions.accountTypeOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">

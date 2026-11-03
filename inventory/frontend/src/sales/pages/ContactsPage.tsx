@@ -9,6 +9,7 @@ import { deleteContact, fetchContacts, fetchEmployeeBatchGroups, moveContactToCu
 import { fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { fetchCalendarEvents, type CalendarApiEvent } from '@/sales/lib/calendarApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 
 const PAGE_SIZE = 20
 const CONTACTS_FETCH_PAGE_SIZE = 100
@@ -43,6 +44,14 @@ const fetchAllLeads = async () => {
 const normalizeEmail = (value?: string) => String(value || '').trim().toLowerCase()
 const normalizePhone = (value?: string) => String(value || '').replace(/\D/g, '')
 const normalizeName = (value?: string) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+const getDateFilterValue = (value?: string | null) => {
+  if (!value) return ''
+  const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePrefix) return datePrefix
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 export default function ContactsPage() {
   const navigate = useNavigate()
@@ -52,6 +61,7 @@ export default function ContactsPage() {
   const [isRelationshipDataLoading, setIsRelationshipDataLoading] = useState(true)
   const [relationshipDataError, setRelationshipDataError] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [employeeGroups, setEmployeeGroups] = useState<EmployeeBatchGroup[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
   const [batchId, setBatchId] = useState('')
@@ -127,17 +137,41 @@ export default function ContactsPage() {
     void loadContacts()
   }, [loadContacts])
 
+  const employeeIdsByName = useMemo(
+    () => new Map(employeeGroups.map((group): [string, string] => [group.employeeName, group.employeeId])),
+    [employeeGroups],
+  )
+
+  const filterFields = useMemo<PageFilterField[]>(() => [
+    { key: 'employeeName', label: 'Employee', type: 'select', options: Array.from(new Set([
+      ...allContacts.map((contact) => contact.employeeName),
+      ...employeeGroups.map((group) => group.employeeName),
+    ].filter((value): value is string => Boolean(value)))).sort() },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: Array.from(new Set(allContacts.map((contact) => contact.customerName).filter((value): value is string => Boolean(value)))).sort() },
+    { key: 'designation', label: 'Designation', type: 'select', options: Array.from(new Set(allContacts.map((contact) => contact.designation).filter(Boolean))).sort() },
+    { key: 'createdAt', label: 'Created Date', type: 'date' },
+  ], [allContacts, employeeGroups])
+
   const filteredContacts = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
-    if (!normalizedQuery) return allContacts
-    return allContacts.filter((contact) => [
-      contact.customerName,
-      contact.contactName,
-      contact.designation,
-      contact.contactNumber,
-      contact.email,
-    ].some((value) => String(value ?? '').toLowerCase().startsWith(normalizedQuery)))
-  }, [allContacts, searchQuery])
+    return allContacts.filter((contact) => {
+      if (filters.employeeName) {
+        const employeeId = employeeIdsByName.get(filters.employeeName)
+        if (contact.employeeName !== filters.employeeName && (!employeeId || contact.employeeId !== employeeId)) return false
+      }
+      if (filters.customerName && (contact.customerName || '') !== filters.customerName) return false
+      if (filters.designation && (contact.designation || '') !== filters.designation) return false
+      if (filters.createdAt && getDateFilterValue(contact.createdAt) !== filters.createdAt) return false
+      if (!normalizedQuery) return true
+      return [
+        contact.customerName,
+        contact.contactName,
+        contact.designation,
+        contact.contactNumber,
+        contact.email,
+      ].some((value) => String(value ?? '').toLowerCase().startsWith(normalizedQuery))
+    })
+  }, [allContacts, searchQuery, filters, employeeIdsByName])
 
   const totalCount = filteredContacts.length
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
@@ -279,6 +313,12 @@ export default function ContactsPage() {
               </optgroup>
             ))}
           </select>
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(values) => { setFilters(values); setPage(1) }}
+            onClear={() => { setFilters({}); setPage(1) }}
+          />
           <PermissionGate moduleName="contacts" action="create">
             <button onClick={() => navigate('/sales/contacts/new')} className="contacts-control contacts-add-button flex items-center gap-2 rounded-lg bg-[#172640] px-4 py-2.5 font-semibold text-white transition hover:bg-[#233958] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7663A8] disabled:cursor-not-allowed">
               <Plus className="h-4 w-4" />

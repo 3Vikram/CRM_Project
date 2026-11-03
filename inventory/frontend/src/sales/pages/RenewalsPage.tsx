@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Eye, Pencil, RefreshCw } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { fetchOPFs, type OPFRecord } from '@/sales/lib/opfApi'
-import { fetchCustomers } from '@/sales/lib/customerApi'
-import { SearchableSelect } from '@/sales/components/SearchableSelect'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 type RenewalOPFRecord = OPFRecord & { revenue?: number | string; margin?: number | string; updatedAt?: string }
@@ -32,9 +31,6 @@ const getRenewalStatus = (days: number) => {
   return 'Upcoming'
 }
 
-const statusOptions = ['All', 'Pending', 'Quotation', 'Under Review']
-const dueDateOptions = ['All', 'Today', 'Tomorrow', 'This Week', 'This Month', 'This Quarter', 'This Year', 'Last Year', 'Custom Date Range']
-
 const getRecordStatus = (opf: OPFRecord) => {
   if (opf.approvalStatus === 'Approved') return 'Renewed'
   if (opf.approvalStatus === 'Rejected') return 'Cancelled'
@@ -45,40 +41,13 @@ const getRecordStatus = (opf: OPFRecord) => {
 const isResolvedRenewal = (opf: OPFRecord) =>
   ['approved', 'rejected', 'renewed', 'cancelled', 'completed'].includes(String(opf.approvalStatus || '').toLowerCase())
 
-const isInDueDateRange = (renewalDate: string, filter: string) => {
-  if (filter === 'All' || filter === 'Custom Date Range') return true
-  const renewal = calendarDate(renewalDate)
-  const today = calendarDate(new Date())
-  const day = DAY_MS
-  const currentDate = new Date()
-  let start = today
-  let end = today
-
-  if (filter === 'Tomorrow') start = end = today + day
-  if (filter === 'This Week') {
-    const dayOfWeek = currentDate.getDay()
-    start = today - dayOfWeek * day
-    end = start + 6 * day
-  }
-  if (filter === 'This Month') {
-    start = Date.UTC(currentDate.getFullYear(), currentDate.getMonth(), 1)
-    end = Date.UTC(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-  }
-  if (filter === 'This Quarter') {
-    const quarterStartMonth = Math.floor(currentDate.getMonth() / 3) * 3
-    start = Date.UTC(currentDate.getFullYear(), quarterStartMonth, 1)
-    end = Date.UTC(currentDate.getFullYear(), quarterStartMonth + 3, 0)
-  }
-  if (filter === 'This Year') {
-    start = Date.UTC(currentDate.getFullYear(), 0, 1)
-    end = Date.UTC(currentDate.getFullYear(), 11, 31)
-  }
-  if (filter === 'Last Year') {
-    start = Date.UTC(currentDate.getFullYear() - 1, 0, 1)
-    end = Date.UTC(currentDate.getFullYear() - 1, 11, 31)
-  }
-
-  return renewal >= start && renewal <= end
+const getDateFilterValue = (value?: string | null) => {
+  if (!value) return ''
+  const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePrefix) return datePrefix
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 const formatCurrency = (value?: number | string) => {
@@ -95,11 +64,7 @@ export default function RenewalsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [todayKey, setTodayKey] = useState(() => new Date().toDateString())
-  const [createdByFilter, setCreatedByFilter] = useState('All')
-  const [dueDateFilter, setDueDateFilter] = useState('All')
-  const [customerFilter, setCustomerFilter] = useState('All')
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [customerOptions, setCustomerOptions] = useState<string[]>([])
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
 
   const loadRenewals = useCallback(async () => {
@@ -126,25 +91,6 @@ export default function RenewalsPage() {
   }, [loadRenewals])
 
   useEffect(() => {
-    const loadCustomers = async () => {
-      try {
-        const firstResponse = await fetchCustomers({ page: 1, limit: 100 })
-        const totalPages = firstResponse.pagination?.totalPages || 1
-        const remainingResponses = await Promise.all(
-          Array.from({ length: Math.max(totalPages - 1, 0) }, (_, index) => fetchCustomers({ page: index + 2, limit: 100 }))
-        )
-        const allCustomers = [firstResponse, ...remainingResponses].flatMap((response) => response.data || [])
-        const names = allCustomers.map((customer) => customer.companyName || customer.customerName || '').filter(Boolean)
-        setCustomerOptions(Array.from(new Set(names)).sort())
-      } catch {
-        setCustomerOptions([])
-      }
-    }
-
-    void loadCustomers()
-  }, [])
-
-  useEffect(() => {
     const refreshOnFocus = () => { void loadRenewals() }
     window.addEventListener('focus', refreshOnFocus)
     return () => window.removeEventListener('focus', refreshOnFocus)
@@ -164,22 +110,28 @@ export default function RenewalsPage() {
       ? opf._id === selectedRecordId || opf.opfNo === selectedRecordId
       : !isResolvedRenewal(opf) && days <= 90), [opfs, selectedRecordId, todayKey])
 
+  const filterFields = useMemo<PageFilterField[]>(() => [
+    { key: 'createdBy', label: 'Created By', type: 'select', options: Array.from(new Set(eligibleRenewals.map(({ opf }) => opf.createdBy || 'Admin'))).sort() },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: Array.from(new Set(eligibleRenewals.map(({ opf }) => opf.customerName).filter((value): value is string => Boolean(value)))).sort() },
+    { key: 'renewalDate', label: 'Renewal Date', type: 'date' },
+    { key: 'status', label: 'Status', type: 'select', options: Array.from(new Set(eligibleRenewals.map(({ opf }) => getRecordStatus(opf)))).sort() },
+    { key: 'product', label: 'Product', type: 'select', options: Array.from(new Set(eligibleRenewals.map(({ opf }) => opf.product).filter((value): value is string => Boolean(value)))).sort() },
+  ], [eligibleRenewals])
+
   const renewalRows = useMemo(() => {
-    const records = selectedRecordId
-      ? eligibleRenewals.filter(({ opf }) => opf._id === selectedRecordId || opf.opfNo === selectedRecordId)
-      : eligibleRenewals
-        .filter(({ opf }) => createdByFilter === 'All' || (opf.createdBy || 'Admin') === createdByFilter)
-        .filter(({ opf }) => customerFilter === 'All' || (opf.customerName || '') === customerFilter)
-        .filter(({ opf }) => isInDueDateRange(opf.renewalDate as string, dueDateFilter))
-        .filter(({ opf }) => statusFilter === 'All' || getRecordStatus(opf) === statusFilter)
+    const records = eligibleRenewals
+      .filter(({ opf }) => !selectedRecordId || opf._id === selectedRecordId || opf.opfNo === selectedRecordId)
+      .filter(({ opf }) => !filters.createdBy || (opf.createdBy || 'Admin') === filters.createdBy)
+      .filter(({ opf }) => !filters.customerName || (opf.customerName || '') === filters.customerName)
+      .filter(({ opf }) => !filters.renewalDate || getDateFilterValue(opf.renewalDate) === filters.renewalDate)
+      .filter(({ opf }) => !filters.status || getRecordStatus(opf) === filters.status)
+      .filter(({ opf }) => !filters.product || (opf.product || '') === filters.product)
 
     return records.sort((left, right) => {
       const difference = left.days - right.days
       return (sortOrder === 'asc' ? difference : -difference) || left.opf._id.localeCompare(right.opf._id)
     })
-  }, [eligibleRenewals, selectedRecordId, createdByFilter, dueDateFilter, customerFilter, statusFilter, sortOrder])
-
-  const createdByOptions = useMemo(() => ['All', ...Array.from(new Set(eligibleRenewals.map(({ opf }) => opf.createdBy || 'Admin'))).sort()], [eligibleRenewals])
+  }, [eligibleRenewals, selectedRecordId, filters, sortOrder])
 
   return (
     <div className="space-y-6">
@@ -189,6 +141,12 @@ export default function RenewalsPage() {
           <p className="mt-1 text-sm text-slate-500">{eligibleRenewals.length} unresolved renewal{eligibleRenewals.length === 1 ? '' : 's'} in the 90-day window, including overdue items</p>
         </div>
         <div className="flex items-center gap-3">
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={setFilters}
+            onClear={() => setFilters({})}
+          />
           {selectedRecordId ? (
             <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all renewals
@@ -197,25 +155,6 @@ export default function RenewalsPage() {
           <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Created By</label>
-          <SearchableSelect value={createdByFilter} onChange={setCreatedByFilter} options={createdByOptions} placeholder="Created By" />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Due Date</label>
-          <SearchableSelect value={dueDateFilter} onChange={setDueDateFilter} options={dueDateOptions} placeholder="Due Date" />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Customer Name</label>
-          <SearchableSelect value={customerFilter} onChange={setCustomerFilter} options={['All', ...customerOptions]} placeholder="Customer Name" />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Status</label>
-          <SearchableSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} placeholder="Status" />
         </div>
       </div>
 

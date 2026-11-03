@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Eye, Pencil, Trash2 } from 'lucide-react'
 import { deleteCompanyProfile, fetchCompanyProfiles, type CompanyProfileRecord } from '@/sales/lib/companyProfileApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 
 const PAGE_SIZE = 20
 
@@ -12,9 +13,8 @@ export default function CompanyProfilesPage() {
   const navigate = useNavigate()
   const [profiles, setProfiles] = useState<CompanyProfileRecord[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
@@ -24,10 +24,14 @@ export default function CompanyProfilesPage() {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await fetchCompanyProfiles({ search: searchQuery, page, limit: PAGE_SIZE })
-        setProfiles(response.data)
-        setTotalPages(response.pagination?.totalPages || 1)
-        setTotalCount(response.pagination?.total || 0)
+        const firstResponse = await fetchCompanyProfiles({ search: searchQuery, page: 1, limit: 100 })
+        const allProfiles = [...firstResponse.data]
+        const lastPage = firstResponse.pagination?.totalPages || 1
+        for (let currentPage = 2; currentPage <= lastPage; currentPage += 1) {
+          const response = await fetchCompanyProfiles({ search: searchQuery, page: currentPage, limit: 100 })
+          allProfiles.push(...response.data)
+        }
+        setProfiles(allProfiles)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load company profiles')
       } finally {
@@ -36,22 +40,47 @@ export default function CompanyProfilesPage() {
     }
 
     void loadProfiles()
-  }, [page, searchQuery, retryToken])
+  }, [searchQuery, retryToken])
+
+  const filterFields = useMemo<PageFilterField[]>(() => {
+    const optionsFor = (values: Array<string | undefined>) =>
+      Array.from(new Set(values.filter((value): value is string => Boolean(value?.trim())))).sort()
+
+    return [
+      { key: 'companyName', label: 'Company', type: 'select', options: optionsFor(profiles.map((profile) => profile.companyName)) },
+      { key: 'branchName', label: 'Branch', type: 'select', options: optionsFor(profiles.map((profile) => profile.branchName)) },
+      { key: 'city', label: 'City', type: 'select', options: optionsFor(profiles.map((profile) => profile.city)) },
+      { key: 'state', label: 'State', type: 'select', options: optionsFor(profiles.map((profile) => profile.state)) },
+      { key: 'country', label: 'Country', type: 'select', options: optionsFor(profiles.map((profile) => profile.country)) },
+    ]
+  }, [profiles])
+
+  const filteredProfiles = useMemo(
+    () => profiles.filter((profile) =>
+      Object.entries(filters).every(([key, value]) => !value || profile[key as keyof CompanyProfileRecord] === value)
+    ),
+    [profiles, filters]
+  )
+  const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / PAGE_SIZE))
+  const pageProfiles = filteredProfiles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   const summaryText = useMemo(() => {
     if (error) return 'Unable to load profiles.'
-    if (totalCount === 0) return 'No profiles found.'
+    if (filteredProfiles.length === 0) return 'No profiles found.'
     const start = (page - 1) * PAGE_SIZE + 1
-    const end = Math.min(page * PAGE_SIZE, totalCount)
-    return `Showing ${start} to ${end} of ${totalCount} profiles`
-  }, [error, page, totalCount])
+    const end = Math.min(page * PAGE_SIZE, filteredProfiles.length)
+    return `Showing ${start} to ${end} of ${filteredProfiles.length} profiles`
+  }, [error, filteredProfiles.length, page])
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this company profile?')) return
     try {
       await deleteCompanyProfile(id)
       setProfiles((prev) => prev.filter((item) => item._id !== id))
-      setTotalCount((prev) => Math.max(prev - 1, 0))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete company profile')
     }
@@ -73,6 +102,12 @@ export default function CompanyProfilesPage() {
               Add New
             </button>
           </PermissionGate>
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(values) => { setFilters(values); setPage(1) }}
+            onClear={() => { setFilters({}); setPage(1) }}
+          />
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -148,7 +183,7 @@ export default function CompanyProfilesPage() {
               </tr>
             </thead>
             <tbody>
-              {profiles.map((profile) => (
+              {pageProfiles.map((profile) => (
                 <tr key={profile._id} className="border-t border-[#E5E7EB] bg-white hover:bg-[#F9FAFB]">
                   <td className="border border-[#E5E7EB] px-3 py-2 align-top text-[11px] leading-5 text-slate-900">{profile.directorName || '-'}</td>
                   <td className="border border-[#E5E7EB] px-3 py-2 align-top text-[11px] leading-5">{profile.directorDesignation || '-'}</td>
@@ -198,10 +233,10 @@ export default function CompanyProfilesPage() {
                   </td>
                 </tr>
               ))}
-              {profiles.length === 0 && !isLoading ? (
+              {pageProfiles.length === 0 && !isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-500">
-                    No company profiles found.
+                  <td colSpan={34} className="px-4 py-10 text-center text-sm text-gray-500">
+                    {Object.values(filters).some(Boolean) ? 'No company profiles match the selected filters.' : 'No company profiles found.'}
                   </td>
                 </tr>
               ) : null}

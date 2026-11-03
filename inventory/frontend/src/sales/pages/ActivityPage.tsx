@@ -8,19 +8,10 @@ import { fetchCustomers } from '@/sales/lib/customerApi';
 import { downloadExcelReport } from '@/lib/downloadExcelReport';
 import { toExcelDate } from '@/sales/lib/excelFormat';
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi';
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters';
 
-const dateOptions = [
-  { value: 'All', label: 'All' },
-  { value: 'today', label: 'Today' },
-  { value: 'yesterday', label: 'Yesterday' },
-  { value: 'this-week', label: 'This Week' },
-  { value: 'this-month', label: 'This Month' },
-  { value: 'this-quarter', label: 'This Quarter' },
-  { value: 'this-year', label: 'This Year' },
-  { value: 'last-year', label: 'Last Year' },
-  { value: 'custom-date', label: 'Custom Date' },
-];
 const DATE_FORMATTER = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
+const getDateFilterValue = (value?: string) => value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '';
 
 export default function ActivityPage() {
   const navigate = useNavigate();
@@ -34,35 +25,51 @@ export default function ActivityPage() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null);
   const [activityPendingDeletion, setActivityPendingDeletion] = useState<ActivityRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [createdBy, setCreatedBy] = useState('All');
-  const [customerName, setCustomerName] = useState('All');
-  const [followUpPreset, setFollowUpPreset] = useState('All');
+  const [filters, setFilters] = useState<PageFilterValues>({});
   const [toast, setToast] = useState<string | null>(null);
   const [customerOptions, setCustomerOptions] = useState<string[]>([]);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
-  const [employeesLoading, setEmployeesLoading] = useState(false);
-  const [employeesError, setEmployeesError] = useState('');
-  const selectedEmployee = createdBy.startsWith('employee:')
-    ? employees.find((employee) => `employee:${employee._id}` === createdBy)
-    : undefined;
+  const selectedEmployee = employees.find((employee) =>
+    (employee.employeeName || employee.fullName) === filters.createdBy,
+  );
   const selectedEmployeeName = selectedEmployee?.employeeName || selectedEmployee?.fullName || '';
 
   const loadActivities = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchActivities({
-        page,
-        limit,
-        createdBy: selectedEmployeeName || (createdBy !== 'All' && !createdBy.startsWith('employee:') ? createdBy : ''),
-        createdById: createdBy.startsWith('employee:') ? createdBy.slice('employee:'.length) : '',
-        customerName: customerName !== 'All' ? customerName : '',
-        followUpPreset: followUpPreset !== 'All' ? followUpPreset : '',
+      const requestFilters = {
+        createdBy: selectedEmployeeName || filters.createdBy || '',
+        createdById: selectedEmployee?._id || '',
+        customerName: filters.customerName || '',
         sortBy: 'createdAt',
         sortOrder: 'desc',
-      });
-      setActivities(response.data || []);
-      setTotalPages(response.pagination?.totalPages || 1);
-      setTotalRows(response.pagination?.total || 0);
+      } as const;
+      if (filters.followUpDate) {
+        const allActivities: ActivityRecord[] = [];
+        let currentPage = 1;
+        let lastPage = 1;
+        do {
+          const response = await fetchActivities({ ...requestFilters, page: currentPage, limit: 500 });
+          allActivities.push(...(response.data || []));
+          lastPage = response.pagination?.totalPages || 1;
+          currentPage += 1;
+        } while (currentPage <= lastPage);
+
+        const matchingActivities = allActivities.filter((activity) => getDateFilterValue(activity.followUpDate) === filters.followUpDate);
+        setTotalRows(matchingActivities.length);
+        setTotalPages(Math.max(1, Math.ceil(matchingActivities.length / limit)));
+        setActivities(matchingActivities.slice((page - 1) * limit, page * limit));
+      } else {
+        const response = await fetchActivities({
+          ...requestFilters,
+          page,
+          limit,
+          followUpPreset: '',
+        });
+        setActivities(response.data || []);
+        setTotalPages(response.pagination?.totalPages || 1);
+        setTotalRows(response.pagination?.total || 0);
+      }
     } catch {
       setActivities([]);
       setTotalPages(1);
@@ -70,20 +77,15 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, createdBy, selectedEmployeeName, customerName, followUpPreset]);
+  }, [page, limit, filters, selectedEmployee, selectedEmployeeName]);
 
   useEffect(() => {
     const loadEmployees = async () => {
-      setEmployeesLoading(true);
-      setEmployeesError('');
       try {
         const response = await fetchEmployees({ limit: 500 });
         setEmployees(response.data || []);
       } catch {
         setEmployees([]);
-        setEmployeesError('Unable to load employees.');
-      } finally {
-        setEmployeesLoading(false);
       }
     };
 
@@ -116,6 +118,18 @@ export default function ActivityPage() {
       void loadActivities();
     }
   }, [location.state, loadActivities]);
+
+  const createdByOptions = useMemo(() => Array.from(new Set([
+    ...employees.map((employee) => employee.employeeName || employee.fullName || '').filter(Boolean),
+    ...activities.map((activity) => activity.createdBy || '').filter(Boolean),
+    ...(filters.createdBy ? [filters.createdBy] : []),
+  ])).sort((a, b) => a.localeCompare(b)), [activities, employees, filters.createdBy]);
+
+  const filterFields: PageFilterField[] = [
+    { key: 'createdBy', label: 'Created By', type: 'select', options: createdByOptions },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: customerOptions },
+    { key: 'followUpDate', label: 'Follow-up Date', type: 'date' },
+  ];
 
   const handleSearch = useCallback(() => {
     setPage(1);
@@ -213,47 +227,17 @@ export default function ActivityPage() {
           <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
             <Download className="h-4 w-4" /> Download Report
           </button>
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(nextFilters) => { setFilters(nextFilters); setPage(1) }}
+            onClear={() => { setFilters({}); setPage(1) }}
+          />
           <PermissionGate moduleName="activities" action="create">
             <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> Add New
             </button>
           </PermissionGate>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-3">
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
-            <select value={createdBy} onChange={(event) => { setPage(1); setCreatedBy(event.target.value); }} disabled={employeesLoading} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm disabled:bg-gray-50">
-              <option value="All">All</option>
-              <option value="Admin">Admin</option>
-              {employees.map((employee) => {
-                const fullName = employee.employeeName || employee.fullName;
-                return fullName ? <option key={employee._id} value={`employee:${employee._id}`}>{fullName}</option> : null;
-              })}
-              <option value="System">System</option>
-            </select>
-            {employeesLoading ? <span className="text-xs text-gray-500">Loading employees...</span> : null}
-            {!employeesLoading && employeesError ? <span className="text-xs text-red-600">{employeesError}</span> : null}
-            {!employeesLoading && !employeesError && !employees.length ? <span className="text-xs text-gray-500">No employees found.</span> : null}
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Customer Name</span>
-            <select value={customerName} onChange={(event) => setCustomerName(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
-              <option value="All">All</option>
-              {customerOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Follow-up Date</span>
-            <select value={followUpPreset} onChange={(event) => setFollowUpPreset(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
-              {dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-
         </div>
       </div>
 

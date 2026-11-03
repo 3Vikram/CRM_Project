@@ -12,6 +12,7 @@ import {
   type MappingCustomer,
   type MappingEmployee,
 } from '@/sales/lib/customerMappingApi'
+import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 
 const tableCellClass = 'px-4 py-3 border-r border-[#D1D5DB]'
 const PAGE_SIZES = [10, 25, 50, 100]
@@ -62,6 +63,10 @@ export default function CustomerMappingPage() {
       ? employees.filter((employee) => `${employee.name} ${employee.email || ''} ${employee.employeeType || ''}`.toLowerCase().includes(value))
       : employees
   }, [employees, modalSearch])
+  const mappingFilterFields = [
+    { key: 'assignment', label: 'Assignment', type: 'select' as const, options: [{ value: 'assigned', label: 'Assigned' }, { value: 'unassigned', label: 'Unassigned' }] },
+    { key: 'employeeId', label: 'Employee', type: 'select' as const, options: employees.map((employee) => ({ value: employee.id, label: employee.name })) },
+  ]
 
   const allCurrentSelected = customers.length > 0 && customers.every((customer) => selectedIds.includes(customer._id))
   const summaryText = total === 0 ? 'Showing 0 to 0 of 0 entries' : `Showing ${(page - 1) * limit + 1} to ${Math.min(page * limit, total)} of ${total} entries`
@@ -125,17 +130,18 @@ export default function CustomerMappingPage() {
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer" className="w-full rounded-lg border border-[#EFECE5] py-2 pl-9 pr-3 text-sm outline-none focus:border-[#111827]" />
             </div>
           </label>
-          <label className="text-sm font-medium text-gray-700">Assignment
-            <select value={assignment} onChange={(event) => setAssignment(event.target.value)} className="mt-1 block rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm">
-              <option value="all">All</option><option value="assigned">Assigned</option><option value="unassigned">Unassigned</option>
-            </select>
-          </label>
-          <label className="text-sm font-medium text-gray-700">Employee
-            <select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} className="mt-1 block min-w-[180px] rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm">
-              <option value="">All</option>
-              {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
-            </select>
-          </label>
+          <PageFilters
+            fields={mappingFilterFields}
+            values={{ assignment: assignment === 'all' ? '' : assignment, employeeId }}
+            onApply={(values: PageFilterValues) => {
+              setAssignment(values.assignment || 'all')
+              setEmployeeId(values.employeeId || '')
+            }}
+            onClear={() => {
+              setAssignment('all')
+              setEmployeeId('')
+            }}
+          />
         </div>
         {selectedIds.length > 0 && <button type="button" onClick={() => openAssignModal(selectedIds)} className="mt-5 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">Assign selected ({selectedIds.length})</button>}
         <div className="mt-5 overflow-x-auto rounded-lg border border-[#EFECE5]">

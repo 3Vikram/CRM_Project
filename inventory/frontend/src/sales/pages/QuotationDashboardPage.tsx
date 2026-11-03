@@ -15,6 +15,7 @@ import {
 import { Toast } from '@/sales/components/toast'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
 
@@ -25,6 +26,14 @@ const formatDate = (value?: string | null) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleDateString('en-GB')
+}
+
+const getDateFilterValue = (value?: string | null) => {
+  if (!value) return ''
+  const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePrefix) return datePrefix
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
 }
 
 const getProductNames = (products?: any[]) => {
@@ -48,6 +57,17 @@ const calculateGrandTotal = (products?: any[]) => {
 const getUniqueValues = (items: Array<string | undefined>) =>
   Array.from(new Set(items.filter(Boolean) as string[])).sort()
 
+const fetchAllQuotations = async (quotationType: 'rent' | 'sold') => {
+  const firstPage = await fetchLeads({ status: 'Proposal Sent', quotationType, page: 1, limit: 1000 })
+  const records = [...firstPage.data]
+  const totalPages = firstPage.pagination.totalPages || 1
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchLeads({ status: 'Proposal Sent', quotationType, page, limit: 1000 })
+    records.push(...response.data)
+  }
+  return records
+}
+
 export default function QuotationDashboardPage() {
   const navigate = useNavigate()
   const { type } = useParams<{ type?: string }>()
@@ -59,10 +79,7 @@ export default function QuotationDashboardPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [createdBy, setCreatedBy] = useState('all')
-  const [createdDate, setCreatedDate] = useState('all')
-  const [expectedClosure, setExpectedClosure] = useState('all')
-  const [customerName, setCustomerName] = useState('all')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
@@ -72,8 +89,7 @@ export default function QuotationDashboardPage() {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await fetchLeads({ status: 'Proposal Sent', quotationType, limit: 1000 })
-        setQuotations(response.data)
+        setQuotations(await fetchAllQuotations(quotationType))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load quotations')
       } finally {
@@ -86,35 +102,32 @@ export default function QuotationDashboardPage() {
 
   const filterOptions = useMemo(() => {
     const createdByOptions = getUniqueValues(quotations.map((quote) => quote.createdBy || 'System'))
-    const createdDateOptions = getUniqueValues(quotations.map((quote) => formatDate(quote.createdDate)))
-    const expectedClosureOptions = getUniqueValues(
-      quotations.map((quote) => {
-        const expectedClosure = quote.quotationDetails?.expectedClosure
-        if (!expectedClosure) return undefined
-        return formatDate(expectedClosure)
-      })
-    )
     const customerNameOptions = getUniqueValues(quotations.map((quote) => quote.companyName))
     return {
       createdByOptions,
-      createdDateOptions,
-      expectedClosureOptions,
       customerNameOptions,
     }
   }, [quotations])
+
+  const filterFields = useMemo<PageFilterField[]>(() => [
+    { key: 'createdBy', label: 'Created By', type: 'select', options: filterOptions.createdByOptions },
+    { key: 'createdDate', label: 'Created Date', type: 'date' },
+    { key: 'expectedClosure', label: 'Expected Closure', type: 'date' },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: filterOptions.customerNameOptions },
+  ], [filterOptions.createdByOptions, filterOptions.customerNameOptions])
 
   const filteredQuotations = useMemo(() => {
     return quotations.filter((quote) => {
       if (selectedRecordId) {
         return quote._id === selectedRecordId || quote.quotationId === selectedRecordId || quote.leadId === selectedRecordId
       }
-      if (createdBy !== 'all' && (quote.createdBy || 'System') !== createdBy) return false
-      if (createdDate !== 'all' && formatDate(quote.createdDate) !== createdDate) return false
-      if (expectedClosure !== 'all') {
+      if (filters.createdBy && (quote.createdBy || 'System') !== filters.createdBy) return false
+      if (filters.createdDate && getDateFilterValue(quote.createdDate) !== filters.createdDate) return false
+      if (filters.expectedClosure) {
         const quoteDateClosure = quote.quotationDetails?.expectedClosure
-        if (formatDate(quoteDateClosure) !== expectedClosure) return false
+        if (getDateFilterValue(quoteDateClosure) !== filters.expectedClosure) return false
       }
-      if (customerName !== 'all' && (quote.companyName || '') !== customerName) return false
+      if (filters.customerName && (quote.companyName || '') !== filters.customerName) return false
 
       if (!searchQuery.trim()) return true
       const search = searchQuery.trim().toLowerCase()
@@ -128,7 +141,7 @@ export default function QuotationDashboardPage() {
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(search))
     })
-  }, [quotations, selectedRecordId, createdBy, createdDate, expectedClosure, customerName, searchQuery])
+  }, [quotations, selectedRecordId, filters, searchQuery])
 
   const pageCount = Math.max(1, Math.ceil(filteredQuotations.length / entriesPerPage))
   const pageData = filteredQuotations.slice((page - 1) * entriesPerPage, page * entriesPerPage)
@@ -213,64 +226,6 @@ export default function QuotationDashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
-          <select
-            value={createdBy}
-            onChange={(event) => { setCreatedBy(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.createdByOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created Date</span>
-          <select
-            value={createdDate}
-            onChange={(event) => { setCreatedDate(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.createdDateOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Expected Closure</span>
-          <select
-            value={expectedClosure}
-            onChange={(event) => { setExpectedClosure(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.expectedClosureOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Customer Name</span>
-          <select
-            value={customerName}
-            onChange={(event) => { setCustomerName(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.customerNameOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <span>Show</span>
@@ -287,7 +242,13 @@ export default function QuotationDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
+        <PageFilters
+          fields={filterFields}
+          values={filters}
+          onApply={(values) => { setFilters(values); setPage(1) }}
+          onClear={() => { setFilters({}); setPage(1) }}
+        />
+        <button
             type="button"
             onClick={downloadReport}
             className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"

@@ -28,6 +28,7 @@ import { StatCard } from '@/sales/components/stat-card'
 import { LeadDetailsDrawer } from '@/sales/components/LeadDetailsDrawer'
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { Toast } from '@/sales/components/toast'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 import { fetchLeadById, fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/sales/lib/leadApi'
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { clearApiCache } from '@/sales/lib/apiCache'
@@ -77,8 +78,7 @@ export default function LeadsPage({
   const [ownerMenuPosition, setOwnerMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [isAssigningOwner, setIsAssigningOwner] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [assignedFilter, setAssignedFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(8)
   const [totalPages, setTotalPages] = useState(1)
@@ -104,7 +104,7 @@ export default function LeadsPage({
         setPage(1)
         return
       }
-      const params = { page, limit, search: searchQuery, assignedTo: assignedFilter === 'all' ? '' : assignedFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
+      const params = { page, limit, search: searchQuery, assignedTo: filters.assignedTo || '', source: filters.source || '' }
       const response = await fetchLeads(params)
       setLeads(response.data)
       setTotalPages(response.pagination.totalPages)
@@ -118,7 +118,7 @@ export default function LeadsPage({
     } finally {
       setIsLoading(false)
     }
-  }, [assignedFilter, limit, page, searchQuery, selectedRecordId, sourceFilter])
+  }, [filters, limit, page, searchQuery, selectedRecordId])
 
   useEffect(() => { void loadLeads() }, [loadLeads])
 
@@ -131,7 +131,7 @@ export default function LeadsPage({
       })
   }, [])
 
-  useEffect(() => { setPage(1) }, [searchQuery, assignedFilter, sourceFilter])
+  useEffect(() => { setPage(1) }, [searchQuery, filters])
 
   const assignedOptions = useMemo(() => {
     const employeeNames = employees
@@ -140,8 +140,24 @@ export default function LeadsPage({
     const leadNames = leads
       .map((lead) => lead.assignedTo?.trim())
       .filter((name): name is string => Boolean(name && name !== 'Unassigned'))
-    return Array.from(new Set([...employeeNames, ...leadNames])).sort((a, b) => a.localeCompare(b))
-  }, [employees, leads])
+    const includesUnassigned = leads.some((lead) => !lead.assignedTo?.trim() || lead.assignedTo === 'Unassigned')
+    return Array.from(new Set([
+      ...employeeNames,
+      ...leadNames,
+      ...(filters.assignedTo && filters.assignedTo !== 'Unassigned' ? [filters.assignedTo] : []),
+      ...(includesUnassigned || filters.assignedTo === 'Unassigned' ? ['Unassigned'] : []),
+    ])).sort((a, b) => a.localeCompare(b))
+  }, [employees, filters.assignedTo, leads])
+
+  const sourceOptions = useMemo(() => Array.from(new Set([
+    ...leads.map((lead) => lead.sourceOfLead?.trim()).filter((source): source is string => Boolean(source)),
+    ...(filters.source ? [filters.source] : []),
+  ])).sort((a, b) => a.localeCompare(b)), [filters.source, leads])
+
+  const filterFields: PageFilterField[] = [
+    { key: 'assignedTo', label: 'Assigned To', type: 'select', options: assignedOptions },
+    { key: 'source', label: 'Source', type: 'select', options: sourceOptions },
+  ]
 
   const handleDownloadReport = async () => {
     setIsDownloading(true)
@@ -155,8 +171,8 @@ export default function LeadsPage({
           page: currentPage,
           limit: 100,
           search: searchQuery,
-          assignedTo: assignedFilter === 'all' ? '' : assignedFilter,
-          source: sourceFilter === 'all' ? '' : sourceFilter,
+          assignedTo: filters.assignedTo || '',
+          source: filters.source || '',
         })
         allLeads.push(...response.data)
         totalReportPages = response.pagination.totalPages || 1
@@ -340,6 +356,14 @@ export default function LeadsPage({
           <h1 className="crm-page-heading">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {!selectedRecordId ? (
+            <PageFilters
+              fields={filterFields}
+              values={filters}
+              onApply={(nextFilters) => { setFilters(nextFilters); setPage(1) }}
+              onClear={() => { setFilters({}); setPage(1) }}
+            />
+          ) : null}
           {selectedRecordId ? (
             <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all leads
@@ -374,27 +398,6 @@ export default function LeadsPage({
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap gap-3">
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Assigned To</span>
-            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
-              <option value="all">All</option>
-              <option value="Unassigned">Unassigned</option>
-              {assignedOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Source</span>
-            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-              <option value="all">All</option>
-              <option value="Mail Campaign">Mail Campaign</option>
-              <option value="Manual">Manual</option>
-              <option value="Website">Website</option>
-              <option value="Referral">Referral</option>
-            </select>
-          </label>
-        </div>
-
         <div className="overflow-x-auto rounded-lg border border-[#EFECE5]">
           {isLoading ? <div className="p-8 text-center text-sm text-gray-500">Loading leads…</div> : (
             <table className="min-w-full text-sm">

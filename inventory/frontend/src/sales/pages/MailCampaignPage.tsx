@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Download, Search, Mail, FileText, Clock3, Send, Trash2 } from 'lucide-react'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
@@ -8,6 +8,7 @@ import { StatCard } from '@/sales/components/stat-card'
 import { deleteCampaign, getCampaigns, MailCampaignRecord } from '@/sales/lib/mailCampaignApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 
 type CampaignStatus = 'Draft' | 'Scheduled' | 'Sent'
 
@@ -18,6 +19,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [campaignFilters, setCampaignFilters] = useState<PageFilterValues>({})
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null)
@@ -27,7 +29,54 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   const [stats, setStats] = useState({ total: 0, drafts: 0, scheduled: 0, sent: 0 })
   const [isDownloading, setIsDownloading] = useState(false)
 
+  const campaignFilterFields = useMemo(() => {
+    const fields = [
+      { key: 'createdBy', label: 'Created By', type: 'select' as const, options: Array.from(new Set(campaigns.map((campaign) => campaign.createdBy).filter(Boolean))).sort() },
+      { key: 'campaignDate', label: statusFilter === 'Scheduled' ? 'Scheduled Date' : 'Created Date', type: 'date' as const },
+    ]
+    if (!statusFilter) {
+      fields.unshift({
+        key: 'status',
+        label: 'Status',
+        type: 'select' as const,
+        options: Array.from(new Set(campaigns.map((campaign) => campaign.status).filter(Boolean))).sort(),
+      })
+    }
+    return fields
+  }, [campaigns, statusFilter])
+
   const loadCampaigns = async (nextPage = page, nextLimit = pageSize) => {
+    const hasFilters = Object.values(campaignFilters).some(Boolean)
+    if (hasFilters) {
+      const allCampaigns: MailCampaignRecord[] = []
+      let currentPage = 1
+      let lastPage = 1
+      do {
+        const data = await getCampaigns({
+          search,
+          page: currentPage,
+          limit: 100,
+          ...(statusFilter ? { status: statusFilter } : {}),
+        })
+        allCampaigns.push(...(data.data || []))
+        lastPage = data.pagination?.totalPages || 1
+        currentPage += 1
+      } while (currentPage <= lastPage)
+
+      const filtered = allCampaigns.filter((campaign) => {
+        const campaignDate = statusFilter === 'Scheduled'
+          ? campaign.scheduledDate
+          : campaign.createdDate || campaign.createdAt
+        return (!campaignFilters.createdBy || campaign.createdBy === campaignFilters.createdBy)
+          && (!campaignFilters.status || campaign.status === campaignFilters.status)
+          && (!campaignFilters.campaignDate || String(campaignDate || '').slice(0, 10) === campaignFilters.campaignDate)
+      })
+      setTotalCount(filtered.length)
+      setTotalPages(Math.max(1, Math.ceil(filtered.length / nextLimit)))
+      setCampaigns(filtered.slice((nextPage - 1) * nextLimit, nextPage * nextLimit))
+      return
+    }
+
     const data = await getCampaigns({ search, page: nextPage, limit: nextLimit, ...(statusFilter ? { status: statusFilter } : {}) })
     setCampaigns(data.data || [])
     setTotalPages(data.pagination?.totalPages || 1)
@@ -39,7 +88,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       void loadCampaigns(1, pageSize)
     }, 200)
     return () => window.clearTimeout(timer)
-  }, [search, pageSize])
+  }, [search, pageSize, campaignFilters, statusFilter])
 
   useEffect(() => {
     void loadCampaigns(page, pageSize)
@@ -156,6 +205,18 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
           <h1 className="crm-page-heading">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaigns'}</h1>
         </div>
         <div className="flex items-center gap-3">
+          <PageFilters
+            fields={campaignFilterFields}
+            values={campaignFilters}
+            onApply={(values) => {
+              setCampaignFilters(values)
+              setPage(1)
+            }}
+            onClear={() => {
+              setCampaignFilters({})
+              setPage(1)
+            }}
+          />
           <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm disabled:opacity-60">
             <Download className="h-4 w-4" />
             {isDownloading ? 'Downloading...' : 'Download Report'}

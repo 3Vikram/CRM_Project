@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { completeCalendarEvent, deleteCalendarEvent, fetchCalendarEvents, type CalendarApiEvent } from '@/sales/lib/calendarApi'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 
 type CalendarModule =
   | 'All'
@@ -229,11 +230,7 @@ export default function CalendarPage() {
   const [today, setToday] = useState(() => new Date())
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedView, setSelectedView] = useState<'Month' | 'Week' | 'Day' | 'List'>('Month')
-  const [activityTypeFilter, setActivityTypeFilter] = useState('All')
-  const [employeeFilter, setEmployeeFilter] = useState('All')
-  const [customerFilter, setCustomerFilter] = useState('All')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [eventPendingDeletion, setEventPendingDeletion] = useState<CalendarEvent | null>(null)
@@ -326,25 +323,32 @@ export default function CalendarPage() {
   }, [actionError])
 
   const activityTypes = useMemo(
-    () => ['All', ...Array.from(new Set(events.map((event) => event.eventType || event.title).filter(Boolean))).sort()],
+    () => Array.from(new Set(events.map((event) => event.eventType || event.title).filter(Boolean))).sort(),
     [events],
   )
   const assignedEmployees = useMemo(
-    () => ['All', ...Array.from(new Set(events.map((event) => event.assignedTo).filter(Boolean))).sort()],
+    () => Array.from(new Set(events.map((event) => event.assignedTo).filter(Boolean))).sort(),
     [events],
   )
   const customers = useMemo(
-    () => ['All', ...Array.from(new Set(events.map((event) => event.customer).filter(Boolean) as string[])).sort()],
+    () => Array.from(new Set(events.map((event) => event.customer).filter(Boolean) as string[])).sort(),
     [events],
   )
+  const filterFields: PageFilterField[] = [
+    { key: 'activityType', label: 'Activity Type', type: 'select', options: activityTypes },
+    { key: 'assignedEmployee', label: 'Assigned Employee', type: 'select', options: assignedEmployees },
+    { key: 'customer', label: 'Customer', type: 'select', options: customers },
+    { key: 'fromDate', label: 'From Date', type: 'date' },
+    { key: 'toDate', label: 'To Date', type: 'date' },
+  ]
   const filteredEvents = useMemo(() => events.filter((event) => {
-    if (activityTypeFilter !== 'All' && (event.eventType || event.title) !== activityTypeFilter) return false
-    if (employeeFilter !== 'All' && event.assignedTo !== employeeFilter) return false
-    if (customerFilter !== 'All' && event.customer !== customerFilter) return false
-    if (dateFrom && event.date < dateFrom) return false
-    if (dateTo && event.date > dateTo) return false
+    if (filters.activityType && (event.eventType || event.title) !== filters.activityType) return false
+    if (filters.assignedEmployee && event.assignedTo !== filters.assignedEmployee) return false
+    if (filters.customer && event.customer !== filters.customer) return false
+    if (filters.fromDate && event.date < filters.fromDate) return false
+    if (filters.toDate && event.date > filters.toDate) return false
     return true
-  }), [events, activityTypeFilter, employeeFilter, customerFilter, dateFrom, dateTo])
+  }), [events, filters])
 
   const todaysEvents = useMemo(
     () =>
@@ -659,6 +663,12 @@ export default function CalendarPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={setFilters}
+            onClear={() => setFilters({})}
+          />
           {[
             { label: 'Add Activity', primary: true, onClick: () => navigate('/sales/activities/new') },
             { label: 'Today', primary: false, onClick: goToToday },
@@ -686,35 +696,6 @@ export default function CalendarPage() {
 
       {actionError ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{actionError}</div> : null}
       {isLoadingEvents && events.length === 0 ? <div role="status" className="rounded-lg border border-[#EFECE5] bg-white px-4 py-6 text-center text-sm text-gray-500">Loading calendar activities...</div> : null}
-
-      <div className="grid gap-3 rounded-xl border border-[#EFECE5] bg-white p-4 md:grid-cols-2 xl:grid-cols-5">
-        <label className="space-y-1 text-xs font-medium text-gray-600">
-          Activity type
-          <select value={activityTypeFilter} onChange={(event) => setActivityTypeFilter(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-800">
-            {activityTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-medium text-gray-600">
-          Assigned employee
-          <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-800">
-            {assignedEmployees.map((employee) => <option key={employee} value={employee}>{employee}</option>)}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-medium text-gray-600">
-          Customer
-          <select value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-800">
-            {customers.map((customer) => <option key={customer} value={customer}>{customer}</option>)}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-medium text-gray-600">
-          From
-          <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-800" />
-        </label>
-        <label className="space-y-1 text-xs font-medium text-gray-600">
-          To
-          <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-800" />
-        </label>
-      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map(({ key, title, count, icon: Icon, subtitle, accent }) => (

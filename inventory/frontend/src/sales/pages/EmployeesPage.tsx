@@ -9,6 +9,7 @@ import { deleteEmployee, fetchEmployees, type EmployeeRecord } from '@/sales/lib
 import { PermissionGate } from '@/sales/components/PermissionGate'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
+import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 import {
   clearInventorySession,
   getInventorySessionToken,
@@ -286,6 +287,7 @@ export default function EmployeesPage() {
   const [toastMessage, setToastMessage] = useState('')
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
   const [activeModule, setActiveModule] = useState<'sales' | 'inventory' | 'accounts'>('sales')
+  const [employeeFilters, setEmployeeFilters] = useState<PageFilterValues>({})
 
   const notify = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage(message)
@@ -293,13 +295,16 @@ export default function EmployeesPage() {
     setShowToast(true)
   }
 
-  const loadEmployees = async (nextPage = page, nextLimit = pageSize, nextSearch = searchQuery) => {
+  const loadEmployees = async (nextPage = page, nextLimit = pageSize, nextSearch = searchQuery, filters = employeeFilters) => {
     setIsLoading(true)
     try {
       const response = await fetchEmployees({
         search: nextSearch,
         page: nextPage,
         limit: nextLimit,
+        role: filters.role,
+        status: filters.status,
+        department: filters.department,
       })
       setEmployees(response.data || [])
       setTotalPages(response.pagination?.totalPages || 1)
@@ -324,15 +329,21 @@ export default function EmployeesPage() {
     return () => {
       if (searchTimeoutRef.current) window.clearTimeout(searchTimeoutRef.current)
     }
-  }, [activeModule, page, pageSize, searchQuery])
+  }, [activeModule, page, pageSize, searchQuery, employeeFilters])
 
   useEffect(() => {
     setPage(1)
-  }, [searchQuery, pageSize])
+  }, [searchQuery, pageSize, employeeFilters])
 
-  const roleOptions = useMemo(() => Array.from(new Set(employees.map((employee) => employee.role).filter(Boolean))).sort(), [employees])
-  const statusOptions = useMemo(() => Array.from(new Set(employees.map((employee) => employee.status).filter(Boolean))).sort(), [employees])
-  const departmentOptions = useMemo(() => Array.from(new Set(employees.map((employee) => employee.department).filter(Boolean))).sort(), [employees])
+  const roleOptions = useMemo(() => Array.from(new Set(employees.map((employee) => employee.role).filter((value): value is string => Boolean(value)))).sort(), [employees])
+  const statusOptions = useMemo(() => Array.from(new Set(employees.map((employee) => employee.status).filter((value) => value !== undefined))).sort(), [employees])
+  const departmentOptions = useMemo(() => Array.from(new Set(employees.map((employee) => employee.department).filter((value): value is string => Boolean(value)))).sort(), [employees])
+  const employeeFilterFields = [
+    { key: 'role', label: 'Role', type: 'select' as const, options: roleOptions },
+    { key: 'status', label: 'Status', type: 'select' as const, options: statusOptions },
+    { key: 'department', label: 'Department', type: 'select' as const, options: departmentOptions },
+  ]
+  const visibleEmployees = employees
 
   const handleAddNew = () => navigate('/sales/employees/new')
   const handleEdit = (employee: EmployeeRecord) => navigate(`/sales/employees/edit/${employee._id}`)
@@ -351,7 +362,7 @@ export default function EmployeesPage() {
 
   const handleDownload = async () => {
     const headers = ['SL No.', 'Official Employee Id', 'Employee Type', 'Full Name', 'Email Id', 'Contact No', 'Designation', 'Department', 'Date of Join', 'Date of Birth', 'Reporting To', 'Branch Code', 'CRUD Option', 'Modules Option']
-    const rows = employees.map((employee, index) => [
+    const rows = visibleEmployees.map((employee, index) => [
       index + 1,
       String(employee.officialEmployeeId || employee.employeeCode || ''),
       employee.employeeType || '',
@@ -424,6 +435,7 @@ export default function EmployeesPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          <PageFilters fields={employeeFilterFields} values={employeeFilters} onApply={setEmployeeFilters} onClear={() => setEmployeeFilters({})} />
           <div className="w-full md:w-80">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -468,8 +480,8 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {employees.length > 0 ? (
-                  employees.map((employee) => (
+                {visibleEmployees.length > 0 ? (
+                  visibleEmployees.map((employee) => (
                     <tr key={employee._id} className="border-b border-[#EEF2F7] hover:bg-slate-50">
                       <td className={tableCellClass}>{employee.officialEmployeeId || employee.employeeCode || '—'}</td>
                       <td className={tableCellClass}>{employee.employeeType || '—'}</td>

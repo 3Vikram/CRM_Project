@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Download,
@@ -16,6 +16,7 @@ import { Toast } from '@/sales/components/toast'
 import { fetchOPFById, fetchOPFs, deleteOPF, type OPFRecord } from '@/sales/lib/opfApi'
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
 
@@ -42,30 +43,56 @@ const getUniqueValues = (items: Array<string | undefined>) =>
   Array.from(new Set(items.filter(Boolean) as string[])).sort()
 
 const getRenewalDate = (item: { renewalDate?: string; amcRenewalDate?: string }) => item.renewalDate || item.amcRenewalDate
+const getDateFilterValue = (value?: string | null) => {
+  if (!value) return ''
+  const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (datePrefix) return datePrefix
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+const fetchAllOPFs = async (params: NonNullable<Parameters<typeof fetchOPFs>[0]> = {}) => {
+  const firstPage = await fetchOPFs({ ...params, page: 1, limit: 1000 })
+  const records = [...(firstPage.data || [])]
+  const totalPages = firstPage.pagination?.totalPages || 1
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchOPFs({ ...params, page, limit: 1000 })
+    records.push(...(response.data || []))
+  }
+  return records
+}
+
+const fetchAllCustomers = async () => {
+  const firstPage = await fetchCustomers({ page: 1, limit: 1000 })
+  const records = [...(firstPage.data || [])]
+  const totalPages = firstPage.pagination?.totalPages || 1
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchCustomers({ page, limit: 1000 })
+    records.push(...(response.data || []))
+  }
+  return records
+}
 
 export default function OPFPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedRecordId = searchParams.get('recordId')
   const [opfData, setOPFData] = useState<OPFRecord[]>([])
+  const [serverFilteredOPFs, setServerFilteredOPFs] = useState<OPFRecord[] | null>(null)
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [createdBy, setCreatedBy] = useState('all')
-  const [createdDate, setCreatedDate] = useState('all')
-  const [renewalDate, setRenewalDate] = useState('all')
-  const [customerName, setCustomerName] = useState('all')
-  const [approvalStatus, setApprovalStatus] = useState('all')
-  const [product, setProduct] = useState('all')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
+  const filterRequestId = useRef(0)
 
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        const response = await fetchCustomers({ limit: 1000 })
-        setCustomers(response.data || [])
+        setCustomers(await fetchAllCustomers())
       } catch (_error) {
         setCustomers([])
       }
@@ -74,8 +101,7 @@ export default function OPFPage() {
     const loadOPFs = async () => {
       setIsLoading(true)
       try {
-        const response = await fetchOPFs({ limit: 1000 })
-        const records = response.data || []
+        const records = await fetchAllOPFs()
         if (selectedRecordId) {
           const selectedRecord = await fetchOPFById(selectedRecordId)
           if (selectedRecord && !records.some((item) => item._id === selectedRecord._id)) {
@@ -95,35 +121,67 @@ export default function OPFPage() {
   }, [selectedRecordId])
 
   const filterOptions = useMemo(() => {
-    const createdByOptions = getUniqueValues(opfData.map((item) => item.createdBy))
-    const createdDateOptions = getUniqueValues(opfData.map((item) => formatDate(item.createdDate)))
-    const renewalDateOptions = getUniqueValues(opfData.map((item) => formatDate(getRenewalDate(item))))
     const customerNameOptions = getUniqueValues([
       ...opfData.map((item) => item.customerName),
       ...customers.map((customer) => customer.customerName || customer.companyName),
     ])
-    const approvalStatusOptions = getUniqueValues(opfData.map((item) => item.approvalStatus))
     const productOptions = getUniqueValues(opfData.map((item) => item.product))
 
     return {
-      createdByOptions,
-      createdDateOptions,
-      renewalDateOptions,
       customerNameOptions,
-      approvalStatusOptions,
       productOptions,
     }
   }, [opfData, customers])
 
+  const filterFields = useMemo<PageFilterField[]>(() => [
+    { key: 'createdBy', label: 'Created By', type: 'select', options: getUniqueValues(opfData.map((item) => item.createdBy || 'Admin')) },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: filterOptions.customerNameOptions },
+    { key: 'approvalStatus', label: 'Approval Status', type: 'select', options: getUniqueValues(opfData.map((item) => item.approvalStatus || 'Pending')) },
+    { key: 'product', label: 'Product', type: 'select', options: filterOptions.productOptions },
+    { key: 'createdDate', label: 'Created Date', type: 'date' },
+    { key: 'renewalDate', label: 'Renewal Date', type: 'date' },
+  ], [opfData, filterOptions.customerNameOptions, filterOptions.productOptions])
+
+  const applyFilters = async (values: PageFilterValues) => {
+    const requestId = ++filterRequestId.current
+    setFilters(values)
+    setPage(1)
+    if (!Object.values(values).some(Boolean)) {
+      setServerFilteredOPFs(null)
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const records = await fetchAllOPFs({
+        createdBy: values.createdBy,
+        createdDate: values.createdDate,
+        renewalDate: values.renewalDate,
+        customerName: values.customerName,
+        approvalStatus: values.approvalStatus,
+        product: values.product,
+      })
+      if (requestId === filterRequestId.current) setServerFilteredOPFs(records)
+    } catch (error) {
+      if (requestId === filterRequestId.current) {
+        setServerFilteredOPFs(null)
+        setToast(error instanceof Error ? error.message : 'Unable to apply OPF filters')
+      }
+    } finally {
+      if (requestId === filterRequestId.current) setIsLoading(false)
+    }
+  }
+
   const filteredOPFs = useMemo(() => {
-    return opfData.filter((item) => {
-      if (selectedRecordId) return item._id === selectedRecordId || item.opfNo === selectedRecordId
-      if (createdBy !== 'all' && (item.createdBy || 'Admin') !== createdBy) return false
-      if (createdDate !== 'all' && formatDate(item.createdDate) !== createdDate) return false
-      if (renewalDate !== 'all' && formatDate(getRenewalDate(item)) !== renewalDate) return false
-      if (customerName !== 'all' && (item.customerName || '') !== customerName) return false
-      if (approvalStatus !== 'all' && (item.approvalStatus || 'Pending') !== approvalStatus) return false
-      if (product !== 'all' && (item.product || '') !== product) return false
+    return (serverFilteredOPFs ?? opfData).filter((item) => {
+      if (selectedRecordId && item._id !== selectedRecordId && item.opfNo !== selectedRecordId) return false
+      if (filters.createdBy && (item.createdBy || 'Admin') !== filters.createdBy) return false
+      if (filters.createdDate && getDateFilterValue(item.createdDate) !== filters.createdDate) return false
+      if (filters.renewalDate && getDateFilterValue(getRenewalDate(item)) !== filters.renewalDate) return false
+      if (filters.customerName && (item.customerName || '') !== filters.customerName) return false
+      if (filters.approvalStatus && (item.approvalStatus || 'Pending') !== filters.approvalStatus) return false
+      if (filters.product && (item.product || '') !== filters.product) return false
 
       if (!searchQuery.trim()) return true
 
@@ -132,7 +190,7 @@ export default function OPFPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(search))
     })
-  }, [opfData, selectedRecordId, createdBy, createdDate, renewalDate, customerName, approvalStatus, product, searchQuery])
+  }, [opfData, serverFilteredOPFs, selectedRecordId, filters, searchQuery])
 
   const pageCount = Math.max(1, Math.ceil(filteredOPFs.length / entriesPerPage))
   const pageData = filteredOPFs.slice((page - 1) * entriesPerPage, page * entriesPerPage)
@@ -212,84 +270,6 @@ export default function OPFPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-6">
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
-          <select
-            value={createdBy}
-            onChange={(event) => { setCreatedBy(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.createdByOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created Date</span>
-          <input
-            type="date"
-            value={createdDate === 'all' ? '' : createdDate}
-            onChange={(event) => { setCreatedDate(event.target.value || 'all'); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          />
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Renewal Date</span>
-          <input
-            type="date"
-            value={renewalDate === 'all' ? '' : renewalDate}
-            onChange={(event) => { setRenewalDate(event.target.value || 'all'); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          />
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Customer Name</span>
-          <select
-            value={customerName}
-            onChange={(event) => { setCustomerName(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.customerNameOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Approval Status</span>
-          <select
-            value={approvalStatus}
-            onChange={(event) => { setApprovalStatus(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.approvalStatusOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Product</span>
-          <select
-            value={product}
-            onChange={(event) => { setProduct(event.target.value); setPage(1) }}
-            className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            <option value="all">All</option>
-            {filterOptions.productOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <span>Show</span>
@@ -306,6 +286,12 @@ export default function OPFPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(values) => { void applyFilters(values) }}
+            onClear={() => { filterRequestId.current += 1; setFilters({}); setServerFilteredOPFs(null); setIsLoading(false); setPage(1) }}
+          />
           <button
             type="button"
             onClick={downloadReport}
