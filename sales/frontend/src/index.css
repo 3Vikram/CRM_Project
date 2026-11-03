@@ -216,6 +216,18 @@
     font-size: 20px !important;
   }
 
+  .sales-module-typography aside nav a {
+    font-size: 19px !important;
+  }
+
+  .sales-module-typography .sales-page-content :where(p, span, label, input, textarea, select, option, li, dt, dd, small):not(button *):not(a *):not([role='button'] *):not(table *) {
+    font-size: 19px !important;
+  }
+
+  .sales-module-typography .sales-page-content :where(input, textarea):not(button *):not(a *):not([role='button'] *)::placeholder {
+    font-size: 19px !important;
+  }
+
   .sales-module-typography :where(p, span, label, td, th, button, a, input, textarea, select, option, li, dt, dd, small) {
     font-size: 18px !important;
   }

@@ -700,10 +700,14 @@ const checkTrackingUrlReachable = async (req) => {
     if (!body.length) throw new Error('Tracking endpoint returned an empty image');
     return { ok: true, baseUrl, endpointUrl };
   } catch (error) {
-    logger.error('mail-campaign.tracking-url.unreachable', { baseUrl, message: error?.message });
+    logger.error('mail-campaign.tracking-url.unreachable', {
+      baseUrlConfigured: Boolean(baseUrl),
+      errorName: error?.name,
+      errorCode: error?.code,
+    });
     return {
       ok: false,
-      message: `Tracking verification failed for ${baseUrl}: ${error?.message || 'unknown error'}. Email sending can continue, but open tracking may not be recorded. Check the tunnel, the /api proxy, and MAIL_TRACKING_BASE_URL or TRACKING_BASE_URL, then restart the backend.`,
+      message: `Tracking verification failed: ${error?.message || 'unknown error'}. Email sending can continue, but open tracking may not be recorded. Check the tunnel, the /api proxy, and MAIL_TRACKING_BASE_URL or TRACKING_BASE_URL, then restart the backend.`,
     };
   }
 };
@@ -829,8 +833,6 @@ const syncCampaignOpenCount = async (campaignId) => {
 
 exports.trackOpen = async (req, res) => {
   const trackingId = String(req.params.trackingId || req.params.token || '').trim();
-  console.log('[TRACK OPEN REQUEST]', trackingId);
-  logger.info('mail-campaign.open.requested', { trackingId });
 
   try {
     const log = await EmailLog.findOne({
@@ -838,9 +840,6 @@ exports.trackOpen = async (req, res) => {
     }).select('_id campaignId campaignName recipientEmail recipientId trackingId trackingToken openCount clickCount openedAt firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt leadCreated leadId').lean();
 
     if (!log) {
-      logger.info('mail-campaign.tracking-id.not-found', { trackingId });
-      console.log(`OPEN TRACKING NOT FOUND: trackingId=${trackingId}`);
-      logger.info('mail-campaign.open-trace', { trackingId, emailLogFound: false });
       return res.status(200).type('gif').send(TRACKING_PIXEL);
     }
 
@@ -862,15 +861,13 @@ exports.trackOpen = async (req, res) => {
       openCount: updatedLog?.openCount || 0,
       clickCount: updatedLog?.clickCount || 0,
     });
-    console.log('[TRACK OPEN]', {
-      trackingId,
+    logger.info('mail-campaign.open.tracked', {
       campaignId: updatedLog?.campaignId,
-      recipient: updatedLog?.recipientEmail,
       openCount: updatedLog?.openCount,
       leadThresholdReached: Boolean(leadResult),
     });
   } catch (error) {
-    logger.error('mail-campaign.track-open.failed', { trackingId, message: error?.message, stack: error?.stack });
+    logger.error('mail-campaign.track-open.failed', { message: error?.message });
   }
 
   res.set({
@@ -924,7 +921,6 @@ exports.getTrackingDiagnostic = async (req, res) => {
 
 exports.trackClick = async (req, res) => {
   const trackingId = String(req.params.token || req.params.trackingId || '').trim();
-  console.log('[TRACK CLICK REQUEST]', trackingId);
   const rawDestination = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
   const originalUrl = String(rawDestination || '');
   let destination = originalUrl;
@@ -958,16 +954,13 @@ exports.trackClick = async (req, res) => {
         } }],
         { new: true },
       ).lean();
-      console.log('[TRACK CLICK]', {
-        trackingId,
-        recipient: updatedLog.recipientEmail,
+      logger.info('mail-campaign.click.tracked', {
         campaignId: updatedLog.campaignId,
         clickCount: updatedLog.clickCount,
-        destination,
       });
     }
   } catch (error) {
-    logger.error('mail-campaign.track-click.failed', { message: error?.message, stack: error?.stack });
+    logger.error('mail-campaign.track-click.failed', { message: error?.message });
   }
   return res.redirect(302, redirectUrl);
 };
@@ -1425,18 +1418,18 @@ exports.sendCampaign = async (req, res) => {
     const trackingUrlIsLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(trackingBaseUrl);
     logger.info('mail-campaign.tracking-config', {
       campaignId: campaign.campaignId,
-      trackingBaseUrl,
       trackingUrlIsLocal,
       warning: trackingUrlIsLocal ? 'External recipients cannot reach a local tracking URL.' : '',
     });
-    const emailLogs = recipientsToSend.filter((recipient) => !existingLogByRecipient.has(recipient.toLowerCase())).map((recipient) => {
-      const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
+    const newTrackingLogCount = recipientsToSend.filter((recipient) => !existingLogByRecipient.has(recipient.toLowerCase())).length;
+    if (newTrackingLogCount) {
       logger.info('mail-campaign.tracking-id.generated', {
         campaignId: campaign.campaignId,
-        recipientEmail: recipient,
-        trackingId,
+        recipientCount: newTrackingLogCount,
       });
-      console.log(`TRACKING ID GENERATED: trackingId=${trackingId} recipient=${recipient} campaignId=${campaign.campaignId}`);
+    }
+    const emailLogs = recipientsToSend.filter((recipient) => !existingLogByRecipient.has(recipient.toLowerCase())).map((recipient) => {
+      const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
       return {
         campaignId: campaign.campaignId,
         campaignName: campaign.campaignName,
@@ -1476,23 +1469,21 @@ exports.sendCampaign = async (req, res) => {
           hasInlineImages: (!campaign.image || imageSources.includes(`cid:${campaignImageCid}`)) && (!hasLogo || imageSources.includes(`cid:${companyLogoCid}`)),
           hasTrackedLinks: /\/api\/mail-campaigns\/(?:tracking\/)?click\//i.test(trackedHtml),
           containsLocalhost: localUrls.length > 0,
-          localUrls,
-          trackingBaseUrl,
         };
-        console.log(`Final email HTML image URLs: ${imageSources.join(', ') || '(none)'}`);
-        console.log(`FINAL EMAIL VALIDATION recipient=${recipient} campaignId=${campaign.campaignId} hasTrackingPixel=${validation.hasTrackingPixel} hasInlineImages=${validation.hasInlineImages} hasTrackedLinks=${validation.hasTrackedLinks} containsLocalhost=${validation.containsLocalhost}${localUrls.length ? ` localUrls=${localUrls.join(',')}` : ''}`);
+        logger.info('mail-campaign.email.content.validated', {
+          campaignId: campaign.campaignId,
+          hasTrackingPixel: validation.hasTrackingPixel,
+          hasInlineImages: validation.hasInlineImages,
+          hasTrackedLinks: validation.hasTrackedLinks,
+          containsLocalhost: validation.containsLocalhost,
+        });
         if (!validation.hasTrackingPixel || !validation.hasInlineImages || validation.containsLocalhost) {
-          throw new Error(`Final campaign HTML validation failed: ${JSON.stringify(validation)}`);
+          throw new Error('Final campaign email content failed validation.');
         }
         logger.info('mail-campaign.tracking-pixel-injected', {
           campaignId: campaign.campaignId,
-          recipientEmail: recipient,
-          trackingId,
-          trackingPixelUrl: trackingUrl,
           trackingPixelIncluded: validation.hasTrackingPixel,
         });
-        console.log(`TRACKING URL: ${trackingUrl}`);
-        console.log(`TRACKING PIXEL IN FINAL HTML: ${validation.hasTrackingPixel}`);
         return trackedHtml;
       },
       tracking: (recipient) => {
@@ -1561,11 +1552,6 @@ exports.sendCampaign = async (req, res) => {
       failed: report.failed,
       status: groupId ? (targetGroup ? targetGroup.status : campaign.status) : campaign.status,
     });
-    report.results.forEach((item) => {
-      const trackingId = trackingIds.get(String(item.recipientEmail).trim().toLowerCase());
-      console.log(`SENT TRACKING: trackingId=${trackingId} recipient=${item.recipientEmail} status=${item.status}`);
-    });
-
     if (failedCount === report.totalRecipients) {
       return res.status(502).json({
         success: false,

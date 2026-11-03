@@ -24,6 +24,43 @@ const getSmtpConfig = () => {
   };
 };
 
+const redactSmtpErrorValue = (value, password, seen = new WeakSet()) => {
+  if (typeof value === 'string') {
+    return password ? value.split(password).join('[REDACTED]') : value;
+  }
+  if (!value || typeof value !== 'object') return value;
+  if (Buffer.isBuffer(value)) return '[binary data]';
+  if (seen.has(value)) return '[Circular]';
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSmtpErrorValue(item, password, seen));
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    /pass|secret|authorization/i.test(key)
+      ? '[REDACTED]'
+      : redactSmtpErrorValue(item, password, seen),
+  ]));
+};
+
+const getSmtpErrorDetails = (error, password) => {
+  const details = {};
+  for (const field of ['code', 'command', 'responseCode', 'response', 'message']) {
+    if (error?.[field] !== undefined && error[field] !== null) {
+      details[field] = redactSmtpErrorValue(error[field], password);
+    }
+  }
+  return details;
+};
+
+const getSmtpConnectionDetails = ({ host, port, secure }) => ({
+  smtpHost: host,
+  smtpPort: port,
+  smtpSecure: secure,
+});
+
 const createTransporter = () => nodemailer.createTransport(getSmtpConfig());
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -95,7 +132,8 @@ const sendCampaignEmails = async ({
   const smtpUser = config.auth.user;
 
   logger.info('mail-campaign.email.send.start', {
-    smtpUser: smtpUser || 'undefined',
+    ...getSmtpConnectionDetails(config),
+    smtpAuthConfigured: Boolean(smtpUser && config.auth.pass),
     recipientCount: recipients.length,
     attachments: attachments.length,
   });
@@ -129,12 +167,12 @@ const sendCampaignEmails = async ({
 
   try {
     await transporter.verify();
-    logger.info('mail-campaign.email.smtp.verified', { smtpUser });
+    logger.info('mail-campaign.email.smtp.verified', getSmtpConnectionDetails(config));
   } catch (error) {
+    const errorDetails = getSmtpErrorDetails(error, config.auth.pass);
     logger.error('mail-campaign.email.smtp.verify.failed', {
-      smtpUser,
-      error: error?.message || 'Unknown SMTP verify error',
-      stack: error?.stack,
+      ...getSmtpConnectionDetails(config),
+      ...errorDetails,
     });
 
     return {
@@ -145,7 +183,7 @@ const sendCampaignEmails = async ({
         recipientEmail: recipient,
         status: 'Failed',
         messageId: '',
-        errorMessage: error?.message || 'SMTP verification failed',
+        errorMessage: errorDetails.message || 'SMTP verification failed',
       })),
     };
   }
@@ -177,27 +215,17 @@ const sendCampaignEmails = async ({
         const trackingPixelIncluded = Boolean(trackingDetails.url && finalHtml.includes(trackingDetails.url));
         logger.info('mail-campaign.email.final-html', {
           campaignId: trackingDetails.campaignId,
-          recipientEmail: recipient,
-          trackingId: trackingDetails.trackingId,
           trackingPixelIncluded,
-          trackingUrl: trackingDetails.url,
-          htmlLength: finalHtml.length,
-          finalHtml,
         });
-        console.log(`MAIL FINAL HTML: campaignId=${trackingDetails.campaignId} recipient=${recipient} trackingId=${trackingDetails.trackingId} trackingPixelInjected=${trackingPixelIncluded} trackingUrl=${trackingDetails.url}`);
         if (!trackingPixelIncluded) {
           throw new Error(`Tracking pixel missing from final HTML for campaign ${trackingDetails.campaignId}, recipient ${recipient}.`);
         }
       }
       const finalImageSources = [...finalHtml.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
       const invalidImageSources = finalImageSources.filter((source) => !/^cid:[^\s"']+$/i.test(source) && (!/^https:\/\//i.test(source) || /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(source) || /^(?:undefined|null)$/i.test(source)));
-      console.log(`FINAL HTML IMG SRC BEFORE sendMail() campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient} srcs=${JSON.stringify(finalImageSources)} invalidSrcs=${JSON.stringify(invalidImageSources)}`);
-      console.log(`FINAL HTML TRACKING URLS BEFORE sendMail() campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient} openUrls=${JSON.stringify([...finalHtml.matchAll(/https:\/\/[^"'\s>]+\/api\/mail-campaigns\/track\/open\/[^"'\s>]+/gi)].map((match) => match[0]))} clickUrls=${JSON.stringify([...finalHtml.matchAll(/https:\/\/[^"'\s>]+\/api\/mail-campaigns\/tracking\/click\/[^"'\s>]+/gi)].map((match) => match[0]))}`);
       if (invalidImageSources.length) {
-        throw new Error(`Final email contains invalid image src values: ${invalidImageSources.join(', ')}`);
+        throw new Error(`Final email contains ${invalidImageSources.length} invalid image source(s).`);
       }
-      console.log(`FINAL HTML BEFORE sendMail() campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient}\n${finalHtml}`);
-      console.log(`MAIL SEND CONFIRMATION: recipient=${recipient}${trackingDetails ? ` campaignId=${trackingDetails.campaignId} trackingId=${trackingDetails.trackingId}` : ''} immediately before sendMail()`);
       const info = await transporter.sendMail(mailOptions);
       const accepted = Array.isArray(info.accepted) ? info.accepted : [];
       const rejected = Array.isArray(info.rejected) ? info.rejected : [];
@@ -208,7 +236,6 @@ const sendCampaignEmails = async ({
       const deliveryError = status === 'Failed'
         ? `Recipient was not accepted by SMTP. accepted=${accepted.join(',')} rejected=${rejected.join(',')} pending=${pending.join(',')}`
         : '';
-      console.log(`CAMPAIGN SEND RESULT campaignId=${trackingDetails?.campaignId || ''} recipient=${recipient} accepted=${JSON.stringify(accepted)} rejected=${JSON.stringify(rejected)} pending=${JSON.stringify(pending)} messageId=${info.messageId || ''} response=${info.response || ''} error=${deliveryError}`);
       results.push({
         recipientEmail: recipient,
         status,
@@ -221,10 +248,11 @@ const sendCampaignEmails = async ({
         deliveryStatus: status === 'Sent' ? 'Accepted by SMTP; final delivery is not confirmed.' : deliveryError,
       });
     } catch (error) {
+      const errorDetails = getSmtpErrorDetails(error, config.auth.pass);
       logger.error('mail-campaign.email.send.failed', {
         recipient,
-        error: error?.message || 'Unknown email sending error',
-        stack: error?.stack,
+        ...getSmtpConnectionDetails(config),
+        ...errorDetails,
       });
       results.push({
         recipientEmail: recipient,
@@ -232,9 +260,9 @@ const sendCampaignEmails = async ({
         accepted: [],
         rejected: [recipient],
         pending: [],
-        response: error?.response || '',
+        response: errorDetails.response || '',
         messageId: '',
-        errorMessage: error?.response || error?.message || 'Unknown email sending error',
+        errorMessage: errorDetails.response || errorDetails.message || 'Unknown email sending error',
       });
     }
   }
@@ -243,7 +271,6 @@ const sendCampaignEmails = async ({
   const failed = results.filter((item) => item.status === 'Failed').length;
 
   logger.info('mail-campaign.email.send.complete', {
-    smtpUser,
     totalRecipients: recipients.length,
     successfullySent,
     failed,
@@ -282,11 +309,13 @@ const sendRenewalReminder = async ({ recipient, employeeName, opf, renewalDate, 
     try {
       await transporter.verify();
     } catch (error) {
+      const errorDetails = getSmtpErrorDetails(error, config.auth.pass);
       logger.error('renewal.reminder.email.smtp.verify.failed', {
         opfNo: opfNumber,
-        error: error?.message || 'SMTP verification failed.',
+        ...getSmtpConnectionDetails(config),
+        ...errorDetails,
       });
-      return { success: false, retryable: true, errorMessage: error?.message || 'SMTP verification failed.' };
+      return { success: false, retryable: true, errorMessage: errorDetails.message || 'SMTP verification failed.' };
     }
     const info = await transporter.sendMail({
       from: `Synov IT Services <${config.auth.user}>`,
@@ -303,11 +332,13 @@ const sendRenewalReminder = async ({ recipient, employeeName, opf, renewalDate, 
     logger.info('renewal.reminder.email.sent', { opfNo: opfNumber });
     return { success: true, messageId: info.messageId || '' };
   } catch (error) {
+    const errorDetails = getSmtpErrorDetails(error, config.auth.pass);
     logger.error('renewal.reminder.email.send.failed', {
       opfNo: opfNumber,
-      error: error?.message || 'Unknown email sending error.',
+      ...getSmtpConnectionDetails(config),
+      ...errorDetails,
     });
-    return { success: false, errorMessage: error?.message || 'Failed to send renewal reminder.' };
+    return { success: false, errorMessage: errorDetails.message || 'Failed to send renewal reminder.' };
   }
 };
 
@@ -369,19 +400,19 @@ const sendQuotationEmail = async ({
 
   try {
     await transporter.verify();
-    logger.info('quotation.email.smtp.verified', { smtpUser });
+    logger.info('quotation.email.smtp.verified', getSmtpConnectionDetails(config));
   } catch (error) {
+    const errorDetails = getSmtpErrorDetails(error, config.auth.pass);
     logger.error('quotation.email.smtp.verify.failed', {
-      smtpUser,
-      error: error?.message || 'Unknown SMTP verify error',
-      stack: error?.stack,
+      ...getSmtpConnectionDetails(config),
+      ...errorDetails,
     });
 
     return {
       success: false,
-      message: error?.message || 'SMTP verification failed',
+      message: errorDetails.message || 'SMTP verification failed',
       status: 'Failed',
-      errorMessage: error?.message || 'SMTP verification failed',
+      errorMessage: errorDetails.message || 'SMTP verification failed',
     };
   }
 
@@ -417,18 +448,19 @@ const sendQuotationEmail = async ({
       messageId: info.messageId,
     };
   } catch (error) {
+    const errorDetails = getSmtpErrorDetails(error, config.auth.pass);
     logger.error('quotation.email.send.failed', {
       recipient,
       quotationNumber,
-      error: error?.message || 'Unknown email sending error',
-      stack: error?.stack,
+      ...getSmtpConnectionDetails(config),
+      ...errorDetails,
     });
 
     return {
       success: false,
-      message: error?.message || 'Failed to send quotation email',
+      message: errorDetails.message || 'Failed to send quotation email',
       status: 'Failed',
-      errorMessage: error?.message || 'Unknown email sending error',
+      errorMessage: errorDetails.message || 'Unknown email sending error',
     };
   }
 };

@@ -3,18 +3,54 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Search, Plus, MoreVertical, MessageCircle } from 'lucide-react'
+import { Search, Plus, MoreVertical, MessageCircle, UsersRound, UserRoundCheck, UserRoundX, UserRoundPlus } from 'lucide-react'
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Tooltip } from '@mui/material'
 import { deleteContact, fetchContacts, fetchEmployeeBatchGroups, moveContactToCustomer, type ContactRecord, type EmployeeBatchGroup } from '@/lib/contactApi'
+import { fetchLeads, type LeadRecord } from '@/lib/leadApi'
+import { fetchCalendarEvents, type CalendarApiEvent } from '@/lib/calendarApi'
 import { PermissionGate } from '@/components/PermissionGate'
-import { getStoredAuth } from '@/lib/auth'
 
 const PAGE_SIZE = 20
-const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
+const CONTACTS_FETCH_PAGE_SIZE = 100
+const tableCellClass = 'border-r border-[#E1E4EA] px-4 py-3'
+
+const fetchAllContacts = async (filters: { employeeId?: string; batchId?: string }) => {
+  const firstPage = await fetchContacts({ ...filters, page: 1, limit: CONTACTS_FETCH_PAGE_SIZE })
+  const contacts = [...(firstPage.data || [])]
+  const totalPages = firstPage.pagination?.totalPages || 1
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchContacts({ ...filters, page, limit: CONTACTS_FETCH_PAGE_SIZE })
+    contacts.push(...(response.data || []))
+  }
+
+  return contacts
+}
+
+const fetchAllLeads = async () => {
+  const firstPage = await fetchLeads({ page: 1, limit: CONTACTS_FETCH_PAGE_SIZE })
+  const leads = [...firstPage.data]
+  const totalPages = firstPage.pagination?.totalPages || 1
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await fetchLeads({ page, limit: CONTACTS_FETCH_PAGE_SIZE })
+    leads.push(...response.data)
+  }
+
+  return leads
+}
+
+const normalizeEmail = (value?: string) => String(value || '').trim().toLowerCase()
+const normalizePhone = (value?: string) => String(value || '').replace(/\D/g, '')
+const normalizeName = (value?: string) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 export default function ContactsPage() {
   const navigate = useNavigate()
   const [allContacts, setAllContacts] = useState<ContactRecord[]>([])
+  const [leads, setLeads] = useState<LeadRecord[]>([])
+  const [calendarEvents, setCalendarEvents] = useState<CalendarApiEvent[]>([])
+  const [isRelationshipDataLoading, setIsRelationshipDataLoading] = useState(true)
+  const [relationshipDataError, setRelationshipDataError] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [employeeGroups, setEmployeeGroups] = useState<EmployeeBatchGroup[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
@@ -42,8 +78,11 @@ export default function ContactsPage() {
   const loadContacts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await fetchContacts({ page: 1, limit: 1000, employeeId: selectedEmployeeId || undefined, batchId: batchId || undefined })
-      setAllContacts(response.data || [])
+      const contacts = await fetchAllContacts({
+        employeeId: selectedEmployeeId || undefined,
+        batchId: batchId || undefined,
+      })
+      setAllContacts(contacts)
       setLoadError(null)
     } catch (error) {
       setAllContacts([])
@@ -62,6 +101,25 @@ export default function ContactsPage() {
       .catch((error) => {
         if (active) setFeedbackMessage(error instanceof Error ? error.message : 'Unable to load contact batches.')
       })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadContactRelationships = async () => {
+      const [leadResult, calendarResult] = await Promise.allSettled([
+        fetchAllLeads(),
+        fetchCalendarEvents(),
+      ])
+
+      if (!active) return
+      if (leadResult.status === 'fulfilled') setLeads(leadResult.value)
+      if (calendarResult.status === 'fulfilled') setCalendarEvents(calendarResult.value)
+      setRelationshipDataError(leadResult.status === 'rejected' || calendarResult.status === 'rejected')
+      setIsRelationshipDataLoading(false)
+    }
+
+    void loadContactRelationships()
     return () => { active = false }
   }, [])
 
@@ -96,9 +154,50 @@ export default function ContactsPage() {
     if (totalCount === 0) return 'Showing 0 to 0 of 0 entries'
     return `Showing ${(page - 1) * pageSize + 1} to ${Math.min(page * pageSize, totalCount)} of ${totalCount} entries`
   }, [page, pageSize, totalCount])
-  const session = getStoredAuth()
-  const ownerGroup = employeeGroups.find((group) => group.employeeId === session?.user.id || group.employeeEmail?.toLowerCase() === session?.user.email.toLowerCase()) || employeeGroups[0]
-  const ownerName = ownerGroup?.employeeName || session?.user.name || session?.user.email || 'User'
+
+  const contactCounts = useMemo(() => {
+    const leadEmails = new Set(leads.map((lead) => normalizeEmail(lead.email)).filter(Boolean))
+    const leadPhones = new Set(leads.map((lead) => normalizePhone(lead.mobile)).filter(Boolean))
+    const calendarContactIds = new Set(
+      calendarEvents
+        .filter((event) => event.referenceModule === 'Contacts' && event.referenceId)
+        .map((event) => String(event.referenceId)),
+    )
+    const calendarContactNames = new Set(
+      calendarEvents
+        .filter((event) => event.referenceModule !== 'Contacts' && event.contactName)
+        .map((event) => normalizeName(event.contactName))
+        .filter(Boolean),
+    )
+    const activeCount = allContacts.filter((contact) => (
+      Boolean(contact.customerId)
+      || calendarContactIds.has(String(contact._id))
+      || leadEmails.has(normalizeEmail(contact.email))
+      || leadPhones.has(normalizePhone(contact.contactNumber))
+      || calendarContactNames.has(normalizeName(contact.contactName))
+    )).length
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const newThisMonth = allContacts.filter((contact) => {
+      if (!contact.createdAt) return false
+      const createdAt = new Date(contact.createdAt)
+      return !Number.isNaN(createdAt.getTime()) && createdAt >= monthStart
+    }).length
+
+    return {
+      total: allContacts.length,
+      active: activeCount,
+      inactive: allContacts.length - activeCount,
+      newThisMonth,
+    }
+  }, [allContacts, calendarEvents, leads])
+
+  const summaryCards = [
+    { label: 'TOTAL CONTACTS', value: isLoading ? '—' : contactCounts.total, icon: UsersRound, color: '#3867E8', background: '#EAF0FF' },
+    { label: 'ACTIVE CONTACTS', value: isLoading || isRelationshipDataLoading || relationshipDataError ? '—' : contactCounts.active, icon: UserRoundCheck, color: '#20B66A', background: '#E8F8F0' },
+    { label: 'INACTIVE CONTACTS', value: isLoading || isRelationshipDataLoading || relationshipDataError ? '—' : contactCounts.inactive, icon: UserRoundX, color: '#E83E8C', background: '#FCEAF2' },
+    { label: 'NEW CONTACTS (THIS MONTH)', value: isLoading ? '—' : contactCounts.newThisMonth, icon: UserRoundPlus, color: '#F5A623', background: '#FFF4E1' },
+  ]
 
   const handleDelete = useCallback(async (id: string) => {
     if (!id) return
@@ -127,19 +226,46 @@ export default function ContactsPage() {
   }, [navigate])
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <div className="contacts-page space-y-5">
+      <style>{`
+        .sales-module-typography .contacts-page .contacts-summary-value {
+          color: #172640 !important;
+          font-size: 24px !important;
+          line-height: 1.1 !important;
+        }
+        .sales-module-typography .contacts-page .contacts-summary-label {
+          color: #667085 !important;
+          font-size: 11px !important;
+          letter-spacing: 0.045em;
+          line-height: 1.25 !important;
+        }
+        .sales-module-typography .contacts-page .contacts-control {
+          color: #344054 !important;
+          font-size: 14px !important;
+        }
+        .sales-module-typography .contacts-page .contacts-table thead th {
+          background-color: #EDE7F6 !important;
+          color: #172640 !important;
+          font-size: 12px !important;
+          letter-spacing: 0.04em;
+          line-height: 1.25 !important;
+        }
+        .sales-module-typography .contacts-page .contacts-table tbody td {
+          color: #344054 !important;
+          font-size: 14px !important;
+        }
+      `}</style>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="shrink-0">
           <h1 className="crm-page-heading">Contacts</h1>
-          <p className="mt-1 text-sm font-medium text-gray-600">{ownerName} ({ownerGroup?.customerCount || 0})</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 xl:justify-end">
           <select value={batchId ? `${selectedEmployeeId}:${batchId}` : ''} onChange={(event) => {
             const [nextEmployeeId = '', nextBatchId = ''] = event.target.value.split(':')
             setSelectedEmployeeId(nextEmployeeId)
             setBatchId(nextBatchId)
             setPage(1)
-          }} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-[18px] text-gray-700">
+          }} className="contacts-control min-w-40 rounded-lg border border-[#E1E4EA] bg-white px-3 py-2.5">
             <option value="">All Batches</option>
             {employeeGroups.map((group) => (
               <optgroup key={group.employeeId} label={group.employeeName}>
@@ -150,12 +276,12 @@ export default function ContactsPage() {
             ))}
           </select>
           <PermissionGate moduleName="contacts" action="create">
-            <button onClick={() => navigate('/sales/contacts/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-[18px] font-medium text-white transition hover:bg-[#1E293B]">
+            <button onClick={() => navigate('/sales/contacts/new')} className="flex items-center gap-2 rounded-lg bg-[#172640] px-4 py-2.5 text-[18px] font-medium text-white transition hover:bg-[#233958]">
               <Plus className="h-4 w-4" />
               ADD NEW
             </button>
           </PermissionGate>
-          <div className="relative w-72">
+          <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -164,12 +290,35 @@ export default function ContactsPage() {
                 setSearchQuery(event.target.value)
                 setPage(1)
               }}
-              placeholder="Search contacts"
-              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-[18px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              placeholder="Search Contacts"
+              className="contacts-control w-full rounded-lg border border-[#E1E4EA] bg-white py-2.5 pl-9 pr-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#7663A8]/30"
             />
           </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div key={card.label} className="flex min-h-[104px] items-center gap-4 rounded-xl border border-[#E1E4EA] bg-white px-5 py-4 shadow-sm">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: card.background, color: card.color }}>
+                <Icon className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <div className="contacts-summary-value font-bold">{card.value}</div>
+                <div className="contacts-summary-label mt-1 font-semibold">{card.label}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {relationshipDataError ? (
+        <p role="status" className="text-sm text-[#667085]">
+          Active and inactive counts are unavailable because lead or calendar data could not be loaded.
+        </p>
+      ) : null}
 
       {feedbackMessage ? (
         <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
@@ -183,8 +332,8 @@ export default function ContactsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <div className="overflow-hidden rounded-lg border border-[#EFECE5]">
+      <div className="overflow-hidden rounded-xl border border-[#E1E4EA] bg-white shadow-sm">
+        <div className="overflow-hidden">
           {isLoading ? (
             <div className="space-y-2 py-8">
               {Array.from({ length: 5 }).map((_, index) => (
@@ -193,16 +342,25 @@ export default function ContactsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-full text-[18px]">
-                <thead className="bg-[#F7F5EF] text-left text-[18px] uppercase tracking-[0.4px] text-[#374151]">
-                  <tr className="border-b border-[#E5E7EB]">
-                    <th className={tableCellClass + ' font-bold'}>SL. NO</th>
-                    <th className={tableCellClass + ' font-bold'}>CUSTOMER NAME</th>
-                    <th className={tableCellClass + ' font-bold'}>CONTACT NAME</th>
-                    <th className={tableCellClass + ' font-bold'}>DESIGNATION</th>
-                    <th className={tableCellClass + ' font-bold'}>PHONE NUMBER</th>
-                    <th className={tableCellClass + ' font-bold'}>EMAIL</th>
-                    <th className={tableCellClass + ' text-center font-bold'}>ACTIONS</th>
+              <table className="contacts-table w-full min-w-[1050px] border-collapse text-left">
+                <colgroup>
+                  <col className="w-[7%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[21%]" />
+                  <col className="w-[8%]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className={`${tableCellClass} border-b py-3 font-bold`}>SL. NO</th>
+                    <th className={`${tableCellClass} border-b py-3 font-bold`}>CUSTOMER NAME</th>
+                    <th className={`${tableCellClass} border-b py-3 font-bold`}>CONTACT NAME</th>
+                    <th className={`${tableCellClass} border-b py-3 font-bold`}>DESIGNATION</th>
+                    <th className={`${tableCellClass} border-b py-3 font-bold`}>PHONE NUMBER</th>
+                    <th className={`${tableCellClass} border-b py-3 font-bold`}>EMAIL</th>
+                    <th className={`${tableCellClass} border-b py-3 text-center font-bold`}>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -225,7 +383,7 @@ export default function ContactsPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-16 text-center text-[18px] text-gray-500 border-r border-[#D1D5DB]">
+                      <td colSpan={7} className="border-r border-[#E1E4EA] px-6 py-16 text-center text-gray-500">
                         {loadError ? 'Contacts could not be loaded.' : 'No contacts found.'}
                       </td>
                     </tr>
@@ -235,10 +393,10 @@ export default function ContactsPage() {
             </div>
           )}
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#EFECE5] pt-4">
-          <div className="flex items-center gap-2 text-[18px] text-gray-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E1E4EA] px-4 py-3">
+          <div className="contacts-control flex items-center gap-2 text-gray-500">
             <span>Show</span>
-            <select className="rounded border border-[#EFECE5] bg-white px-2 py-1.5 text-[18px] text-gray-700" value={pageSize} onChange={(event) => {
+            <select className="contacts-control rounded border border-[#E1E4EA] bg-white px-2 py-1.5" value={pageSize} onChange={(event) => {
               setPageSize(Number(event.target.value))
               setPage(1)
             }}>
@@ -248,13 +406,13 @@ export default function ContactsPage() {
             </select>
             <span>entries</span>
           </div>
-          <div className="text-[18px] text-gray-500">{summaryText}</div>
+          <div className="contacts-control text-gray-500">{summaryText}</div>
           <div className="flex items-center gap-2">
-            <button className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 disabled:opacity-50" disabled={page === 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))}>
+            <button className="rounded border border-[#E1E4EA] bg-white p-2 text-gray-600 disabled:opacity-50" disabled={page === 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))}>
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-[2]" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
             </button>
-            <span className="text-[18px] text-gray-600">Page {page} of {totalPages}</span>
-            <button className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 disabled:opacity-50" disabled={page >= totalPages} onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}>
+            <span className="contacts-control text-gray-600">Page {page} of {totalPages}</span>
+            <button className="rounded border border-[#E1E4EA] bg-white p-2 text-gray-600 disabled:opacity-50" disabled={page >= totalPages} onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}>
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-[2]" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
             </button>
           </div>
@@ -341,12 +499,12 @@ const ContactTableRow = memo(function ContactTableRow({
 
   return (
     <>
-    <tr className="border-b border-[#E5E7EB] bg-white transition-colors hover:bg-[#F9FAFB]">
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-[18px] text-gray-700`}>{serialNumber}</td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-[18px] text-gray-700`}>{contact.customerName || '-'}</td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-[18px] text-gray-700`}>{contact.contactName}</td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-[18px] text-gray-700`}>{contact.designation}</td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-[18px] text-gray-700`}>
+    <tr className="border-b border-[#E1E4EA] bg-white transition-colors hover:bg-[#F8FAFC]">
+      <td className={`${tableCellClass} text-[18px]`}>{serialNumber}</td>
+      <td className={`${tableCellClass} text-[18px]`}>{contact.customerName || '-'}</td>
+      <td className={`${tableCellClass} text-[18px]`}>{contact.contactName}</td>
+      <td className={`${tableCellClass} text-[18px]`}>{contact.designation}</td>
+      <td className={`${tableCellClass} text-[18px]`}>
         <span className="inline-flex items-center">
           <span>{contact.contactNumber}</span>
           <Tooltip title={hasValidPhone ? 'Open WhatsApp' : 'Phone number not available.'} arrow>
@@ -364,10 +522,10 @@ const ContactTableRow = memo(function ContactTableRow({
           </Tooltip>
         </span>
       </td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-[18px] text-gray-700`}>{contact.email}</td>
-      <td className={`${tableCellClass.replace('py-3','py-4')} text-center`}>
+      <td className={`${tableCellClass} text-[18px]`}>{contact.email}</td>
+      <td className={`${tableCellClass} text-center`}>
         <div className="relative inline-flex" data-contact-actions>
-          <button ref={actionButtonRef} type="button" onClick={onToggleMenu} className="rounded border border-[#E5E7EB] bg-white p-2 text-gray-600 transition hover:bg-[#F3F4F6]" title="Actions" aria-label="Contact actions">
+          <button ref={actionButtonRef} type="button" onClick={onToggleMenu} className="rounded border border-[#E1E4EA] bg-white p-1.5 text-gray-600 transition hover:bg-[#F3F4F6]" title="Actions" aria-label="Contact actions">
             <MoreVertical className="h-4 w-4" />
           </button>
         </div>

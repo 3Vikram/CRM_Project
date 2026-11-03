@@ -184,7 +184,7 @@ export default function SuppliersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="sales-data-table w-full">
                 <thead>
                   <tr className="border-b border-[#EFECE5] bg-[#F2EFE8]">
                     <th className={tableCellClass + ' text-left text-xs font-semibold uppercase tracking-wider text-gray-600'}>Supplier ID</th>

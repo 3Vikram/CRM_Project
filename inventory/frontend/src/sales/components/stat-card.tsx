@@ -22,22 +22,16 @@ export function StatCard({
   labelClassName = '',
 }: StatCardProps) {
   return (
-    <div className="bg-white rounded-lg border border-[#EFECE5] p-6 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <div className={`stat-card-label text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 ${labelClassName}`}>
-            {label}
-          </div>
-          <div className="text-3xl font-bold text-gray-900">{value}</div>
-          {description && (
-            <p className="text-xs text-gray-600 mt-1">{description}</p>
-          )}
+    <div className="sales-summary-card flex h-full items-center gap-3">
+      <div className={`sales-summary-card-icon ${iconBg}`}>
+        <Icon className={`${iconColor}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="sales-summary-card-value">{value}</div>
+        <div className={`sales-summary-card-label stat-card-label ${labelClassName}`}>
+          {label}
         </div>
-        <div
-          className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconBg}`}
-        >
-          <Icon className={`w-6 h-6 ${iconColor}`} />
-        </div>
+        {description && <p className="sales-summary-card-description mt-0.5 truncate">{description}</p>}
       </div>
     </div>
   )

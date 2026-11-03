@@ -371,7 +371,7 @@ export default function CalendarPage() {
         count: todaysCount,
         icon: CalendarDays,
         subtitle: 'Scheduled today',
-        accent: 'bg-[#F2EFE8] text-[#111827]',
+        accent: 'bg-blue-50 text-blue-600',
       },
       {
         key: 'upcoming-events' as DashboardDrawerKey,
@@ -379,7 +379,7 @@ export default function CalendarPage() {
         count: upcomingCount,
         icon: Clock3,
         subtitle: 'Next in queue',
-        accent: 'bg-violet-100 text-violet-700',
+        accent: 'bg-orange-50 text-orange-600',
       },
       {
         key: 'overdue-activities' as DashboardDrawerKey,
@@ -387,7 +387,7 @@ export default function CalendarPage() {
         count: overdueCount,
         icon: AlertTriangle,
         subtitle: 'Need attention',
-        accent: 'bg-amber-100 text-amber-700',
+        accent: 'bg-rose-50 text-rose-600',
       },
       {
         key: 'meetings-today' as DashboardDrawerKey,
@@ -395,7 +395,7 @@ export default function CalendarPage() {
         count: meetingsTodayCount,
         icon: Users,
         subtitle: 'Calls and reviews',
-        accent: 'bg-emerald-100 text-emerald-700',
+        accent: 'bg-green-50 text-green-600',
       },
     ]
   }, [filteredEvents, today])
@@ -716,24 +716,22 @@ export default function CalendarPage() {
         </label>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map(({ key, title, count, icon: Icon, subtitle, accent }) => (
           <button
             key={title}
             type="button"
             onClick={() => openDashboardDrawer(key)}
-            className="cursor-pointer rounded-xl border border-[#EFECE5] bg-white p-5 text-left shadow-sm transition hover:border-[#D9D1BF] hover:bg-[#FAF8F2]"
+            className="sales-summary-card flex w-full items-center gap-3 text-left transition"
           >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">{title}</p>
-                <div className="mt-3 text-3xl font-serif font-bold text-gray-900">{count}</div>
-              </div>
-              <div className={`rounded-xl p-2 ${accent}`}>
-                <Icon className="h-5 w-5" />
-              </div>
+            <div className={`sales-summary-card-icon ${accent}`}>
+              <Icon />
             </div>
-            <p className="mt-4 text-xs font-medium uppercase tracking-wider text-gray-400">{subtitle}</p>
+            <div className="min-w-0">
+              <p className="sales-summary-card-value">{count}</p>
+              <p className="sales-summary-card-label mt-0.5">{title}</p>
+              <p className="sales-summary-card-description mt-0.5 truncate">{subtitle}</p>
+            </div>
           </button>
         ))}
       </div>
@@ -977,7 +975,7 @@ export default function CalendarPage() {
           onClick={closeDrawer}
         >
           <div
-            className={`fixed right-0 top-[calc((4rem+20px)/var(--sales-ui-scale))] z-50 h-[calc(100vh/var(--sales-ui-scale)-(4rem+20px)/var(--sales-ui-scale))] w-full max-w-[480px] border-l border-[#EFECE5] bg-white shadow-2xl transition-transform duration-300 ease-out md:w-[70%] ${
+            className={`fixed right-0 top-[calc(4rem+20px)] z-50 h-[calc(100vh-4rem-20px)] w-full max-w-[480px] border-l border-[#EFECE5] bg-white shadow-2xl transition-transform duration-300 ease-out md:w-[70%] ${
               isDrawerClosing ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'
             }`}
             onClick={(event) => event.stopPropagation()}
@@ -1258,7 +1256,7 @@ export default function CalendarPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="calendar-day-events-title"
-            className="flex max-h-[calc(85vh/var(--sales-ui-scale))] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[#EFECE5] bg-white shadow-2xl"
+            className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[#EFECE5] bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <header className="flex items-center justify-between border-b border-[#EFECE5] px-4 py-3">

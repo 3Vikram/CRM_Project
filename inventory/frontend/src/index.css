@@ -157,84 +157,84 @@ aside a {
 }
 
 .sales-page-content {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .sales-page-content :where(.text-xs):not(thead *):not(th *) {
-  font-size: calc(1rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-sm):not(thead *):not(th *) {
-  font-size: calc(1.0625rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-base):not(thead *):not(th *) {
-  font-size: calc(1.1875rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-lg):not(thead *):not(th *) {
-  font-size: calc(1.3125rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-xl):not(thead *):not(th *) {
-  font-size: calc(1.5rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-2xl):not(thead *):not(th *) {
-  font-size: calc(1.75rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-3xl):not(thead *):not(th *) {
-  font-size: calc(1.875rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-4xl):not(thead *):not(th *) {
-  font-size: calc(2.25rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-5xl):not(thead *):not(th *) {
-  font-size: calc(3rem + 1px) !important;
-}
-
-.sales-page-content :where(.text-6xl):not(thead *):not(th *) {
-  font-size: calc(3.75rem + 1px) !important;
-}
-
-.sales-page-content .crm-page-heading {
-  font-size: calc(2.25rem + 1px) !important;
-}
-
-.sales-page-content :where([class*="text-[10px]"]):not(thead *):not(th *) {
-  font-size: 11px !important;
-}
-
-.sales-page-content :where([class*="text-[11px]"]):not(thead *):not(th *) {
-  font-size: 12px !important;
-}
-
-.sales-page-content :where([class*="text-[12px]"]):not(thead *):not(th *) {
   font-size: 13px !important;
 }
 
-.sales-page-content :where([class*="text-[13px]"]):not(thead *):not(th *) {
+.sales-page-content :where(.text-sm):not(thead *):not(th *) {
   font-size: 14px !important;
 }
 
-.sales-page-content :where([class*="text-[16px]"]):not(thead *):not(th *) {
+.sales-page-content :where(.text-base):not(thead *):not(th *) {
+  font-size: 16px !important;
+}
+
+.sales-page-content :where(.text-lg):not(thead *):not(th *) {
   font-size: 17px !important;
 }
 
+.sales-page-content :where(.text-xl):not(thead *):not(th *) {
+  font-size: 20px !important;
+}
+
+.sales-page-content :where(.text-2xl):not(thead *):not(th *) {
+  font-size: 23px !important;
+}
+
+.sales-page-content :where(.text-3xl):not(thead *):not(th *) {
+  font-size: 24px !important;
+}
+
+.sales-page-content :where(.text-4xl):not(thead *):not(th *) {
+  font-size: 29px !important;
+}
+
+.sales-page-content :where(.text-5xl):not(thead *):not(th *) {
+  font-size: 38px !important;
+}
+
+.sales-page-content :where(.text-6xl):not(thead *):not(th *) {
+  font-size: 48px !important;
+}
+
+.sales-page-content .crm-page-heading {
+  font-size: 29px !important;
+}
+
+.sales-page-content :where([class*="text-[10px]"]):not(thead *):not(th *) {
+  font-size: 9px !important;
+}
+
+.sales-page-content :where([class*="text-[11px]"]):not(thead *):not(th *) {
+  font-size: 9px !important;
+}
+
+.sales-page-content :where([class*="text-[12px]"]):not(thead *):not(th *) {
+  font-size: 10px !important;
+}
+
+.sales-page-content :where([class*="text-[13px]"]):not(thead *):not(th *) {
+  font-size: 11px !important;
+}
+
+.sales-page-content :where([class*="text-[16px]"]):not(thead *):not(th *) {
+  font-size: 13px !important;
+}
+
 .sales-page-content :where([class*="text-[18px]"]):not(thead *):not(th *) {
-  font-size: 19px !important;
+  font-size: 15px !important;
 }
 
 .sales-page-content table thead {
-  font-size: 16px !important;
+  font-size: 13px !important;
 }
 
 .sales-page-content nav a:not([class*="text-"]),
 .sales-page-content aside a:not([class*="text-"]) {
-  font-size: 17px !important;
+  font-size: 15px !important;
 }
 
 .sales-page-content .MuiInputBase-root,
@@ -243,11 +243,11 @@ aside a {
 .sales-page-content .MuiFormLabel-root,
 .sales-page-content .MuiSelect-select,
 .sales-page-content .MuiMenuItem-root {
-  font-size: calc(1.125rem + 1px) !important;
+  font-size: 15px !important;
 }
 
 .sales-page-content .MuiButton-root {
-  font-size: calc(1.0625rem + 1px) !important;
+  font-size: 15px !important;
 }
 
 .sales-page-content .MuiDataGrid-cell,
@@ -257,11 +257,96 @@ aside a {
 .sales-page-content .MuiDialogActions-root,
 .sales-page-content .MuiPaginationItem-root,
 .sales-page-content .MuiFormHelperText-root {
-  font-size: calc(1rem + 1px) !important;
+  font-size: 14px !important;
 }
 
 .sales-module-typography nav[aria-label="Sales navigation"] a {
-  font-size: 1.0625rem !important;
+  font-size: 14px !important;
+}
+
+.sales-module-typography .sales-summary-card {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 88px;
+  padding: 16px;
+  border: 1px solid #E1E4EA;
+  border-radius: 12px;
+  background-color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+.sales-module-typography .sales-dashboard-kpi-card {
+  min-height: 130px;
+  padding: 18px;
+}
+
+.sales-module-typography .sales-summary-card:hover {
+  border-color: #D9D1BF;
+  background-color: #FFFFFF;
+}
+
+.sales-module-typography .sales-summary-card-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.sales-module-typography .sales-summary-card-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sales-module-typography .sales-summary-card-label {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748B;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1.15 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.sales-module-typography .sales-summary-card-value {
+  overflow: hidden;
+  color: #172640 !important;
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-module-typography .sales-summary-card-description,
+.sales-module-typography .sales-summary-card-meta {
+  overflow: hidden;
+  color: #64748B;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  text-overflow: ellipsis;
+}
+
+.sales-module-typography .sales-summary-card-detail-value {
+  color: #334155 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.15 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.sales-module-typography .sales-summary-card-change {
+  font-size: 10px !important;
+}
+
+.sales-module-typography .sales-summary-card-change svg {
+  width: 12px;
+  height: 12px;
 }
 
 .customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
@@ -328,12 +413,22 @@ aside a {
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
 }
 
-.employee-list-table thead th {
-  color: #4b5563;
-  font-size: 16px !important;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.sales-page-content .sales-data-table thead th {
+  height: 37px;
+  padding-block: 10px;
+  border: 1px solid #DDE1E8;
+  background-color: #EDE7F6 !important;
+  color: #172640 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 18px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.sales-page-content .sales-mail-campaign-table thead th {
+  height: 39px;
+  padding-block: 8px;
 }
 
 .sales-module-typography table thead,

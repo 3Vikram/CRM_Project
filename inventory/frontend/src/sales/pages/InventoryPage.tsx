@@ -85,22 +85,22 @@ export default function InventoryPage() {
           icon={Package}
           label="Total Fleet"
           value={stats.totalFleet}
-          iconBg="bg-emerald-100"
-          iconColor="text-emerald-700"
+          iconBg="bg-blue-50"
+          iconColor="text-blue-600"
         />
         <StatCard
           icon={Package}
           label="Rented Out"
           value={stats.rentedOut}
-          iconBg="bg-amber-100"
-          iconColor="text-amber-700"
+          iconBg="bg-orange-50"
+          iconColor="text-orange-600"
         />
         <StatCard
           icon={Package}
           label="Available Now"
           value={stats.availableNow}
-          iconBg="bg-green-100"
-          iconColor="text-green-700"
+          iconBg="bg-green-50"
+          iconColor="text-green-600"
         />
       </div>
 

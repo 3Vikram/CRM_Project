@@ -91,6 +91,7 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
 
   const requiredPermission = getRoutePermission(location.pathname)
   const canView = !requiredPermission || hasPermission(requiredPermission)
+  const isDashboardPage = location.pathname.replace(/\/+$/, '') === '/sales/dashboard'
 
   return (
     <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
@@ -102,7 +103,7 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
           onToggle={() => setSidebarExpanded((expanded) => !expanded)}
           onClose={() => setMobileSidebarOpen(false)}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">{canView ? children : <AccessDeniedPage />}</main>
+        <main className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3 ${isDashboardPage ? '' : 'sales-page-content'}`}>{canView ? children : <AccessDeniedPage />}</main>
       </div>
     </div>
   )

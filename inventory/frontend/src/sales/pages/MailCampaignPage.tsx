@@ -168,10 +168,10 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
 
       {!statusFilter ? (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} description="All active campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-[#111827]" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} description="Saved for later review" iconBg="bg-[#F2EFE8]" iconColor="text-gray-700" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/scheduled')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Clock3} label="Scheduled Campaigns" value={stats.scheduled} description="Queued for sending" iconBg="bg-[#F2EFE8]" iconColor="text-amber-700" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} description="Completed campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-green-700" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} description="All active campaigns" iconBg="bg-blue-50" iconColor="text-blue-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} description="Saved for later review" iconBg="bg-violet-50" iconColor="text-violet-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/scheduled')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Clock3} label="Scheduled Campaigns" value={stats.scheduled} description="Queued for sending" iconBg="bg-orange-50" iconColor="text-orange-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} description="Completed campaigns" iconBg="bg-green-50" iconColor="text-green-600" /></button>
         </div>
       ) : null}
 
@@ -192,7 +192,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
           {campaigns.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[#EFECE5] bg-[#FAF8F2] px-6 py-12 text-center text-sm text-gray-500">No campaigns found.</div>
           ) : (
-          <table className="w-full min-w-[900px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
+          <table className="sales-data-table sales-mail-campaign-table w-full min-w-[900px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
             <thead>
               <tr className="text-left text-xs font-semibold uppercase tracking-wider">
                 <th className={`${tableHeaderCellClass} w-[7%] text-center`}>Sl No.</th>

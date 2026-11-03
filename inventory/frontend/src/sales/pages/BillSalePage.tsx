@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, FileText } from 'lucide-react'
+import { Search, FileText, CircleDollarSign, Wallet } from 'lucide-react'
 
 const bills = [
   { id: 'INV-2026-0117', customer: 'Fernwood Studios', amount: '₹4,50,000', dueDate: '2025-02-15', status: 'Paid' },
@@ -45,29 +45,38 @@ export default function BillSalePage() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg border border-[#EFECE5] p-6 shadow-sm">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Total Invoiced
-          </div>
-          <div className="text-3xl font-bold text-gray-900">
-            ₹{(totalAmount / 100000).toFixed(1)}L
-          </div>
-        </div>
-        <div className="bg-white rounded-lg border border-[#EFECE5] p-6 shadow-sm">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Amount Collected
-          </div>
-          <div className="text-3xl font-bold text-green-600">
-            ₹{(paidAmount / 100000).toFixed(1)}L
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="sales-summary-card flex items-center gap-3">
+          <span className="sales-summary-card-icon bg-blue-50 text-blue-600"><FileText /></span>
+          <div className="min-w-0">
+            <div className="sales-summary-card-value">
+              ₹{(totalAmount / 100000).toFixed(1)}L
+            </div>
+            <div className="sales-summary-card-label mt-0.5">
+              Total Invoiced
+            </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-[#EFECE5] p-6 shadow-sm">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Outstanding
+        <div className="sales-summary-card flex items-center gap-3">
+          <span className="sales-summary-card-icon bg-green-50 text-green-600"><CircleDollarSign /></span>
+          <div className="min-w-0">
+            <div className="sales-summary-card-value text-green-600">
+              ₹{(paidAmount / 100000).toFixed(1)}L
+            </div>
+            <div className="sales-summary-card-label mt-0.5">
+              Amount Collected
+            </div>
           </div>
-          <div className="text-3xl font-bold text-red-600">
-            ₹{((totalAmount - paidAmount) / 100000).toFixed(1)}L
+        </div>
+        <div className="sales-summary-card flex items-center gap-3">
+          <span className="sales-summary-card-icon bg-rose-50 text-rose-600"><Wallet /></span>
+          <div className="min-w-0">
+            <div className="sales-summary-card-value text-red-600">
+              ₹{((totalAmount - paidAmount) / 100000).toFixed(1)}L
+            </div>
+            <div className="sales-summary-card-label mt-0.5">
+              Outstanding
+            </div>
           </div>
         </div>
       </div>

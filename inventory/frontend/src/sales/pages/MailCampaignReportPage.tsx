@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { Activity, ArrowLeft, Eye, Mail, Send, Users } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCampaignReport, type MailCampaignReportRow, type MailCampaignReportSummary } from '@/sales/lib/mailCampaignApi'
 
@@ -30,15 +30,18 @@ export default function MailCampaignReportPage() {
         {summary ? (
           <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {[
-              ['Total Recipients', summary.totalRecipients],
-              ['Sent Emails', summary.sentEmails],
-              ['Unique Opens', summary.uniqueOpens],
-              ['Total Opens', summary.totalOpens],
-              ['Open Rate', `${summary.openRate}%`],
-            ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-lg border border-[#EFECE5] bg-[#FAF8F2] p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
-                <p className="mt-1 text-xl font-semibold text-[#111827]">{value}</p>
+              { label: 'Total Recipients', value: summary.totalRecipients, icon: Users, tone: 'bg-blue-50 text-blue-600' },
+              { label: 'Sent Emails', value: summary.sentEmails, icon: Send, tone: 'bg-green-50 text-green-600' },
+              { label: 'Unique Opens', value: summary.uniqueOpens, icon: Eye, tone: 'bg-violet-50 text-violet-600' },
+              { label: 'Total Opens', value: summary.totalOpens, icon: Mail, tone: 'bg-blue-50 text-blue-600' },
+              { label: 'Open Rate', value: `${summary.openRate}%`, icon: Activity, tone: 'bg-orange-50 text-orange-600' },
+            ].map(({ label, value, icon: Icon, tone }) => (
+              <div key={label} className="sales-summary-card flex items-center gap-3">
+                <span className={`sales-summary-card-icon ${tone}`}><Icon /></span>
+                <div className="min-w-0">
+                  <p className="sales-summary-card-value">{value}</p>
+                  <p className="sales-summary-card-label mt-0.5">{label}</p>
+                </div>
               </div>
             ))}
           </div>

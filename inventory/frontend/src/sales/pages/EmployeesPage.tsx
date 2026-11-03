@@ -448,7 +448,7 @@ export default function EmployeesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="employee-list-table min-w-[1500px] w-full border-collapse text-left text-sm">
+            <table className="sales-data-table min-w-[1500px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="bg-[#F8FAFC] text-slate-700">
                   <th className={tableCellClass}>Official Employee Id</th>

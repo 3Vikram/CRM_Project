@@ -139,7 +139,7 @@ export default function CustomerMappingPage() {
         </div>
         {selectedIds.length > 0 && <button type="button" onClick={() => openAssignModal(selectedIds)} className="mt-5 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">Assign selected ({selectedIds.length})</button>}
         <div className="mt-5 overflow-x-auto rounded-lg border border-[#EFECE5]">
-          <table className="w-full min-w-[850px]">
+          <table className="sales-data-table w-full min-w-[850px]">
             <thead><tr className="border-b border-[#EFECE5] bg-[#F2EFE8]">
               <th className={tableCellClass}><input type="checkbox" checked={allCurrentSelected} onChange={() => setSelectedIds(allCurrentSelected ? selectedIds.filter((id) => !customers.some((customer) => customer._id === id)) : Array.from(new Set([...selectedIds, ...customers.map((customer) => customer._id)])))} aria-label="Select all customers on page" /></th>
               {['SL No.', 'Customer ID', 'Customer Name', 'Account Type', 'Assigned To', 'Action'].map((heading) => <th key={heading} className={`${tableCellClass} text-left text-xs font-semibold uppercase tracking-wider text-gray-600`}>{heading}</th>)}

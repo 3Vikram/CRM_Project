@@ -166,7 +166,7 @@ function ChangeIndicator({ changePct }: { changePct: number }) {
   const isPositive = changePct >= 0
   const Icon = isPositive ? ArrowUpRight : ArrowDownRight
   return (
-    <span className={`inline-flex items-center gap-0.5 ${T.small} font-semibold ${isPositive ? 'text-[#22B07D]' : 'text-[#EF4444]'}`}>
+    <span className={`sales-summary-card-change inline-flex items-center gap-0.5 ${T.small} font-semibold ${isPositive ? 'text-[#22B07D]' : 'text-[#EF4444]'}`}>
       <Icon className="h-3 w-3" />
       {Math.abs(changePct).toFixed(1)}%
     </span>
@@ -215,27 +215,23 @@ function KpiCard({
           }
         }}
         aria-label={`${title}: ${numberFormat.format(value)}`}
-        className={`${cardClass} ${liftCard} relative flex min-h-[150px] min-w-0 cursor-pointer flex-col pr-[194px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F6AF0]`}
+        className={`sales-summary-card sales-dashboard-kpi-card ${liftCard} flex min-w-0 cursor-pointer items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F6AF0]`}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className={`${T.body} font-medium text-slate-600`}>{title}</p>
-          </div>
-          <span style={iconStyle} className="absolute right-4 top-4 grid h-[52px] w-[52px] place-items-center rounded-full"><Icon className="h-6 w-6 text-white" /></span>
+        <span style={iconStyle} className="sales-summary-card-icon shrink-0">
+          <Icon />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="sales-summary-card-label">{title}</p>
+          <p className="sales-summary-card-value mt-0.5 flex items-center gap-1.5">
+            <span>{numberFormat.format(value)}</span>
+            <ChangeIndicator changePct={changePct} />
+          </p>
+          <p className="sales-summary-card-meta mt-0.5">{periodLabel} · {previousLabel}: {numberFormat.format(previous)}</p>
         </div>
-        <div className="mt-3 min-w-0">
-          <p className={`${T.micro} font-semibold uppercase tracking-wide text-slate-500`}>{periodLabel}</p>
-          <div className="min-w-0">
-            <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${T.value} font-semibold leading-tight tabular-nums text-slate-700`}>
-              <span>{numberFormat.format(value)}</span><ChangeIndicator changePct={changePct} />
-            </p>
-            <p className={`mt-1 ${T.small} text-slate-500`}>{previousLabel}: {numberFormat.format(previous)}</p>
-          </div>
-        </div>
-        <div className="absolute bottom-4 right-4 w-[170px] rounded border border-dashed border-slate-300 bg-[#F8FAFC] px-2 py-1.5 text-right">
-          <p className={`${T.micro} font-semibold uppercase leading-tight text-slate-500`} title={detailLabel}>{detailLabel}</p>
+        <div className="min-w-0 max-w-[32%] border-l border-slate-200 pl-3 text-right">
+          <p className="sales-summary-card-meta font-semibold uppercase" title={detailLabel}>{detailLabel}</p>
           <div className="flex items-center justify-end gap-1">
-            <p className={`${T.body} font-semibold text-slate-700`}>{detailValue}</p>
+            <p className="sales-summary-card-detail-value">{detailValue}</p>
             <ChangeIndicator changePct={detailChangePct} />
           </div>
         </div>
@@ -394,7 +390,7 @@ export default function DashboardPage() {
       detailLabel: 'Open Opportunities',
       detailValue: numberFormat.format(currentFunnels.filter((lead) => isOpenStatus(lead.leadStatus)).length),
       icon: Target,
-      iconStyle: { background: 'linear-gradient(135deg, #56B0F7, #3B8FE8)' },
+      iconStyle: { backgroundColor: '#F3E8FF', color: '#7663A8' },
       href: '/sales/funnels',
     },
     {
@@ -407,7 +403,7 @@ export default function DashboardPage() {
       detailLabel: 'Open Quotation',
       detailValue: numberFormat.format(currentQuotations.filter((lead) => isOpenStatus(lead.leadStatus)).length),
       icon: FileText,
-      iconStyle: { background: 'linear-gradient(135deg, #34C99A, #22B07D)' },
+      iconStyle: { backgroundColor: '#F3E8FF', color: '#7663A8' },
       href: '/sales/quotations',
     },
     {
@@ -417,7 +413,7 @@ export default function DashboardPage() {
       detailLabel: 'OPF Revenue',
       detailValue: formatCompactCurrency(periodRevenue),
       icon: SquareCheckBig,
-      iconStyle: { background: 'linear-gradient(135deg, #F7B84B, #F0A02B)' },
+      iconStyle: { backgroundColor: '#DBEAFE', color: '#3867E8' },
       href: '/sales/opf',
     },
     {
@@ -430,7 +426,7 @@ export default function DashboardPage() {
       detailLabel: 'Positive Meetings',
       detailValue: numberFormat.format(currentMeetings.filter((activity) => activity.response === 'Positive').length),
       icon: CalendarDays,
-      iconStyle: { background: 'linear-gradient(135deg, #6B7BE8, #4F5BD5)' },
+      iconStyle: { backgroundColor: '#DCFCE7', color: '#20B66A' },
       href: '/sales/activities',
     },
   ]
@@ -763,7 +759,7 @@ export default function DashboardPage() {
           </SectionBoundary>
 
           <SectionBoundary className="min-w-0 lg:col-span-2 lg:row-span-2">
-            <div className="grid h-full auto-rows-fr grid-cols-1 gap-1.5 lg:grid-cols-2">
+            <div className="grid h-full w-full auto-rows-fr grid-cols-1 gap-1 sm:grid-cols-2">
               {kpis.map((kpi) => (
                 <KpiCard
                   key={kpi.title}

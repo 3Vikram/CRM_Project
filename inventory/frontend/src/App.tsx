@@ -72,8 +72,6 @@ import ReportDetailPage from '@/sales/pages/ReportDetailPage'
 
 installInventoryApiAuthorization()
 
-const SALES_UI_SCALE = 0.78
-
 axios.interceptors.request.use((config) => {
   const token = getStoredAuth()?.token
   if (token && !config.headers.Authorization) {
@@ -142,11 +140,8 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
   const canView = !requiredPermission || hasPermission(requiredPermission.moduleName, requiredPermission.action)
 
   return (
-    <div
-      className="sales-module-typography flex h-screen overflow-hidden bg-[#F8F7F3]"
-      style={{ '--sales-ui-scale': SALES_UI_SCALE } as React.CSSProperties}
-    >
-      <div className="flex shrink-0 self-stretch" style={{ zoom: SALES_UI_SCALE }}>
+    <div className="sales-module-typography flex h-screen overflow-hidden bg-[#F8F7F3]">
+      <div className="flex shrink-0 self-stretch">
         <Sidebar
           isExpanded={sidebarExpanded}
           isMobileOpen={mobileSidebarOpen}
@@ -155,21 +150,17 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
         />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div style={{ zoom: SALES_UI_SCALE }}>
-          <TopBar onMenuClick={() => {
-            if (window.matchMedia('(max-width: 767px)').matches) {
-              setMobileSidebarOpen((open) => !open)
-            } else {
-              setSidebarExpanded((expanded) => !expanded)
-            }
-          }} />
-        </div>
+        <TopBar onMenuClick={() => {
+          if (window.matchMedia('(max-width: 767px)').matches) {
+            setMobileSidebarOpen((open) => !open)
+          } else {
+            setSidebarExpanded((expanded) => !expanded)
+          }
+        }} />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">
-          <div style={{ zoom: isDashboard ? 1 : SALES_UI_SCALE }}>
-            {canView
-              ? isDashboard ? children : <div className="sales-page-content">{children}</div>
-              : <SalesAccessDeniedPage />}
-          </div>
+          {canView
+            ? isDashboard ? children : <div className="sales-page-content">{children}</div>
+            : <SalesAccessDeniedPage />}
         </main>
       </div>
     </div>

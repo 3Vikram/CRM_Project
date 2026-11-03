@@ -331,12 +331,12 @@ export default function CustomersPage() {
           { label: 'Inactive Customers', value: summary.inactive, icon: UserX, tone: 'bg-pink-50 text-pink-600' },
           { label: 'New Customers (This Month)', value: summary.newThisMonth, icon: CalendarDays, tone: 'bg-orange-50 text-orange-600' },
         ].map(({ label, value, icon: Icon, tone }) => (
-          <article key={label} className="flex min-h-[116px] items-center justify-between rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">{value}</p>
+          <article key={label} className="sales-summary-card flex items-center gap-3">
+            <span className={`sales-summary-card-icon ${tone}`}><Icon /></span>
+            <div className="min-w-0">
+              <p className="sales-summary-card-value">{value}</p>
+              <p className="sales-summary-card-label mt-0.5">{label}</p>
             </div>
-            <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${tone}`}><Icon className="h-6 w-6" /></span>
           </article>
         ))}
       </section>
@@ -394,7 +394,7 @@ export default function CustomersPage() {
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] border-collapse">
+          <table className="sales-data-table w-full min-w-[1080px] border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
                 {['Action', 'Customer ID', 'Customer Name', 'Created By', 'Contacts', 'Emails', 'Nature of Business', 'Status', 'Approval'].map((heading) => (
