@@ -143,7 +143,7 @@ export default function CustomerMappingPage() {
             }}
           />
         </div>
-        {selectedIds.length > 0 && <button type="button" onClick={() => openAssignModal(selectedIds)} className="mt-5 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">Assign selected ({selectedIds.length})</button>}
+        {selectedIds.length > 0 && <button type="button" onClick={() => openAssignModal(selectedIds)} className="mt-5 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Assign selected ({selectedIds.length})</button>}
         <div className="mt-5 overflow-x-auto rounded-lg border border-[#EFECE5]">
           <table className="sales-data-table w-full min-w-[850px]">
             <thead><tr className="border-b border-[#EFECE5] bg-[#F2EFE8]">

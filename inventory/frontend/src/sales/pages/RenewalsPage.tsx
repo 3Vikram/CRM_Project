@@ -140,7 +140,7 @@ export default function RenewalsPage() {
           <h1 className="crm-page-heading">Renewals</h1>
           <p className="mt-1 text-sm text-slate-500">{eligibleRenewals.length} unresolved renewal{eligibleRenewals.length === 1 ? '' : 's'} in the 90-day window, including overdue items</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <PageFilters
             fields={filterFields}
             values={filters}
@@ -148,11 +148,11 @@ export default function RenewalsPage() {
             onClear={() => setFilters({})}
           />
           {selectedRecordId ? (
-            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all renewals
             </button>
           ) : null}
-          <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+          <button type="button" onClick={() => void loadRenewals()} className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
         </div>

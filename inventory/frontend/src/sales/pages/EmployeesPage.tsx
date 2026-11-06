@@ -434,8 +434,7 @@ export default function EmployeesPage() {
           <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">Print</button>
         </div>
 
-        <div className="flex items-center gap-4">
-          <PageFilters fields={employeeFilterFields} values={employeeFilters} onApply={setEmployeeFilters} onClear={() => setEmployeeFilters({})} />
+        <div className="flex flex-wrap items-center gap-4">
           <div className="w-full md:w-80">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -448,6 +447,7 @@ export default function EmployeesPage() {
               />
             </div>
           </div>
+          <PageFilters fields={employeeFilterFields} values={employeeFilters} onApply={setEmployeeFilters} onClear={() => setEmployeeFilters({})} />
         </div>
       </div>
 

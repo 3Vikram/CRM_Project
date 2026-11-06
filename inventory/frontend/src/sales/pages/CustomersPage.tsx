@@ -319,15 +319,15 @@ export default function CustomersPage() {
           <p className="mt-1 text-sm text-gray-500">Manage customer accounts and contacts</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setIsAnalyticsOpen((value) => !value)} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          <button type="button" onClick={() => setIsAnalyticsOpen((value) => !value)} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
             <BarChart3 className="h-4 w-4 text-blue-600" /> Analytics
           </button>
           <PageFilters fields={customerFilterFields} values={customerFilterValues} onApply={applyCustomerFilters} onClear={() => applyCustomerFilters({})} />
-          <button type="button" onClick={() => void handleDownloadReport()} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          <button type="button" onClick={() => void handleDownloadReport()} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
             <Download className="h-4 w-4" /> Download Report
           </button>
           <PermissionGate moduleName="customers" action="create">
-            <button type="button" onClick={handleAddNew} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#1E293B]">
+            <button type="button" onClick={handleAddNew} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> New Customer
             </button>
           </PermissionGate>

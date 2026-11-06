@@ -651,8 +651,7 @@ exports.getCampaignById = async (req, res) => {
   }
 };
 
-const buildPublicTrackingBaseUrl = (req) => {
-  const configuredBaseUrl = process.env.MAIL_TRACKING_BASE_URL || process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || '';
+const buildPublicTrackingBaseUrl = (req, configuredBaseUrl = process.env.MAIL_TRACKING_BASE_URL || process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || '') => {
   const forwardedProto = (req.headers && req.headers['x-forwarded-proto']) || req.protocol || 'https';
   const forwardedHost = (req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || req.get('host') || '';
   const rawBaseUrl = configuredBaseUrl || `${Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto}://${Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost}`;
@@ -678,39 +677,101 @@ const buildPublicTrackingBaseUrl = (req) => {
 
 const getTrackingBaseUrl = (req) => buildPublicTrackingBaseUrl(req);
 
+const getTrackingErrorDetails = (error) => {
+  const message = String(error?.message || 'Unknown error')
+    .replace(/mongodb(?:\+srv)?:\/\/[^\s"'`]+/gi, '[MongoDB URI]')
+    .replace(/(password|passwd|pwd|token|secret)\s*[:=]\s*[^,\s;]+/gi, '$1=[REDACTED]')
+    .slice(0, 300);
+  return {
+    errorName: error?.name || 'Error',
+    errorCode: error?.code || error?.cause?.code,
+    causeName: error?.cause?.name,
+    causeCode: error?.cause?.code,
+    errorMessage: message,
+  };
+};
+
+const getTrackingUrlDetails = (baseUrl) => {
+  const parsedUrl = new URL(baseUrl);
+  return {
+    trackingHost: parsedUrl.hostname,
+    trackingPort: parsedUrl.port || (parsedUrl.protocol === 'https:' ? '443' : '80'),
+  };
+};
+
 const checkTrackingUrlReachable = async (req) => {
-  let baseUrl;
-  try {
-    baseUrl = getTrackingBaseUrl(req);
-  } catch (error) {
-    return { ok: false, message: error.message };
-  }
-  try {
-    const healthResponse = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(7000) });
-    if (!healthResponse.ok) throw new Error(`Health endpoint returned HTTP ${healthResponse.status}`);
-    const probeId = `tracking-probe-${crypto.randomBytes(12).toString('hex')}`;
-    const endpointUrl = buildTrackingPixelUrl(baseUrl, probeId);
-    const trackingResponse = await fetch(endpointUrl, { signal: AbortSignal.timeout(7000) });
-    const contentType = trackingResponse.headers.get('content-type') || '';
-    const body = Buffer.from(await trackingResponse.arrayBuffer());
-    if (!trackingResponse.ok) throw new Error(`Tracking endpoint returned HTTP ${trackingResponse.status}`);
-    if (!/^image\/(?:gif|png|jpeg|webp)(?:;|$)/i.test(contentType)) {
-      throw new Error(`Tracking endpoint returned ${contentType || 'no content type'}, not an image`);
+  const configuredBaseUrl = process.env.MAIL_TRACKING_BASE_URL || process.env.TRACKING_BASE_URL || process.env.PUBLIC_API_URL || process.env.APP_URL || process.env.BACKEND_URL || process.env.BASE_URL || '';
+  const candidates = [];
+  const addCandidate = (source, configuredUrl) => {
+    try {
+      const baseUrl = buildPublicTrackingBaseUrl(req, configuredUrl);
+      if (!candidates.some((candidate) => candidate.baseUrl === baseUrl)) {
+        candidates.push({ source, baseUrl });
+      }
+    } catch (error) {
+      logger.error('mail-campaign.tracking-url.invalid', {
+        source,
+        ...getTrackingErrorDetails(error),
+      });
     }
-    if (!body.length) throw new Error('Tracking endpoint returned an empty image');
-    return { ok: true, baseUrl, endpointUrl };
-  } catch (error) {
-    logger.error('mail-campaign.tracking-url.unreachable', {
-      baseUrlConfigured: Boolean(baseUrl),
-      errorName: error?.name,
-      errorCode: error?.code,
-    });
+  };
+
+  if (configuredBaseUrl) addCandidate('configured', configuredBaseUrl);
+  addCandidate('request-host', '');
+
+  if (!candidates.length) {
     return {
       ok: false,
-      message: `Tracking verification failed: ${error?.message || 'unknown error'}. Email sending can continue, but open tracking may not be recorded. Check the tunnel, the /api proxy, and MAIL_TRACKING_BASE_URL or TRACKING_BASE_URL, then restart the backend.`,
+      message: 'Tracking verification failed: configure a reachable public tracking URL or access Sales through the company server address before sending.',
     };
   }
+
+  const failures = [];
+  for (const candidate of candidates) {
+    const { source, baseUrl } = candidate;
+    try {
+      const healthResponse = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(7000) });
+      if (!healthResponse.ok) throw new Error(`Health endpoint returned HTTP ${healthResponse.status}`);
+      const probeId = `tracking-probe-${crypto.randomBytes(12).toString('hex')}`;
+      const endpointUrl = buildTrackingPixelUrl(baseUrl, probeId);
+      const trackingResponse = await fetch(endpointUrl, { signal: AbortSignal.timeout(7000) });
+      const contentType = trackingResponse.headers.get('content-type') || '';
+      const body = Buffer.from(await trackingResponse.arrayBuffer());
+      if (!trackingResponse.ok) throw new Error(`Tracking endpoint returned HTTP ${trackingResponse.status}`);
+      if (!/^image\/(?:gif|png|jpeg|webp)(?:;|$)/i.test(contentType)) {
+        throw new Error(`Tracking endpoint returned ${contentType || 'no content type'}, not an image`);
+      }
+      if (!body.length) throw new Error('Tracking endpoint returned an empty image');
+      logger.info('mail-campaign.tracking-url.verified', {
+        source,
+        ...getTrackingUrlDetails(baseUrl),
+        requestHost: req.get('host') || '',
+      });
+      if (source === 'request-host' && configuredBaseUrl) {
+        logger.info('mail-campaign.tracking-url.fallback-selected', {
+          ...getTrackingUrlDetails(baseUrl),
+          requestHost: req.get('host') || '',
+        });
+      }
+      return { ok: true, baseUrl, endpointUrl, source };
+    } catch (error) {
+      const errorDetails = getTrackingErrorDetails(error);
+      failures.push({ source, errorDetails });
+      logger.error('mail-campaign.tracking-url.unreachable', {
+        source,
+        ...getTrackingUrlDetails(baseUrl),
+        ...errorDetails,
+      });
+    }
+  }
+
+  const lastFailure = failures[failures.length - 1]?.errorDetails;
+  return {
+    ok: false,
+    message: `Tracking verification failed: ${lastFailure?.errorMessage || 'unknown error'}. Email sending can continue, but open tracking may not be recorded. Check the company server, the /api proxy, and MAIL_TRACKING_BASE_URL or TRACKING_BASE_URL.`,
+  };
 };
+exports.checkTrackingUrlReachable = checkTrackingUrlReachable;
 
 const getCompanyProfileWithLogo = () => CompanyProfile.findOne({
   'companyLogo.filePath': { $exists: true, $nin: ['', null] },
@@ -792,6 +853,7 @@ const addEmailTracking = (html, campaignId, trackingId, baseUrl) => {
   if (/<\/html>/i.test(trackedHtml)) return trackedHtml.replace(/<\/html>/i, `${trackingPixel}</html>`);
   return `${trackedHtml}${trackingPixel}`;
 };
+exports.addEmailTracking = addEmailTracking;
 
 const syncCampaignOpenCount = async (campaignId) => {
   const [openSummary] = await EmailLog.aggregate([
@@ -824,6 +886,9 @@ const syncCampaignOpenCount = async (campaignId) => {
     matchedCount: updateResult.matchedCount,
     modifiedCount: updateResult.modifiedCount,
   });
+  if (!updateResult.matchedCount) {
+    logger.error('mail-campaign.opens.campaign-not-found', { campaignId });
+  }
   return {
     opensTotal: openSummary?.opens || 0,
     uniqueOpens: openSummary?.uniqueOpens || 0,
@@ -833,6 +898,20 @@ const syncCampaignOpenCount = async (campaignId) => {
 
 exports.trackOpen = async (req, res) => {
   const trackingId = String(req.params.trackingId || req.params.token || '').trim();
+  const trackingIdFingerprint = crypto.createHash('sha256').update(trackingId).digest('hex').slice(0, 12);
+  const userAgent = String(req.get('user-agent') || '');
+  const requestClient = /GoogleImageProxy/i.test(userAgent)
+    ? 'google-image-proxy'
+    : userAgent ? 'other' : 'unknown';
+  let campaignId = '';
+  let recipientFingerprint = '';
+  let trackingStage = 'recipient_lookup';
+  logger.info('mail-campaign.open.request.received', {
+    trackingIdFingerprint,
+    method: req.method,
+    requestHost: req.get('host') || '',
+    requestClient,
+  });
 
   try {
     const log = await EmailLog.findOne({
@@ -840,10 +919,23 @@ exports.trackOpen = async (req, res) => {
     }).select('_id campaignId campaignName recipientEmail recipientId trackingId trackingToken openCount clickCount openedAt firstOpenedAt lastOpenedAt firstClickedAt lastClickedAt leadCreated leadId').lean();
 
     if (!log) {
+      logger.info('mail-campaign.open.recipient-not-found', { trackingIdFingerprint });
       return res.status(200).type('gif').send(TRACKING_PIXEL);
     }
+    campaignId = log.campaignId;
+    recipientFingerprint = crypto.createHash('sha256')
+      .update(String(log.recipientEmail || '').trim().toLowerCase())
+      .digest('hex')
+      .slice(0, 12);
+    logger.info('mail-campaign.open.recipient-identified', {
+      campaignId,
+      recipientFingerprint,
+      trackingIdFingerprint,
+      previousOpenCount: log.openCount || 0,
+    });
 
     const now = new Date();
+    trackingStage = 'recipient_update';
     const updatedLog = await EmailLog.findOneAndUpdate(
       { _id: log._id },
       [{ $set: {
@@ -855,19 +947,41 @@ exports.trackOpen = async (req, res) => {
       { new: true },
     ).lean();
 
-    await syncCampaignOpenCount(log.campaignId);
-    const leadResult = await ensureEngagementLead({
-      log: updatedLog,
-      openCount: updatedLog?.openCount || 0,
-      clickCount: updatedLog?.clickCount || 0,
-    });
-    logger.info('mail-campaign.open.tracked', {
-      campaignId: updatedLog?.campaignId,
-      openCount: updatedLog?.openCount,
-      leadThresholdReached: Boolean(leadResult),
-    });
+    if (!updatedLog) {
+      logger.error('mail-campaign.open.recipient-update-missed', {
+        campaignId,
+        trackingIdFingerprint,
+        recipientFingerprint,
+      });
+    } else {
+      logger.info('mail-campaign.open.recipient-updated', {
+        campaignId,
+        trackingIdFingerprint,
+        recipientFingerprint,
+        openCount: updatedLog.openCount,
+      });
+      trackingStage = 'campaign_statistics_update';
+      await syncCampaignOpenCount(log.campaignId);
+      trackingStage = 'engagement_update';
+      const leadResult = await ensureEngagementLead({
+        log: updatedLog,
+        openCount: updatedLog.openCount || 0,
+        clickCount: updatedLog.clickCount || 0,
+      });
+      logger.info('mail-campaign.open.tracked', {
+        campaignId: updatedLog.campaignId,
+        openCount: updatedLog.openCount,
+        leadThresholdReached: Boolean(leadResult),
+      });
+    }
   } catch (error) {
-    logger.error('mail-campaign.track-open.failed', { message: error?.message });
+    logger.error('mail-campaign.track-open.failed', {
+      campaignId,
+      trackingIdFingerprint,
+      recipientFingerprint,
+      trackingStage,
+      ...getTrackingErrorDetails(error),
+    });
   }
 
   res.set({
@@ -1489,10 +1603,15 @@ exports.sendCampaign = async (req, res) => {
       tracking: (recipient) => {
         const trackingId = trackingIds.get(String(recipient).trim().toLowerCase());
         if (!trackingAvailable) return null;
+        const url = buildTrackingPixelUrl(trackingBaseUrl, trackingId);
+        logger.info('mail-campaign.tracking-url.generated', {
+          campaignId: campaign.campaignId,
+          trackingIdFingerprint: crypto.createHash('sha256').update(trackingId).digest('hex').slice(0, 12),
+          ...getTrackingUrlDetails(trackingBaseUrl),
+        });
         return {
           campaignId: campaign.campaignId,
-          trackingId,
-          url: buildTrackingPixelUrl(trackingBaseUrl, trackingId),
+          url,
         };
       },
       text: campaign.footer || subject || 'Campaign email',
@@ -1553,9 +1672,13 @@ exports.sendCampaign = async (req, res) => {
       status: groupId ? (targetGroup ? targetGroup.status : campaign.status) : campaign.status,
     });
     if (failedCount === report.totalRecipients) {
+      const firstFailure = report.results.find((item) => item.status === 'Failed');
+      const reasonText = String(firstFailure?.errorMessage || firstFailure?.error || firstFailure?.message || '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 160);
       return res.status(502).json({
         success: false,
-        message: 'Campaign was saved, but email delivery failed. Check the mail server configuration and delivery report.',
+        message: `Campaign was saved, but email delivery failed.${reasonText ? ` Reason: ${reasonText}.` : ''} Check the mail server configuration and delivery report.`,
         data: {
           campaignId: campaign.campaignId,
           groupId: groupId || null,

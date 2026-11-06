@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Download, Search, Mail, FileText, Clock3, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Download, Search, Mail, FileText, Send, Trash2 } from 'lucide-react'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import { StatCard } from '@/sales/components/stat-card'
 import { deleteCampaign, getCampaigns, MailCampaignRecord } from '@/sales/lib/mailCampaignApi'
@@ -200,11 +200,11 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       {statusFilter === 'Draft' || statusFilter === 'Scheduled' ? (
         <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
       ) : null}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="crm-page-heading">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaigns'}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <PageFilters
             fields={campaignFilterFields}
             values={campaignFilters}
@@ -228,11 +228,10 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       </div>
 
       {!statusFilter ? (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} description="All active campaigns" iconBg="bg-blue-50" iconColor="text-blue-600" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} description="Saved for later review" iconBg="bg-violet-50" iconColor="text-violet-600" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/scheduled')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Clock3} label="Scheduled Campaigns" value={stats.scheduled} description="Queued for sending" iconBg="bg-orange-50" iconColor="text-orange-600" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} description="Completed campaigns" iconBg="bg-green-50" iconColor="text-green-600" /></button>
+        <div className="grid gap-6 md:grid-cols-3">
+          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} iconBg="bg-blue-50" iconColor="text-blue-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} iconBg="bg-violet-50" iconColor="text-violet-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} iconBg="bg-green-50" iconColor="text-green-600" /></button>
         </div>
       ) : null}
 

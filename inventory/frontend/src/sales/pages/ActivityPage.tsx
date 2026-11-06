@@ -224,17 +224,17 @@ export default function ActivityPage() {
           {/* <button type="button" onClick={handleSearch} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white">
             <Search className="h-4 w-4" /> Search
           </button> */}
-          <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
-            <Download className="h-4 w-4" /> Download Report
-          </button>
           <PageFilters
             fields={filterFields}
             values={filters}
             onApply={(nextFilters) => { setFilters(nextFilters); setPage(1) }}
             onClear={() => { setFilters({}); setPage(1) }}
           />
+          <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700">
+            <Download className="h-4 w-4" /> Download Report
+          </button>
           <PermissionGate moduleName="activities" action="create">
-            <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
+            <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> Add New
             </button>
           </PermissionGate>

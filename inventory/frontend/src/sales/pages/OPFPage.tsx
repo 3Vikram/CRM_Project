@@ -254,16 +254,16 @@ export default function OPFPage() {
         <div>
           <h1 className="crm-page-heading">OPF</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {selectedRecordId ? (
-            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all OPFs
             </button>
           ) : null}
           <button
             type="button"
             onClick={() => navigate('/sales/opf/new')}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]"
           >
             <Plus className="h-4 w-4" /> GENERATE NEW
           </button>
@@ -271,21 +271,30 @@ export default function OPFPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 text-sm text-gray-700">
-          <span>Show</span>
-          <select
-            value={entriesPerPage}
-            onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
-            className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            {entriesOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <span>entries</span>
-        </div>
-
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
+              placeholder="Search by quotation number"
+              className="w-72 rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <span>Show</span>
+            <select
+              value={entriesPerPage}
+              onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
+              className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            >
+              {entriesOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <span>entries</span>
+          </div>
           <PageFilters
             fields={filterFields}
             values={filters}
@@ -295,20 +304,10 @@ export default function OPFPage() {
           <button
             type="button"
             onClick={downloadReport}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
           >
             <Download className="h-4 w-4" /> Download Report
           </button>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
-              placeholder="Search by quotation number"
-              className="w-72 rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-            />
-          </div>
         </div>
       </div>
 

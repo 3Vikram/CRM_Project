@@ -356,6 +356,10 @@ export default function LeadsPage({
           <h1 className="crm-page-heading">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
+          </div>
           {!selectedRecordId ? (
             <PageFilters
               fields={filterFields}
@@ -365,36 +369,32 @@ export default function LeadsPage({
             />
           ) : null}
           {selectedRecordId ? (
-            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all leads
             </button>
           ) : null}
+          <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA] disabled:opacity-60">
+            <Download className="h-4 w-4" /> {isDownloading ? 'Downloading...' : 'Download Report'}
+          </button>
           {showAddButton && <PermissionGate moduleName="leads" action="create">
-            <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+            <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> {addButtonLabel}
             </button>
           </PermissionGate>}
-          <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA] disabled:opacity-60">
-            <Download className="h-4 w-4" /> {isDownloading ? 'Downloading...' : 'Download Report'}
-          </button>
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
-          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard labelClassName="stat-card-label-increased" icon={BarChart3} label="Total Leads" value={metrics.total} description="All leads in the CRM" iconBg="bg-blue-50" iconColor="text-blue-600" />
-        <StatCard labelClassName="stat-card-label-increased" icon={Sparkles} label="New Leads Today" value={metrics.newToday} description="Freshly created today" iconBg="bg-orange-50" iconColor="text-orange-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={BarChart3} label="Total Leads" value={metrics.total}  iconBg="bg-blue-50" iconColor="text-blue-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={Sparkles} label="New Leads Today" value={metrics.newToday}  iconBg="bg-orange-50" iconColor="text-orange-600" />
         {/* <StatCard icon={Clock3} label="Pending Leads" value={metrics.pending} description="Awaiting attention" iconBg="bg-amber-100" iconColor="text-amber-700" /> */}
         {/* <StatCard icon={Flame} label="Hot Leads" value={metrics.hot} description="Score above 80" iconBg="bg-rose-100" iconColor="text-rose-700" /> */}
-        <StatCard labelClassName="stat-card-label-increased" icon={RefreshCw} label="Follow-ups Today" value={metrics.followUps} description="Scheduled follow ups" iconBg="bg-orange-50" iconColor="text-orange-600" />
-        <StatCard labelClassName="stat-card-label-increased" icon={Activity} label="Total Activities Generated" value={metrics.activities} description="Tracked events" iconBg="bg-blue-50" iconColor="text-blue-600" />
-        <StatCard labelClassName="stat-card-label-increased" icon={Users} label="Total Funnels Generated" value={metrics.funnels} description="Qualified pipeline" iconBg="bg-violet-50" iconColor="text-violet-600" />
-        <StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Total Quotations Generated" value={metrics.quotations} description="Proposals sent" iconBg="bg-violet-50" iconColor="text-violet-600" />
-        <StatCard labelClassName="stat-card-label-increased" icon={CheckCircle2} label="Converted Leads" value={metrics.converted} description="Won customers" iconBg="bg-green-50" iconColor="text-green-600" />
-        <StatCard labelClassName="stat-card-label-increased" icon={XCircle} label="Scrapped Leads" value={metrics.scrapped} description="Closed as lost" iconBg="bg-rose-50" iconColor="text-rose-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={RefreshCw} label="Follow-ups Today" value={metrics.followUps} iconBg="bg-orange-50" iconColor="text-orange-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={Activity} label="Total Activities Generated" value={metrics.activities} iconBg="bg-blue-50" iconColor="text-blue-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={Users} label="Total Funnels Generated" value={metrics.funnels} iconBg="bg-violet-50" iconColor="text-violet-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Total Quotations Generated" value={metrics.quotations} iconBg="bg-violet-50" iconColor="text-violet-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={CheckCircle2} label="Converted Leads" value={metrics.converted} iconBg="bg-green-50" iconColor="text-green-600" />
+        <StatCard labelClassName="stat-card-label-increased" icon={XCircle} label="Scrapped Leads" value={metrics.scrapped} iconBg="bg-rose-50" iconColor="text-rose-600" />
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">

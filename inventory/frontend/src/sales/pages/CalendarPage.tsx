@@ -670,10 +670,10 @@ export default function CalendarPage() {
             onClear={() => setFilters({})}
           />
           {[
-            { label: 'Add Activity', primary: true, onClick: () => navigate('/sales/activities/new') },
             { label: 'Today', primary: false, onClick: goToToday },
             { label: 'Refresh', primary: false, onClick: () => void loadEvents(true) },
             { label: 'Export Calendar', primary: false, onClick: handleExportCalendar },
+            { label: 'Add Activity', primary: true, onClick: () => navigate('/sales/activities/new') },
           ].map((action) => (
             <button
               key={action.label}

@@ -147,16 +147,16 @@ export default function SuppliersPage() {
           <h1 className="crm-page-heading">Supplier List</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <PermissionGate moduleName="suppliers" action="create">
-            <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
-              <Plus className="h-4 w-4" />
-              ADD NEW
-            </button>
-          </PermissionGate>
-          <button onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
-            <Download className="h-4 w-4" />
-            Download Report
-          </button>
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search"
+              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            />
+          </div>
           <PageFilters
             fields={supplierFilterFields}
             values={{ product: productFilter === 'all' ? '' : productFilter, createdBy: createdByFilter }}
@@ -169,16 +169,16 @@ export default function SuppliersPage() {
               setCreatedByFilter('')
             }}
           />
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search"
-              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-            />
-          </div>
+          <button onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
+            <Download className="h-4 w-4" />
+            Download Report
+          </button>
+          <PermissionGate moduleName="suppliers" action="create">
+            <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" />
+              ADD NEW
+            </button>
+          </PermissionGate>
         </div>
       </div>
 

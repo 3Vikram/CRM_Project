@@ -298,12 +298,25 @@ export default function ContactsPage() {
           <h1 className="crm-page-heading">Contacts</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value)
+                setPage(1)
+              }}
+              placeholder="Search Contacts"
+              className="contacts-control w-full rounded-lg border border-[#E1E4EA] bg-white py-2 pl-9 pr-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#7663A8]/30"
+            />
+          </div>
           <select value={batchId ? `${selectedEmployeeId}:${batchId}` : ''} onChange={(event) => {
             const [nextEmployeeId = '', nextBatchId = ''] = event.target.value.split(':')
             setSelectedEmployeeId(nextEmployeeId)
             setBatchId(nextBatchId)
             setPage(1)
-          }} className="contacts-control min-w-40 rounded-lg border border-[#E1E4EA] bg-white px-3 py-2.5">
+          }} className="contacts-control min-w-40 rounded-lg border border-[#E1E4EA] bg-white px-3 py-2">
             <option value="">All Batches</option>
             {employeeGroups.map((group) => (
               <optgroup key={group.employeeId} label={group.employeeName}>
@@ -320,24 +333,11 @@ export default function ContactsPage() {
             onClear={() => { setFilters({}); setPage(1) }}
           />
           <PermissionGate moduleName="contacts" action="create">
-            <button onClick={() => navigate('/sales/contacts/new')} className="contacts-control contacts-add-button flex items-center gap-2 rounded-lg bg-[#172640] px-4 py-2.5 font-semibold text-white transition hover:bg-[#233958] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7663A8] disabled:cursor-not-allowed">
+            <button onClick={() => navigate('/sales/contacts/new')} className="contacts-control contacts-add-button flex items-center gap-2 rounded-lg bg-[#172640] px-4 py-2 font-semibold text-white transition hover:bg-[#233958] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7663A8] disabled:cursor-not-allowed">
               <Plus className="h-4 w-4" />
               ADD NEW
             </button>
           </PermissionGate>
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value)
-                setPage(1)
-              }}
-              placeholder="Search Contacts"
-              className="contacts-control w-full rounded-lg border border-[#E1E4EA] bg-white py-2.5 pl-9 pr-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#7663A8]/30"
-            />
-          </div>
         </div>
       </div>
 

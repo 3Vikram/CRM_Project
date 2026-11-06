@@ -96,18 +96,6 @@ export default function CompanyProfilesPage() {
           {/* <p className="text-gray-600">View all saved company profiles and quotation integration settings.</p> */}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <PermissionGate moduleName="companyProfiles" action="create">
-            <button onClick={() => navigate('/sales/company-profiles/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
-              <Plus className="h-4 w-4" />
-              Add New
-            </button>
-          </PermissionGate>
-          <PageFilters
-            fields={filterFields}
-            values={filters}
-            onApply={(values) => { setFilters(values); setPage(1) }}
-            onClear={() => { setFilters({}); setPage(1) }}
-          />
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -115,9 +103,21 @@ export default function CompanyProfilesPage() {
               value={searchQuery}
               onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
               placeholder="Search by company or director"
-              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
             />
           </div>
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(values) => { setFilters(values); setPage(1) }}
+            onClear={() => { setFilters({}); setPage(1) }}
+          />
+          <PermissionGate moduleName="companyProfiles" action="create">
+            <button onClick={() => navigate('/sales/company-profiles/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" />
+              Add New
+            </button>
+          </PermissionGate>
         </div>
       </div>
 

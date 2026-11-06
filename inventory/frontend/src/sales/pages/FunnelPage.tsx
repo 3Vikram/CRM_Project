@@ -294,9 +294,9 @@ export default function FunnelPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="crm-page-heading">Funnel Dashboard</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <PageFilters
             fields={filterFields}
             values={filters}
