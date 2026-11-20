@@ -38,6 +38,7 @@ import QuotationFormPage from '@/pages/QuotationFormPage'
 import QuotationEditPage from '@/pages/QuotationEditPage'
 import QuotationViewPage from '@/pages/QuotationViewPage'
 import FunnelPage from '@/pages/FunnelPage'
+import FunnelAnalyticsPage from '@/pages/FunnelAnalyticsPage'
 import FunnelFormPage from '@/pages/FunnelFormPage'
 import OPFPage from '@/pages/OPFPage'
 import OPFGenerateFormPage from '@/pages/OPFGenerateFormPage'
@@ -387,6 +388,14 @@ export default function App() {
           element={
             <SalesLayout>
               <ActivityFormPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/funnels/analytics"
+          element={
+            <SalesLayout>
+              <FunnelAnalyticsPage />
             </SalesLayout>
           }
         />

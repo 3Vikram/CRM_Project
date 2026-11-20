@@ -81,6 +81,7 @@ export default function QuotationFormPage() {
   const conversionCustomer = (location.state as { customer?: { _id?: string; id?: string; companyName?: string; customerName?: string; contactPerson?: string; email?: string; mobile?: string; phone?: string; contacts?: CustomerApiRecord['contacts'] } } | null)?.customer
   const { type } = useParams<{ type?: string }>()
   const quotationType: 'rent' | 'sold' = type === 'sold' ? 'sold' : 'rent'
+  const isRentQuotation = quotationType === 'rent'
   const [form, setForm] = useState(initialForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [toast, setToast] = useState<string | null>(null)
@@ -95,6 +96,8 @@ export default function QuotationFormPage() {
   const [product2DropdownOpen, setProduct2DropdownOpen] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState('')
   const [selectedProduct2Id, setSelectedProduct2Id] = useState('')
+  const [isProductManual, setIsProductManual] = useState(false)
+  const [isProduct2Manual, setIsProduct2Manual] = useState(false)
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false)
   const [taxSearch, setTaxSearch] = useState('')
   const [tax2DropdownOpen, setTax2DropdownOpen] = useState(false)
@@ -249,7 +252,7 @@ export default function QuotationFormPage() {
     if (!form.productName.trim()) {
       nextErrors.productName = 'Product is required'
     }
-    if (!selectedProductId) {
+    if (!selectedProductId && !(isRentQuotation && isProductManual)) {
       nextErrors.productName = 'Select a product from Inventory'
     }
 
@@ -272,6 +275,9 @@ export default function QuotationFormPage() {
     if (!hasExpectedVendorPrice && !hasUnitPrice) {
       nextErrors.unitPrice = 'At least one price (Unit Price or Expected Vendor Price) is required'
     }
+    if (isRentQuotation && isProductManual && !hasUnitPrice) {
+      nextErrors.unitPrice = 'Unit Price is required for a manually entered product'
+    }
 
     if (!form.tax.trim() || form.tax === '--Select--') {
       nextErrors.tax = 'Tax is required'
@@ -282,7 +288,7 @@ export default function QuotationFormPage() {
       if (!form.product2Name.trim()) {
         nextErrors.product2Name = 'Product is required'
       }
-      if (!selectedProduct2Id) {
+      if (!selectedProduct2Id && !(isRentQuotation && isProduct2Manual)) {
         nextErrors.product2Name = 'Select a product from Inventory'
       }
 
@@ -305,6 +311,9 @@ export default function QuotationFormPage() {
 
       if (!hasProduct2ExpectedVendorPrice && !hasProduct2UnitPrice) {
         nextErrors.product2UnitPrice = 'At least one price (Unit Price or Expected Vendor Price) is required'
+      }
+      if (isRentQuotation && isProduct2Manual && !hasProduct2UnitPrice) {
+        nextErrors.product2UnitPrice = 'Unit Price is required for a manually entered product'
       }
 
       if (!form.product2Tax.trim() || form.product2Tax === '--Select--') {
@@ -330,7 +339,7 @@ export default function QuotationFormPage() {
     }
 
     return nextErrors
-  }, [form, selectedProductId, selectedProduct2Id])
+  }, [form, isProductManual, isProduct2Manual, isRentQuotation, selectedProductId, selectedProduct2Id])
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, type, value, checked } = event.target as HTMLInputElement
@@ -367,11 +376,13 @@ export default function QuotationFormPage() {
     }
 
     if (productNumber === 1) {
+      setIsProductManual(false)
       setSelectedProductId(selectedId)
       setProductSearch('')
       setProductDropdownOpen(false)
       setForm((prev) => ({ ...prev, ...productValues }))
     } else {
+      setIsProduct2Manual(false)
       setSelectedProduct2Id(selectedId)
       setProduct2Search('')
       setProduct2DropdownOpen(false)
@@ -497,6 +508,8 @@ export default function QuotationFormPage() {
     setToast(null)
     setSelectedProductId('')
     setSelectedProduct2Id('')
+    setIsProductManual(false)
+    setIsProduct2Manual(false)
     setProductSearch('')
     setProduct2Search('')
   }
@@ -560,21 +573,55 @@ export default function QuotationFormPage() {
                 autoComplete="off"
                 value={productSearch || form.productName}
                 onFocus={(event) => {
+                  if (isProductManual) return
                   setProductSearch('')
                   setProductDropdownOpen(true)
                   event.currentTarget.select()
                 }}
                 onChange={(event) => {
+                  if (isRentQuotation && isProductManual) {
+                    setForm((prev) => ({ ...prev, productName: event.target.value }))
+                    return
+                  }
                   setProductSearch(event.target.value)
                   setSelectedProductId('')
                   setForm((prev) => ({ ...prev, productName: '', productDescription: '', hsnSac: '', expectedVendorPrice: '', unitPrice: '', tax: '' }))
                   setProductDropdownOpen(true)
                 }}
                 className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.productName ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                placeholder={isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
+                placeholder={isProductManual ? 'Enter product name' : isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
               />
+              {isRentQuotation && isProductManual && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProductManual(false)
+                    setProductSearch('')
+                    setProductDropdownOpen(true)
+                  }}
+                  className="text-xs font-medium text-[#111827] hover:underline"
+                >
+                  Choose an existing product
+                </button>
+              )}
               {productDropdownOpen && (
                 <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                  {isRentQuotation && (
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setIsProductManual(true)
+                        setSelectedProductId('')
+                        setForm((prev) => ({ ...prev, productName: productSearch.trim() }))
+                        setProductSearch('')
+                        setProductDropdownOpen(false)
+                      }}
+                      className="block w-full border-b border-[#EFECE5] px-3 py-2 text-left text-sm font-medium text-[#111827] hover:bg-[#F2EFE8]"
+                    >
+                      + Add New Product Manually
+                    </button>
+                  )}
                   {isLoadingProducts ? (
                     <div className="px-3 py-2 text-sm text-gray-500">Loading Inventory products...</div>
                   ) : filteredProducts.length ? filteredProducts.map((product) => (
@@ -739,21 +786,55 @@ export default function QuotationFormPage() {
                     autoComplete="off"
                     value={product2Search || form.product2Name}
                     onFocus={(event) => {
+                      if (isProduct2Manual) return
                       setProduct2Search('')
                       setProduct2DropdownOpen(true)
                       event.currentTarget.select()
                     }}
                     onChange={(event) => {
+                      if (isRentQuotation && isProduct2Manual) {
+                        setForm((prev) => ({ ...prev, product2Name: event.target.value }))
+                        return
+                      }
                       setProduct2Search(event.target.value)
                       setSelectedProduct2Id('')
                       setForm((prev) => ({ ...prev, product2Name: '', product2Description: '', product2HsnSac: '', product2ExpectedVendorPrice: '', product2UnitPrice: '', product2Tax: '' }))
                       setProduct2DropdownOpen(true)
                     }}
                     className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${errors.product2Name ? 'border-red-500 ring-red-100 focus:ring-red-200' : 'border-[#E5E7EB] focus:ring-[#CEC9BD]'}`}
-                    placeholder={isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
-                  />
-                  {product2DropdownOpen && (
-                    <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                        placeholder={isProduct2Manual ? 'Enter product name' : isLoadingProducts ? 'Loading Inventory products...' : 'Search Inventory products'}
+                      />
+                      {isRentQuotation && isProduct2Manual && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProduct2Manual(false)
+                            setProduct2Search('')
+                            setProduct2DropdownOpen(true)
+                          }}
+                          className="text-xs font-medium text-[#111827] hover:underline"
+                        >
+                          Choose an existing product
+                        </button>
+                      )}
+                      {product2DropdownOpen && (
+                        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                          {isRentQuotation && (
+                            <button
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setIsProduct2Manual(true)
+                                setSelectedProduct2Id('')
+                                setForm((prev) => ({ ...prev, product2Name: product2Search.trim() }))
+                                setProduct2Search('')
+                                setProduct2DropdownOpen(false)
+                              }}
+                              className="block w-full border-b border-[#EFECE5] px-3 py-2 text-left text-sm font-medium text-[#111827] hover:bg-[#F2EFE8]"
+                            >
+                              + Add New Product Manually
+                            </button>
+                          )}
                       {isLoadingProducts ? (
                         <div className="px-3 py-2 text-sm text-gray-500">Loading Inventory products...</div>
                       ) : filteredProducts2.length ? filteredProducts2.map((product) => (

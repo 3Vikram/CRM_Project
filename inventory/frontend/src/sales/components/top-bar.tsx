@@ -10,7 +10,6 @@ import {
   FilePlus2,
   LayoutGrid,
   LogOut,
-  Menu,
   Plus,
   Search,
   Settings,
@@ -21,6 +20,7 @@ import {
 } from 'lucide-react'
 import { clearStoredAuth, getStoredAuth } from '@/sales/lib/auth'
 import { hasPermission } from '@/sales/lib/permissions'
+import AiChatAssistant from '@/sales/components/AiChatAssistant'
 import NotificationBell from '@/sales/components/NotificationBell'
 
 interface TopBarProps {
@@ -56,7 +56,7 @@ const createItems = [
   { href: '/customers/new', label: 'New Customer', permission: 'customers', icon: Users },
 ]
 
-export function TopBar({ userName, userRole, onMenuClick }: TopBarProps) {
+export function TopBar({ userName, userRole }: TopBarProps) {
   const [activePanel, setActivePanel] = useState<'mega' | 'add' | 'profile' | 'support' | 'search' | null>(null)
   const [search, setSearch] = useState('')
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement))
@@ -108,10 +108,7 @@ export function TopBar({ userName, userRole, onMenuClick }: TopBarProps) {
 
   return (
     <header ref={barRef} className="relative z-50 flex h-16 w-full shrink-0 items-center gap-2 border-b border-[#EFECE5] bg-white px-3 sm:gap-4 sm:px-5">
-      <button type="button" onClick={onMenuClick} aria-label="Collapse or expand Sales navigation" className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 sm:p-2">
-        <Menu className="h-5 w-5" />
-      </button>
-      <div className="relative mx-auto hidden min-w-32 max-w-lg flex-1 md:block">
+      <div className="relative hidden min-w-32 max-w-lg flex-1 md:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <input
           type="search"
@@ -127,10 +124,11 @@ export function TopBar({ userName, userRole, onMenuClick }: TopBarProps) {
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
         <button type="button" onClick={panelButton('search')} aria-label="Search Sales pages" aria-expanded={activePanel === 'search'} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 sm:p-2 md:hidden"><Search className="h-5 w-5" /></button>
-        <button type="button" onClick={panelButton('mega')} aria-expanded={activePanel === 'mega'} className="inline-flex items-center gap-1 rounded-lg p-1 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:p-2"><LayoutGrid className="h-4 w-4" /><span className="hidden xl:inline">Mega Menu</span></button>
+        <button type="button" onClick={panelButton('mega')} aria-expanded={activePanel === 'mega'} className="inline-flex items-center gap-1 rounded-lg p-1 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:p-2"><LayoutGrid className="h-4 w-4" /><span className="hidden xl:inline">Menu</span></button>
         <button type="button" onClick={panelButton('add')} aria-label="Add new record" aria-expanded={activePanel === 'add'} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 sm:p-2"><Plus className="h-5 w-5" /></button>
         <button type="button" onClick={() => void toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="inline-flex rounded-lg p-1 text-slate-600 hover:bg-slate-100 sm:p-2">{fullscreen ? <Shrink className="h-5 w-5" /> : <Expand className="h-5 w-5" />}</button>
         <NotificationBell />
+        <AiChatAssistant />
         <button type="button" onClick={panelButton('support')} aria-label="Support" aria-expanded={activePanel === 'support'} className="inline-flex rounded-lg p-1 text-slate-600 hover:bg-slate-100 sm:p-2"><CircleHelp className="h-5 w-5" /></button>
         <button type="button" onClick={() => goTo('/sales/profile')} aria-label="Settings" className="inline-flex rounded-lg p-1 text-slate-600 hover:bg-slate-100 sm:p-2"><Settings className="h-5 w-5" /></button>
         <button type="button" onClick={panelButton('profile')} aria-label="Open profile menu" aria-expanded={activePanel === 'profile'} className="ml-0.5 flex items-center gap-1 rounded-full border border-[#E2E8F0] px-1 py-1 transition hover:bg-slate-100 sm:ml-1 sm:gap-2 sm:px-1.5">

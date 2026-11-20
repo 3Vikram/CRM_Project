@@ -68,6 +68,7 @@ const LeadSchema = new mongoose.Schema(
     },
     calendarStatus: { type: String, enum: ['Pending', 'Completed'], default: 'Pending' },
     assignedTo: { type: String, trim: true, default: 'Unassigned' },
+    assignedToId: { type: String, trim: true, default: '' },
     createdBy: { type: String, trim: true, default: 'System' },
     createdById: { type: String, trim: true, default: '', index: true },
     createdDate: { type: Date, default: Date.now },
@@ -79,6 +80,7 @@ const LeadSchema = new mongoose.Schema(
     timeline: { type: [TimelineEntrySchema], default: [] },
     notes: { type: [NoteSchema], default: [] },
     isConverted: { type: Boolean, default: false },
+    convertedAt: { type: Date, default: null },
     isScrapped: { type: Boolean, default: false },
     reason: { type: String, trim: true, default: '' },
     // Quotation fields

@@ -4,7 +4,6 @@ import { Bell, ChevronRight, List, X } from 'lucide-react'
 import { clearNotifications, getNotificationState, markRead } from '@/sales/lib/notificationState'
 import { fetchNotifications, type NotificationItem } from '@/sales/lib/notificationApi'
 
-type NotificationTab = 'mine' | 'all'
 type StoredNotificationState = ReturnType<typeof getNotificationState>
 
 const relativeTime = (value: string): string => {
@@ -24,8 +23,6 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const [items, setItems] = useState<NotificationItem[]>([])
   const [storedState, setStoredState] = useState<StoredNotificationState>(() => getNotificationState())
-  const [activeTab, setActiveTab] = useState<NotificationTab>('mine')
-  const selectedTab = useRef(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const navigate = useNavigate()
 
@@ -73,14 +70,8 @@ export default function NotificationBell() {
     () => items.filter((item) => !storedState.cleared.includes(item.id)),
     [items, storedState.cleared],
   )
-  const myItems = useMemo(() => visibleItems.filter((item) => item.mine), [visibleItems])
   const unreadCount = visibleItems.filter((item) => !storedState.read.includes(item.id)).length
-  const tabItems = activeTab === 'mine' ? myItems : visibleItems
   const unreadCountLabel = unreadCount > 9 ? '9+' : String(unreadCount)
-
-  useEffect(() => {
-    if (!selectedTab.current) setActiveTab(myItems.length ? 'mine' : 'all')
-  }, [myItems.length])
 
   const updateState = (nextState: StoredNotificationState) => {
     setStoredState(nextState)
@@ -93,7 +84,7 @@ export default function NotificationBell() {
   }
 
   const handleClear = () => {
-    updateState(clearNotifications(tabItems.map((item) => item.id)))
+    updateState(clearNotifications(visibleItems.map((item) => item.id)))
   }
 
   const handleNavigate = (path: string) => {
@@ -125,18 +116,13 @@ export default function NotificationBell() {
               {unreadCount > 0 ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">{unreadCountLabel}</span> : null}
             </div>
             <div className="flex items-center gap-3">
-              <button type="button" onClick={handleClear} disabled={!tabItems.length} className="text-xs font-semibold text-slate-500 hover:text-slate-900 disabled:cursor-default disabled:opacity-40">Clear</button>
+              <button type="button" onClick={handleClear} disabled={!visibleItems.length} className="text-xs font-semibold text-slate-500 hover:text-slate-900 disabled:cursor-default disabled:opacity-40">Clear</button>
               <button type="button" aria-label="Close notifications" onClick={() => setIsOpen(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X className="h-4 w-4" /></button>
             </div>
           </div>
 
-          <div className="mx-4 flex rounded-lg bg-slate-100 p-1">
-            <button type="button" onClick={() => { selectedTab.current = true; setActiveTab('mine') }} className={`flex-1 rounded-md px-2 py-2 text-xs font-semibold transition ${activeTab === 'mine' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>My Items ({myItems.length})</button>
-            <button type="button" onClick={() => { selectedTab.current = true; setActiveTab('all') }} className={`flex-1 rounded-md px-2 py-2 text-xs font-semibold transition ${activeTab === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>All Items ({visibleItems.length})</button>
-          </div>
-
           <div className="max-h-[360px] min-h-36 overflow-y-auto px-2 py-2">
-            {tabItems.length ? tabItems.map((item) => {
+            {visibleItems.length ? visibleItems.map((item) => {
               const isUnread = !storedState.read.includes(item.id)
               return (
                 <button key={item.id} type="button" onClick={() => handleItemClick(item)} className="block w-full rounded-lg px-3 py-3 text-left transition hover:bg-slate-50">

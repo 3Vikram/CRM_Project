@@ -1,14 +1,14 @@
 'use client'
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createPortal } from 'react-dom'
-import { Search, Plus, MoreVertical, MessageCircle, UsersRound, UserRoundCheck, UserRoundX, UserRoundPlus } from 'lucide-react'
+import { Search, Plus, MessageCircle, UsersRound, UserRoundCheck, UserRoundX, UserRoundPlus } from 'lucide-react'
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Tooltip } from '@mui/material'
 import { deleteContact, fetchContacts, fetchEmployeeBatchGroups, moveContactToCustomer, type ContactRecord, type EmployeeBatchGroup } from '@/lib/contactApi'
 import { fetchLeads, type LeadRecord } from '@/lib/leadApi'
 import { fetchCalendarEvents, type CalendarApiEvent } from '@/lib/calendarApi'
 import { PermissionGate } from '@/components/PermissionGate'
+import { ActionMenu } from '@/components/ActionMenu'
 
 const PAGE_SIZE = 20
 const CONTACTS_FETCH_PAGE_SIZE = 100
@@ -60,20 +60,8 @@ export default function ContactsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
-  const [openContactId, setOpenContactId] = useState<string | null>(null)
+  const [selectedContact, setSelectedContact] = useState<ContactRecord | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof Element) || !target.closest('[data-contact-actions]')) {
-        setOpenContactId(null)
-      }
-    }
-
-    document.addEventListener('mousedown', handleOutsideClick)
-    return () => document.removeEventListener('mousedown', handleOutsideClick)
-  }, [])
 
   const loadContacts = useCallback(async () => {
     setIsLoading(true)
@@ -375,9 +363,7 @@ export default function ContactsPage() {
                           onEdit={(id) => navigate(`/sales/contacts/edit/${id}`)}
                           onDelete={setDeleteTargetId}
                           onMoveToCustomer={() => void handleMoveToCustomer(contact._id)}
-                          isMenuOpen={openContactId === contact._id}
-                          onToggleMenu={() => setOpenContactId((currentId) => currentId === contact._id ? null : contact._id)}
-                          onCloseMenu={() => setOpenContactId((currentId) => currentId === contact._id ? null : currentId)}
+                          onView={setSelectedContact}
                         />
                       )
                     })
@@ -419,6 +405,20 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      <Dialog open={Boolean(selectedContact)} onClose={() => setSelectedContact(null)}>
+        <DialogTitle>{selectedContact?.contactName || 'Contact Details'}</DialogTitle>
+        <DialogContent>
+          <div className="grid gap-3 text-sm text-gray-700">
+            <div><strong>Customer:</strong> {selectedContact?.customerName || '-'}</div>
+            <div><strong>Contact Person:</strong> {selectedContact?.contactName || '-'}</div>
+            <div><strong>Designation:</strong> {selectedContact?.designation || '-'}</div>
+            <div><strong>Phone:</strong> {selectedContact?.contactNumber || '-'}</div>
+            <div><strong>Email:</strong> {selectedContact?.email || '-'}</div>
+          </div>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setSelectedContact(null)}>Close</Button></DialogActions>
+      </Dialog>
+
       <Dialog open={Boolean(deleteTargetId)} onClose={() => setDeleteTargetId(null)}>
         <DialogTitle>Delete contact</DialogTitle>
         <DialogContent>
@@ -441,53 +441,15 @@ const ContactTableRow = memo(function ContactTableRow({
   onEdit,
   onDelete,
   onMoveToCustomer,
-  isMenuOpen,
-  onToggleMenu,
-  onCloseMenu,
+  onView,
 }: {
   serialNumber: number
   contact: ContactRecord
   onEdit: (id: string) => void
   onDelete: (id: string) => void
   onMoveToCustomer: () => void
-  isMenuOpen: boolean
-  onToggleMenu: () => void
-  onCloseMenu: () => void
+  onView: (contact: ContactRecord) => void
 }) {
-  const actionButtonRef = useRef<HTMLButtonElement>(null)
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
-
-  useLayoutEffect(() => {
-    if (!isMenuOpen || !actionButtonRef.current) return
-
-    const updateMenuPosition = () => {
-      const buttonRect = actionButtonRef.current?.getBoundingClientRect()
-      if (!buttonRect) return
-
-      const menuWidth = 176
-      const menuHeight = 128
-      const viewportPadding = 8
-      const topBelow = buttonRect.bottom + 4
-      const top = topBelow + menuHeight <= window.innerHeight - viewportPadding
-        ? topBelow
-        : Math.max(viewportPadding, buttonRect.top - menuHeight - 4)
-      const left = Math.min(
-        Math.max(viewportPadding, buttonRect.right - menuWidth),
-        window.innerWidth - menuWidth - viewportPadding,
-      )
-
-      setMenuPosition({ top, left })
-    }
-
-    updateMenuPosition()
-    window.addEventListener('resize', updateMenuPosition)
-    window.addEventListener('scroll', updateMenuPosition, true)
-    return () => {
-      window.removeEventListener('resize', updateMenuPosition)
-      window.removeEventListener('scroll', updateMenuPosition, true)
-    }
-  }, [isMenuOpen])
-
   const normalizeDigits = (value = '') => String(value).replace(/\D/g, '')
   const digits = normalizeDigits(contact.contactNumber || '')
   const hasValidPhone = digits.length >= 10
@@ -524,35 +486,11 @@ const ContactTableRow = memo(function ContactTableRow({
       </td>
       <td className={`${tableCellClass} text-[18px]`}>{contact.email}</td>
       <td className={`${tableCellClass} text-center`}>
-        <div className="relative inline-flex" data-contact-actions>
-          <button ref={actionButtonRef} type="button" onClick={onToggleMenu} className="rounded border border-[#E1E4EA] bg-white p-1.5 text-gray-600 transition hover:bg-[#F3F4F6]" title="Actions" aria-label="Contact actions">
-            <MoreVertical className="h-4 w-4" />
-          </button>
-        </div>
+        <ActionMenu moduleName="contacts" onView={() => onView(contact)} onEdit={() => onEdit(contact._id)} onDelete={() => onDelete(contact._id)}>
+          {(closeMenu) => <button type="button" role="menuitem" onClick={() => { closeMenu(); onMoveToCustomer() }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]">Move to Customer</button>}
+        </ActionMenu>
       </td>
     </tr>
-    {isMenuOpen && typeof document !== 'undefined' ? createPortal(
-      <div
-        data-contact-actions
-        className="fixed z-[1000] w-44 rounded-lg border border-[#E5E7EB] bg-white py-1 text-left shadow-lg"
-        style={{ top: menuPosition.top, left: menuPosition.left }}
-      >
-        <PermissionGate moduleName="contacts" action="edit">
-          <button type="button" onClick={() => { onCloseMenu(); onEdit(contact._id) }} className="block w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Edit</button>
-        </PermissionGate>
-        <PermissionGate moduleName="contacts" action="delete">
-          <button type="button" onClick={() => { onCloseMenu(); onDelete(contact._id) }} className="block w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Delete</button>
-        </PermissionGate>
-        <button
-          type="button"
-          onClick={() => { onCloseMenu(); onMoveToCustomer() }}
-          className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-        >
-          Move to Customer
-        </button>
-      </div>,
-      document.body,
-    ) : null}
     </>
   )
 })

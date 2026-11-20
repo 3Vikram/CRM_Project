@@ -465,9 +465,26 @@ const sendQuotationEmail = async ({
   }
 };
 
+const sendSupportEmail = async ({ to, replyTo, subject, text, html }) => {
+  const config = getSmtpConfig();
+  if (!config.auth.user || !config.auth.pass) {
+    throw new Error('SMTP credentials are not configured.');
+  }
+  const transporter = createTransporter();
+  return transporter.sendMail({
+    from: `${process.env.MAIL_FROM_NAME || 'CRM Sales Assistant'} <${config.auth.user}>`,
+    to,
+    ...(replyTo ? { replyTo } : {}),
+    subject,
+    text,
+    html,
+  });
+};
+
 module.exports = {
   sendCampaignEmails,
   sendRenewalReminder,
   sendQuotationEmail,
   buildRenewalReminderEmail,
+  sendSupportEmail,
 };

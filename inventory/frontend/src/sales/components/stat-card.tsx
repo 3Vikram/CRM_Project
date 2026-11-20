@@ -10,6 +10,7 @@ interface StatCardProps {
   /** Icon color, e.g. "text-emerald-700" */
   iconColor?: string
   labelClassName?: string
+  onClick?: () => void
 }
 
 export function StatCard({
@@ -20,9 +21,21 @@ export function StatCard({
   iconBg = 'bg-[#F2EFE8]',
   iconColor = 'text-gray-700',
   labelClassName = '',
+  onClick,
 }: StatCardProps) {
   return (
-    <div className="sales-summary-card flex h-full items-center gap-3">
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      } : undefined}
+      className={`sales-summary-card flex h-full items-center gap-3 ${onClick ? 'cursor-pointer transition-shadow duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111827]' : ''}`}
+    >
       <div className={`sales-summary-card-icon ${iconBg}`}>
         <Icon className={`${iconColor}`} />
       </div>

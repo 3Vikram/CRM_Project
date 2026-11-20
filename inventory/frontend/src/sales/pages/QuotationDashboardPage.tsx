@@ -1,20 +1,18 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Download,
-  Eye,
-  Pencil,
   Plus,
   Search,
-  Trash2,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
 import { Toast } from '@/sales/components/toast'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/sales/lib/leadApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
@@ -57,24 +55,35 @@ const calculateGrandTotal = (products?: any[]) => {
 const getUniqueValues = (items: Array<string | undefined>) =>
   Array.from(new Set(items.filter(Boolean) as string[])).sort()
 
-const fetchAllQuotations = async (quotationType: 'rent' | 'sold') => {
-  const firstPage = await fetchLeads({ status: 'Proposal Sent', quotationType, page: 1, limit: 1000 })
+const fetchAllQuotations = async (quotationType: 'rent' | 'sold' | 'all') => {
+  const firstPage = await fetchLeads({ status: 'Proposal Sent', ...(quotationType === 'all' ? {} : { quotationType }), page: 1, limit: 1000 })
   const records = [...firstPage.data]
   const totalPages = firstPage.pagination.totalPages || 1
   for (let page = 2; page <= totalPages; page += 1) {
-    const response = await fetchLeads({ status: 'Proposal Sent', quotationType, page, limit: 1000 })
+    const response = await fetchLeads({ status: 'Proposal Sent', ...(quotationType === 'all' ? {} : { quotationType }), page, limit: 1000 })
     records.push(...response.data)
   }
   return records
 }
 
-export default function QuotationDashboardPage() {
+interface QuotationDashboardPageProps {
+  quotationTypeOverride?: 'rent' | 'sold' | 'all'
+  embedded?: boolean
+  tabs?: ReactNode
+}
+
+export default function QuotationDashboardPage({
+  quotationTypeOverride,
+  embedded = false,
+  tabs,
+}: QuotationDashboardPageProps = {}) {
   const navigate = useNavigate()
   const { type } = useParams<{ type?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedRecordId = searchParams.get('recordId')
   const queryType = searchParams.get('type')
-  const quotationType: 'rent' | 'sold' = (type || queryType) === 'sold' ? 'sold' : 'rent'
+  const requestedType = type || queryType
+  const quotationType: 'rent' | 'sold' | 'all' = quotationTypeOverride || (requestedType === 'sold' || requestedType === 'rent' ? requestedType : requestedType === 'all' ? 'all' : 'rent')
   const [quotations, setQuotations] = useState<LeadRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -204,68 +213,124 @@ export default function QuotationDashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={() => navigate('/sales/quotations')}
-            className="mb-2 flex items-center gap-1 text-sm text-[#111827] hover:underline cursor-pointer"
-          >
-            ← Back to Quotation
-          </button>
-          <h1 className="crm-page-heading">{quotationType === 'sold' ? 'Sold Quotation Dashboard' : 'Rent Quotation Dashboard'}</h1>
+        <div className="min-w-0">
+          {embedded ? (
+            <h1 className="crm-page-heading">Quotation</h1>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => navigate('/sales/quotations')}
+                className="mb-2 flex items-center gap-1 text-sm text-[#111827] hover:underline cursor-pointer"
+              >
+                ← Back to Quotation
+              </button>
+              <h1 className="crm-page-heading">{quotationType === 'all' ? 'Quotation List' : quotationType === 'sold' ? 'Sold Quotation Dashboard' : 'Rent Quotation Dashboard'}</h1>
+            </>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
           {selectedRecordId ? (
             <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
               Show all quotations
             </button>
           ) : null}
-          <PermissionGate moduleName="quotations" action="create">
-            <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
-          </PermissionGate>
+          {embedded ? (
+            <>
+              <div className="relative w-full sm:w-44 lg:w-56">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
+                  placeholder="Search"
+                  className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+                />
+              </div>
+              <div className="flex h-10 items-center gap-2 whitespace-nowrap text-sm text-gray-700">
+                <span>Show</span>
+                <select
+                  value={entriesPerPage}
+                  onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
+                  className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+                >
+                  {entriesOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <span>entries</span>
+              </div>
+              <PageFilters
+                fields={filterFields}
+                values={filters}
+                onApply={(values) => { setFilters(values); setPage(1) }}
+                onClear={() => { setFilters({}); setPage(1) }}
+              />
+              <button
+                type="button"
+                onClick={downloadReport}
+                className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
+              >
+                <Download className="h-4 w-4" /> Download Report
+              </button>
+            </>
+          ) : null}
+          {!embedded ? (
+            <PermissionGate moduleName="quotations" action="create">
+              <button onClick={() => navigate(quotationType === 'all' ? '/sales/quotations' : `/sales/quotations/new/${quotationType}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
+            </PermissionGate>
+          ) : (
+            <PermissionGate moduleName="quotations" action="create">
+              <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
+            </PermissionGate>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
-              placeholder="Search"
-              className="w-72 rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+      {!embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
+                placeholder="Search"
+                className="w-72 rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span>Show</span>
+              <select
+                value={entriesPerPage}
+                onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
+                className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              >
+                {entriesOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+              <span>entries</span>
+            </div>
+            <PageFilters
+              fields={filterFields}
+              values={filters}
+              onApply={(values) => { setFilters(values); setPage(1) }}
+              onClear={() => { setFilters({}); setPage(1) }}
             />
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700">
-            <span>Show</span>
-            <select
-              value={entriesPerPage}
-              onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
-              className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+            <button
+              type="button"
+              onClick={downloadReport}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
             >
-              {entriesOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-            <span>entries</span>
+              <Download className="h-4 w-4" /> Download Report
+            </button>
           </div>
-          <PageFilters
-            fields={filterFields}
-            values={filters}
-            onApply={(values) => { setFilters(values); setPage(1) }}
-            onClear={() => { setFilters({}); setPage(1) }}
-          />
-          <button
-            type="button"
-            onClick={downloadReport}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
-          >
-            <Download className="h-4 w-4" /> Download Report
-          </button>
         </div>
-      </div>
+      ) : null}
+
+      {tabs}
 
       <div className="overflow-x-auto rounded-lg border border-[#EFECE5] bg-white shadow-sm">
         <table className="min-w-full text-sm">
@@ -308,15 +373,7 @@ export default function QuotationDashboardPage() {
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(quote.createdDate)}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(quote.quotationDetails?.expectedClosure)}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.quotationDetails?.delivery || '-'}</td>
-                  <td className="px-4 py-3 text-gray-700">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleOpenQuotationPdf(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Open quotation PDF in a new tab">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <PermissionGate moduleName="quotations" action="edit"><button onClick={() => navigate(`/sales/quotations/edit/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /></button></PermissionGate>
-                      <PermissionGate moduleName="quotations" action="delete"><button onClick={() => handleDelete(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]"><Trash2 className="h-4 w-4" /></button></PermissionGate>
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 text-gray-700"><ActionMenu moduleName="quotations" onView={() => handleOpenQuotationPdf(quote._id)} onEdit={() => navigate(`/sales/quotations/edit/${quote._id}`)} onDelete={() => handleDelete(quote._id)} /></td>
                 </tr>
               ))
             )}

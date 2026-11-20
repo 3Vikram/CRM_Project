@@ -68,6 +68,48 @@ export interface CustomerSummary {
   newThisMonth: number;
 }
 
+export interface CustomerAnalytics {
+  range: { start: string; end: string };
+  kpis: {
+    totalCustomers: number;
+    totalChangePercent: number | null;
+    leadingSector: {
+      name: string;
+      count: number;
+      changePercent: number | null;
+    } | null;
+    leadingIndustryRevenue: { industry: string; revenue: number } | null;
+    activeCustomers: number;
+    inactiveCustomers: number;
+  };
+  charts: {
+    sectorDistribution: Array<{ industry: string; count: number }>;
+    topCustomers: Array<{ customer: string; revenue: number; marginPercent?: number }>;
+    growthTrend: Array<{ month: string; label: string; customers: number }>;
+    statusDistribution: Array<{ status: 'Active' | 'Inactive'; count: number }>;
+    conversionOverview: {
+      convertedLeads: number;
+      directCustomers: number;
+      convertedActivitiesAvailable: boolean;
+    };
+    leadAcquisitionSources: Array<{ source: string; count: number }>;
+    marginAvailable: boolean;
+  };
+}
+
+export async function fetchCustomerAnalytics(params: { startDate: string; endDate: string }) {
+  const searchParams = new URLSearchParams(params);
+  const response = await fetch(`${API_BASE_URL}/customers/analytics?${searchParams.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => ({}));
+    throw new Error(errorPayload.message || 'Failed to load customer analytics');
+  }
+  const result = await response.json() as { success: boolean; data: CustomerAnalytics };
+  return result.data;
+}
+
 export interface CustomerPayload {
   companyName: string;
   customerName: string;

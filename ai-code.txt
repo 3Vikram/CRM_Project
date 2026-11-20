@@ -1,0 +1,113 @@
+﻿    }
+    if (/\bactivit(?:y|ies)\b|\bfollow[\s-]?ups?\b|\boverdue\b/.test(normalizedQuestion)) {
+      const range = getDateRange(analyticsRequest.query);
+      const activityScope = await buildReportOwnerScope(analyticsRequest, {
+        extraClauses: [
+          ...(req.user?.name ? [{ assignedUser: String(req.user.name) }] : []),
+          ...(req.user?.id ? [{ assignedUserId: String(req.user.id) }] : []),
+        ],
+      });
+      const activityRecords = await Activity.find({
+        $and: [
+          {
+            deletedAt: null,
+            $or: [
+              { activityDate: { $gte: localDateKey(range.start), $lt: localDateKey(range.end) } },
+              { followUpDate: { $gte: localDateKey(range.start), $lt: localDateKey(range.end) } },
+            ],
+          },
+          activityScope,
+        ],
+      })
+        .select('activityId customerName activityType activityDate followUpDate status assignedUser assignedUserId')
+        .sort({ activityDate: -1 })
+        .limit(101)
+        .lean();
+      const activitiesWithEmployeeNames = await resolveActivityEmployeeNames(activityRecords);
+      const overdueOnly = /\boverdue\b/.test(normalizedQuestion);
+      const relevantActivities = activitiesWithEmployeeNames
+        .map((activity) => ({ activity, effectiveStatus: getEffectiveStatus(activity, getTodayInKolkata()) }))
+        .filter(({ effectiveStatus }) => overdueOnly
+          ? effectiveStatus.startsWith('Overdue - ')
+          : !['Completed', 'Cancelled'].includes(effectiveStatus))
+        .slice(0, 100)
+        .map(({ activity, effectiveStatus }) => ({
+          activityId: String(activity.activityId || ''),
+          customer: String(activity.customerName || 'Not recorded'),
+          type: String(activity.activityType || 'Not recorded'),
+          assignedTo: String(activity.assignedUser || 'Unassigned'),
+          followUpDate: String(activity.followUpDate || ''),
+          status: effectiveStatus,
+        }));
+      relevantRecords.activities = {
+        records: relevantActivities,
+        truncated: activityRecords.length > 100,
+      };
+    }
+    phase = 'ai-provider';
+    const response = await fetchProvider(aiUrl, {
+      method: 'POST',
+      headers: {
+        ...(process.env.SALES_AI_API_KEY ? { Authorization: `Bearer ${process.env.SALES_AI_API_KEY}` } : {}),
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({
+        model: process.env.SALES_AI_MODEL || 'llama3.1',
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: 'You are the CRM Sales analytics assistant. Answer only from the supplied authorized, date-filtered CRM aggregates and relevant records. Never invent or infer unprovided values. If the records cannot answer the question, say so. If a relevant record list is truncated, say that only a limited set is shown. Return JSON with an answer string and chartKey, which must be one of revenueTrend, customers, quotations, employees, funnel, products, activities, or null. Use null unless a chart materially helps. State the reporting period when useful.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              question,
+              authorizedSalesAnalytics: {
+                ...analytics,
+                breakdown: undefined,
+              },
+              relevantRecords,
+            }),
+          },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      const providerBody = await response.text().catch(() => '');
+      const providerMessage = sanitizeAssistantError(providerBody);
+      throw new Error(`Provider returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${providerMessage ? `: ${providerMessage}` : ''}`);
+    }
+    const providerResult = await response.json();
+    const content = providerResult.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') throw new Error('Sales AI provider returned an invalid response.');
+    const answer = JSON.parse(content);
+    if (typeof answer.answer !== 'string' || answer.answer.trim().length === 0) {
+      throw new Error('Sales AI provider returned an empty answer.');
+    }
+    const allowedCharts = ['revenueTrend', 'customers', 'quotations', 'employees', 'funnel', 'products', 'activities', null];
+    if (!allowedCharts.includes(answer.chartKey)) answer.chartKey = null;
+    return res.status(200).json({
+      success: true,
+      data: { answer: answer.answer, chartKey: answer.chartKey, generatedAt: analytics.generatedAt, details: relevantRecords },
+    });
+  } catch (error) {
+    const failure = getAssistantFailure(phase, error);
+    console.error('Sales AI assistant failed:', {
+      phase,
+      errorName: error?.name || 'Error',
+      errorCode: error?.code || error?.cause?.code || null,
+      errorMessage: sanitizeAssistantError(error),
+    });
+    return res.status(failure.status).json({ success: false, message: failure.message });
+  }
+};
+
+exports.askSalesAssistant = createSalesAssistantHandler();
+exports._getDateRange = getDateRange;
+exports._getComparisonRange = getComparisonRange;
+exports._getRevenue = getRevenue;
+exports._getAnalyticsData = getAnalyticsData;
+exports._createSalesAssistantHandler = createSalesAssistantHandler;

@@ -106,6 +106,7 @@ export default function QuotationViewPage() {
   const [isGeneratingBrowserPdf, setIsGeneratingBrowserPdf] = useState(isPdfTab)
   const printRef = useRef<HTMLDivElement | null>(null)
   const hasStartedPdfTab = useRef(false)
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; fileName: string } | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -188,7 +189,8 @@ export default function QuotationViewPage() {
             .catch(reject)
         })
 
-        window.location.replace(pdfUrl)
+        setPdfPreview({ url: pdfUrl, fileName: `quotation-${String(quotation.quotationId || 'document').replace(/[\\/:*?"<>|\s]+/g, '-')}.pdf` })
+        setIsGeneratingBrowserPdf(false)
       } catch (pdfError) {
         setIsGeneratingBrowserPdf(false)
         setError(pdfError instanceof Error ? pdfError.message : 'Unable to generate quotation PDF.')
@@ -198,6 +200,26 @@ export default function QuotationViewPage() {
 
     void openGeneratedPdf()
   }, [isLoading, isPdfTab, quotation])
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreview) URL.revokeObjectURL(pdfPreview.url)
+    }
+  }, [pdfPreview])
+
+  if (pdfPreview) {
+    return (
+      <div className="fixed inset-0 z-[100] flex flex-col bg-[#323639]">
+        <div className="flex items-center justify-between gap-3 bg-[#202124] px-4 py-2 text-white">
+          <span className="truncate text-sm font-medium">{pdfPreview.fileName}</span>
+          <a href={pdfPreview.url} download={pdfPreview.fileName} className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-[#111827] hover:bg-gray-100">
+            <Download className="h-4 w-4" /> Download PDF
+          </a>
+        </div>
+        <iframe title="Quotation PDF" src={pdfPreview.url} className="w-full flex-1 border-0" />
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (

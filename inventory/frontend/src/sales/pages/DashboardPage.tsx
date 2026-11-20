@@ -19,7 +19,7 @@ import {
   SquareCheckBig,
   Target,
   UserRound,
-  Users,
+  type LucideIcon,
 } from 'lucide-react'
 import {
   Bar,
@@ -191,13 +191,13 @@ function KpiCard({
   title: string
   value: number
   previous: number
-  changePct: number
+  changePct: number | null
   periodLabel: string
   previousLabel: string
   detailLabel: string
   detailValue: string
   detailChangePct: number
-  icon: typeof Users
+  icon: LucideIcon
   iconStyle: CSSProperties
   href: string
   onNavigate: (href: string) => void
@@ -224,9 +224,9 @@ function KpiCard({
           <p className="sales-summary-card-label">{title}</p>
           <p className="sales-summary-card-value mt-0.5 flex items-center gap-1.5">
             <span>{numberFormat.format(value)}</span>
-            <ChangeIndicator changePct={changePct} />
+            {changePct !== null && <ChangeIndicator changePct={changePct} />}
           </p>
-          <p className="sales-summary-card-meta mt-0.5">{periodLabel} · {previousLabel}: {numberFormat.format(previous)}</p>
+          <p className="sales-summary-card-meta mt-0.5">{previousLabel ? `${periodLabel} · ${previousLabel}: ${numberFormat.format(previous)}` : periodLabel}</p>
         </div>
         <div className="min-w-0 max-w-[32%] border-l border-slate-200 pl-3 text-right">
           <p className="sales-summary-card-meta font-semibold uppercase" title={detailLabel}>{detailLabel}</p>
@@ -301,6 +301,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void loadData()
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => { void loadData(true) }
+    window.addEventListener('sales:lead-converted', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.removeEventListener('sales:lead-converted', refresh)
+      window.removeEventListener('focus', refresh)
+    }
   }, [])
 
   useEffect(() => {
@@ -711,7 +721,7 @@ export default function DashboardPage() {
       {error ? <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 ${T.body} text-red-700`}>{error}<button type="button" onClick={() => void loadData(true)} className="font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F6AF0]">Try again</button></div> : null}
       {loading && !records.leads.length && !records.opfs.length ? (
         <div role="status" aria-label="Loading dashboard" className="grid animate-[fadeIn_300ms_ease-out] grid-cols-1 gap-6 motion-reduce:animate-none lg:grid-cols-2">
-          {Array.from({ length: 5 }, (_, index) => <div key={index} className={`${cardClass} min-h-56 animate-pulse motion-reduce:animate-none`}><div className="h-5 w-2/5 rounded bg-slate-200" /><div className="mt-6 h-10 w-3/5 rounded bg-slate-200" /><div className="mt-5 h-4 w-full rounded bg-slate-100" /><div className="mt-3 h-4 w-4/5 rounded bg-slate-100" /></div>)}
+          {Array.from({ length: 4 }, (_, index) => <div key={index} className={`${cardClass} min-h-56 animate-pulse motion-reduce:animate-none`}><div className="h-5 w-2/5 rounded bg-slate-200" /><div className="mt-6 h-10 w-3/5 rounded bg-slate-200" /><div className="mt-5 h-4 w-full rounded bg-slate-100" /><div className="mt-3 h-4 w-4/5 rounded bg-slate-100" /></div>)}
         </div>
       ) : null}
 

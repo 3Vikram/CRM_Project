@@ -52,6 +52,7 @@ export interface DashboardData {
   }
   summary: {
     opportunities: { total: number; currentYear: number; previousYear: number; open: number }
+    convertedLeads: { total: number; currentYear: number; previousYear: number }
     quotations: { total: number; currentYear: number; previousYear: number; open: number }
     opfs: { total: number; currentYear: number; previousYear: number }
     meetings: { total: number; currentYear: number; previousYear: number }

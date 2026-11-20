@@ -4,6 +4,8 @@ const CompanyProfile = require('../models/CompanyProfile');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch, escapeRegex } = require('../utils/queryUtils');
 const { sendQuotationEmail } = require('../services/emailService');
 const { ownerScope, creatorFields, resolveCreatorNames } = require('../utils/accessScope');
+const { LEAD_ASSIGNMENT_REQUIRED_MESSAGE, isLeadAssigned } = require('../utils/leadAssignment');
+const { customerDuplicateConditions, customerIdentityKeys } = require('../utils/customerDuplicates');
 
 const PRIORITY_BY_SCORE = (score) => {
   if (score > 80) return 'High';
@@ -198,6 +200,7 @@ exports.getLeads = async (req, res) => {
       priority: 1,
       leadStatus: 1,
       assignedTo: 1,
+      assignedToId: 1,
       createdBy: 1,
       createdById: 1,
       createdDate: 1,
@@ -286,6 +289,11 @@ exports.updateLead = async (req, res) => {
     updated.timeline = existing.timeline || [];
     if (payload.leadStatus && payload.leadStatus !== existing.leadStatus) {
       updated.timeline.unshift(buildTimeline('Status updated', `Moved to ${payload.leadStatus}`, 'info'));
+    } else if (
+      payload.quotationDetails?.stage
+      && payload.quotationDetails.stage !== (existing.quotationDetails?.stage || existing.leadStatus)
+    ) {
+      updated.timeline.unshift(buildTimeline('Status updated', `Moved to ${payload.quotationDetails.stage}`, 'info'));
     }
     
     // Generate quotation ID if status changed to Proposal Sent
@@ -423,6 +431,9 @@ exports.moveToActivity = async (req, res) => {
   try {
     const lead = await Lead.findOne({ $and: [{ _id: req.body.id }, ownerScope(req)] });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found' });
+    if (!isLeadAssigned(lead.assignedTo)) {
+      return res.status(400).json({ success: false, message: LEAD_ASSIGNMENT_REQUIRED_MESSAGE });
+    }
     lead.leadStatus = 'Follow-up';
     lead.timeline.unshift(buildTimeline('Moved to activity', 'Lead was moved to activity tracking', 'info'));
     await lead.save();
@@ -465,35 +476,91 @@ exports.convertToCustomer = async (req, res) => {
 
     // Lazy-load Customer model to avoid circular requires at module load time
     const Customer = require('../models/Customer');
-
-    // Reuse existing customer if email matches to avoid duplicates
-    let customer = await Customer.findOne({ email: lead.email });
-    if (!customer) {
-      const contact = {
-        contactType: 'Primary',
-        name: lead.contactPerson || lead.companyName || 'Primary Contact',
-        email: lead.email,
-        phone: lead.mobile || '',
-        designation: lead.designation || '',
-      };
-
-      const customerPayload = {
-        companyName: lead.companyName || lead.contactPerson || 'Unnamed Company',
-        contacts: [contact],
-        customerName: contact.name,
-        email: contact.email,
-        phone: contact.phone,
-        ...creatorFields(req),
-        notes: `Converted from Lead ${lead.leadId || lead._id}`,
-      };
-
-      customer = await Customer.create(customerPayload);
+    const sourceLeadId = String(lead._id);
+    const existingLeadCustomer = await Customer.findOne({ sourceLeadId });
+    if (existingLeadCustomer) {
+      if (lead.customerId && String(lead.customerId) !== String(existingLeadCustomer._id)) {
+        return res.status(409).json({ success: false, message: 'This lead is linked to a different customer.' });
+      }
+      lead.customerId = String(existingLeadCustomer._id);
+      lead.isConverted = true;
+      lead.leadStatus = 'Won';
+      lead.convertedAt = lead.convertedAt || existingLeadCustomer.createdAt || new Date();
+      await lead.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Lead is already linked to its converted customer',
+        data: { lead, customer: existingLeadCustomer },
+      });
     }
 
-    // Mark lead converted and link to customer reference if desired
+    if (lead.isConverted && lead.customerId) {
+      const linkedCustomer = await Customer.findOne({
+        _id: lead.customerId,
+        sourceLeadId,
+      });
+      if (linkedCustomer) {
+        return res.status(200).json({
+          success: true,
+          message: 'Lead is already linked to its converted customer',
+          data: { lead, customer: linkedCustomer },
+        });
+      }
+      return res.status(409).json({ success: false, message: 'The converted lead has an invalid customer link.' });
+    }
+
+    const contact = {
+      contactType: 'Primary',
+      name: lead.contactPerson || lead.companyName || 'Primary Contact',
+      email: lead.email,
+      phone: lead.mobile || '',
+      designation: lead.designation || '',
+    };
+
+    const customerPayload = {
+      companyName: lead.companyName || lead.contactPerson || 'Unnamed Company',
+      contacts: [contact],
+      customerName: contact.name,
+      email: contact.email,
+      phone: contact.phone,
+      ...creatorFields(req),
+      notes: `Converted from Lead ${lead.leadId || lead._id}`,
+    };
+    const duplicateConditions = customerDuplicateConditions(customerPayload);
+    if (duplicateConditions.length && await Customer.findOne({ $or: duplicateConditions })) {
+      return res.status(409).json({
+        success: false,
+        message: "A customer with this lead's contact details already exists. Resolve the duplicate before converting this lead.",
+      });
+    }
+
+    let customer;
+    try {
+      customer = await Customer.create({
+        ...customerPayload,
+        sourceLeadId,
+        duplicateKeys: customerIdentityKeys(customerPayload),
+      });
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+      customer = await Customer.findOne({ sourceLeadId });
+      if (!customer && error.keyPattern?.duplicateKeys) {
+        return res.status(409).json({
+          success: false,
+          message: "A customer with this lead's contact details already exists. Resolve the duplicate before converting this lead.",
+        });
+      }
+      if (!customer) throw error;
+    }
+
+    const wasConverted = lead.isConverted && String(lead.customerId || '') === String(customer._id);
+    lead.customerId = String(customer._id);
     lead.isConverted = true;
     lead.leadStatus = 'Won';
-    lead.timeline.unshift(buildTimeline('Converted to customer', `Converted to customer ${customer._id}`, 'success'));
+    lead.convertedAt = lead.convertedAt || new Date();
+    if (!wasConverted) {
+      lead.timeline.unshift(buildTimeline('Converted to customer', `Converted to customer ${customer._id}`, 'success'));
+    }
     await lead.save();
 
     res.status(200).json({ success: true, message: 'Lead converted to customer', data: { lead, customer } });

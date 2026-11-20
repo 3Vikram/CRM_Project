@@ -1,18 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, RotateCcw } from 'lucide-react';
 import { Toast } from '@/sales/components/toast';
-import { createActivity, fetchActivityById, updateActivity } from '@/sales/lib/activityApi';
+import { checkActivityCompany, createActivity, fetchActivityById, updateActivity } from '@/sales/lib/activityApi';
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi';
+import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi';
 import { fetchProductsForSuppliers } from '@/sales/lib/supplierApi';
 import { PHONE_ERROR_MESSAGE, isValidPhoneNumber, sanitizePhoneInput } from '@/sales/lib/phone';
 import { getStoredAuth } from '@/sales/lib/auth';
 
 const activityTypeOptions = ['Meeting', 'Call', 'Email', 'Demo', 'Site Visit', 'Follow-up', 'Support', 'Other'];
+const statusOptions = ['Open', 'Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show', 'Completed', 'Cancelled'];
 const responseOptions = ['Positive', 'Negative', 'Pending', 'No Response'];
 const followUpOptions = ['Required', 'Not Required', 'Completed', 'Pending'];
 const sourceOfLeadOptions = ['Website', 'Manual', 'Referral', 'Campaign', 'LinkedIn', 'Facebook', 'Instagram', 'Email Campaign', 'Cold Call', 'Other'];
 const tagResourceOptions = ['Admin', 'Anaya Patel', 'Rahul Sharma', 'Rhea Shah', 'Maya Nair', 'System'];
+type RequiredFieldName = 'assignedUserId' | 'customerName' | 'activityType' | 'activityDate' | 'product';
+type RequiredFieldErrors = Partial<Record<RequiredFieldName, string>>;
+
+const getTodayInKolkata = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+};
 
 const initialState = {
   customerName: '',
@@ -21,7 +36,7 @@ const initialState = {
   email: '',
   mobileNo: '',
   activityType: '',
-  activityDate: new Date().toISOString().slice(0, 10),
+  activityDate: getTodayInKolkata(),
   followUpDate: '',
   location: '',
   response: 'Pending',
@@ -32,6 +47,7 @@ const initialState = {
   customerRequirements: '',
   customerRemarks: '',
   assignedUser: 'Admin',
+  assignedUserId: '',
   company: '',
   priority: 'Medium',
   campaign: '',
@@ -55,9 +71,22 @@ export default function ActivityFormPage() {
   const isEditMode = Boolean(id);
   const [form, setForm] = useState(createInitialState);
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [employeesError, setEmployeesError] = useState('');
   const [products, setProducts] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+  const [requiredFieldErrors, setRequiredFieldErrors] = useState<RequiredFieldErrors>({});
   const [saving, setSaving] = useState(false);
+  const submittingRef = useRef(false);
+  const customerNameRef = useRef<HTMLInputElement>(null);
+  const assignedUserRef = useRef<HTMLSelectElement>(null);
+  const activityTypeRef = useRef<HTMLSelectElement>(null);
+  const activityDateRef = useRef<HTMLInputElement>(null);
+  const productRef = useRef<HTMLSelectElement>(null);
+  const isCompletedReadOnly = isEditMode
+    && form.status === 'Completed'
+    && getStoredAuth()?.user.role !== 'admin';
   const lead = (location.state as { lead?: any; activity?: any } | null)?.lead ?? null;
   const passedActivity = (location.state as { activity?: any } | null)?.activity ?? null;
 
@@ -75,6 +104,15 @@ export default function ActivityFormPage() {
         setProducts(productOptions);
       } catch {
         setProducts([]);
+      }
+
+      try {
+        const employeeResponse = await fetchEmployees({ limit: 1000, status: 'Active', department: 'Sales' });
+        setEmployees(employeeResponse.data || []);
+        setEmployeesError('');
+      } catch {
+        setEmployees([]);
+        setEmployeesError('Unable to load active Sales employees. Please try again.');
       }
     };
 
@@ -95,6 +133,7 @@ export default function ActivityFormPage() {
         customerRequirements: lead.customerRequirements || '',
         customerRemarks: lead.remarks || '',
         assignedUser: lead.assignedTo || 'Admin',
+        assignedUserId: lead.assignedToId || '',
         campaign: lead.campaignName || '',
         priority: lead.priority || 'Medium',
         leadId: lead.leadId || lead._id || '',
@@ -118,7 +157,7 @@ export default function ActivityFormPage() {
           email: activity.email || '',
           mobileNo: activity.mobileNo || '',
           activityType: activity.activityType || '',
-          activityDate: activity.activityDate || new Date().toISOString().slice(0, 10),
+          activityDate: activity.activityDate || getTodayInKolkata(),
           followUpDate: activity.followUpDate || '',
           location: activity.location || '',
           response: activity.response || 'Pending',
@@ -129,6 +168,7 @@ export default function ActivityFormPage() {
           customerRequirements: activity.customerRequirements || '',
           customerRemarks: activity.customerRemarks || '',
           assignedUser: activity.assignedUser || 'Admin',
+          assignedUserId: activity.assignedUserId || '',
           company: activity.company || '',
           priority: activity.priority || 'Medium',
           campaign: activity.campaign || '',
@@ -136,7 +176,7 @@ export default function ActivityFormPage() {
           leadIdLabel: activity.leadIdLabel || '',
           createdBy: activity.createdBy || 'Admin',
           lastModifiedBy: activity.lastModifiedBy || 'Admin',
-          status: activity.status || 'Open',
+          status: ['Pending', 'Overdue'].includes(activity.status) ? 'Open' : activity.status || 'Open',
         });
       } catch {
         setToast('Unable to load activity details');
@@ -145,6 +185,17 @@ export default function ActivityFormPage() {
 
     void loadActivity();
   }, [id, isEditMode]);
+
+  useEffect(() => {
+    if (form.assignedUserId || !form.assignedUser) return;
+    const assignedEmployee = employees.find((employee) =>
+      (employee.employeeName || employee.fullName || employee.email).toLowerCase()
+        === form.assignedUser.toLowerCase(),
+    );
+    if (assignedEmployee) {
+      setForm((previous) => ({ ...previous, assignedUserId: assignedEmployee._id }));
+    }
+  }, [employees, form.assignedUser, form.assignedUserId]);
 
   useEffect(() => {
     if (passedActivity) {
@@ -163,12 +214,28 @@ export default function ActivityFormPage() {
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
+    if (name === 'assignedUserId') {
+      const employee = employees.find((item) => item._id === value);
+      setForm((previous) => ({
+        ...previous,
+        assignedUserId: value,
+        assignedUser: employee?.employeeName || employee?.fullName || employee?.email || '',
+      }));
+      if (value) setRequiredFieldErrors((previous) => ({ ...previous, assignedUserId: undefined }));
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
+    if (['customerName', 'activityType', 'activityDate', 'product'].includes(name) && value.trim()) {
+      setRequiredFieldErrors((previous) => ({ ...previous, [name]: undefined }));
+    }
   };
 
   const handleCustomerSelect = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const normalizedValue = event.target.value;
-    setForm((prev) => ({ ...prev, customerName: normalizedValue }));
+    setForm((prev) => ({ ...prev, customerName: normalizedValue, company: normalizedValue }));
+    if (normalizedValue.trim()) {
+      setRequiredFieldErrors((previous) => ({ ...previous, customerName: undefined }));
+    }
 
     const customer = customers.find((item) => (item.companyName || item.customerName || '') === normalizedValue);
     if (!customer) return;
@@ -182,34 +249,75 @@ export default function ActivityFormPage() {
       designation: primaryContact?.designation || '',
       email: primaryContact?.email || customer.email || '',
       mobileNo: primaryContact?.phone || customer.phone || '',
-      assignedUser: customer.createdBy || prev.assignedUser,
     }));
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!form.customerName.trim() || !form.activityType.trim() || !form.activityDate || !form.product.trim()) {
-      setToast('Customer / Partner Name, Activity Type, Activity Date, and Product are required.');
+    if (submittingRef.current) return;
+
+    const errors: RequiredFieldErrors = {};
+    if (!form.assignedUserId) errors.assignedUserId = 'Please select an employee.';
+    if (!form.customerName.trim()) errors.customerName = 'Please fill this field.';
+    if (!form.activityType.trim()) errors.activityType = 'Please select an activity type.';
+    if (!form.activityDate) errors.activityDate = 'Please select an activity date.';
+    if (!form.product.trim()) errors.product = 'Please select a product.';
+    setRequiredFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      const firstInvalidField = (Object.keys(errors) as RequiredFieldName[])[0];
+      const fieldRefs = {
+        assignedUserId: assignedUserRef,
+        customerName: customerNameRef,
+        activityType: activityTypeRef,
+        activityDate: activityDateRef,
+        product: productRef,
+      };
+      fieldRefs[firstInvalidField].current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      fieldRefs[firstInvalidField].current?.focus({ preventScroll: true });
+      return;
+    }
+    if (['Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show'].includes(form.status) && !form.followUpDate) {
+      setToast(`${form.status} requires a Follow-Up Date.`);
+      setToastType('error');
+      return;
+    }
+    if (['Rescheduled / No-Show', 'Cancelled'].includes(form.status) && !form.customerRemarks.trim()) {
+      setToast(`${form.status} requires a reason in Remarks.`);
+      setToastType('error');
       return;
     }
     if (form.mobileNo.trim() && !isValidPhoneNumber(form.mobileNo)) {
       setToast(PHONE_ERROR_MESSAGE);
+      setToastType('error');
       return;
     }
 
+    submittingRef.current = true;
     setSaving(true);
+    setToast(null);
     try {
       const { createdBy: _createdBy, ...activityFields } = form;
       const payload = {
         ...activityFields,
         customerName: form.customerName.trim(),
-        company: form.company || form.customerName || '',
+        company: (form.company || form.customerName).trim(),
         contactPerson: form.contactPerson.trim(),
         email: form.email.trim(),
         mobileNo: form.mobileNo.trim(),
+        assignedUserId: form.assignedUserId,
+        assignedUser: form.assignedUser,
         lastModifiedBy: form.lastModifiedBy || 'Admin',
       };
+
+      if (!isEditMode) {
+        const duplicateCheck = await checkActivityCompany(payload.company);
+        if (duplicateCheck.exists) {
+          setToast('This company already exists.');
+          setToastType('error');
+          return;
+        }
+      }
 
       const response = isEditMode && id
         ? await updateActivity(id, payload)
@@ -217,19 +325,23 @@ export default function ActivityFormPage() {
 
       if (!response.success) {
         setToast(response.message || 'Unable to save activity');
+        setToastType('error');
         return;
       }
 
-      setToast('Activity created successfully.');
+      const message = isEditMode ? 'Activity updated successfully.' : 'Activity created successfully.';
       navigate('/sales/activities', {
         state: {
-          message: 'Activity created successfully.',
+          message,
           refresh: true,
+          toastType: 'success',
         },
       });
     } catch (error: any) {
       setToast(error?.response?.data?.message || 'Unable to save activity');
+      setToastType('error');
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   };
@@ -245,17 +357,30 @@ export default function ActivityFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
+        {isCompletedReadOnly ? <p role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">This activity is completed and locked. Only an administrator can reopen or modify it.</p> : null}
+        <fieldset disabled={isCompletedReadOnly} className="contents">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Created By</span>
-            <input value={form.createdBy} readOnly className="w-full rounded-lg border border-[#EFECE5] bg-gray-100 px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Assigned To <span className="required-asterisk">*</span></span>
+            <select ref={assignedUserRef} name="assignedUserId" value={form.assignedUserId} onChange={handleChange} aria-invalid={Boolean(requiredFieldErrors.assignedUserId)} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${requiredFieldErrors.assignedUserId ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-200' : 'border-[#EFECE5]'}`}>
+              <option value="">Select Sales employee</option>
+              {form.assignedUserId && !employees.some((employee) => employee._id === form.assignedUserId)
+                ? <option value={form.assignedUserId}>{form.assignedUser || 'Previously assigned employee'}</option>
+                : null}
+              {employees.map((employee) => (
+                <option key={employee._id} value={employee._id}>{employee.employeeName || employee.fullName || employee.email}</option>
+              ))}
+            </select>
+            {requiredFieldErrors.assignedUserId ? <span role="alert" className="block text-xs text-red-600">{requiredFieldErrors.assignedUserId}</span> : null}
+            {employeesError ? <span role="alert" className="block text-xs text-red-600">{employeesError}</span> : null}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Customer / Partner Name <span className="required-asterisk">*</span></span>
-            <input list="customer-options" value={form.customerName} onChange={handleCustomerSelect} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <input ref={customerNameRef} name="customerName" list="customer-options" value={form.customerName} onChange={handleCustomerSelect} aria-invalid={Boolean(requiredFieldErrors.customerName)} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${requiredFieldErrors.customerName ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-200' : 'border-[#EFECE5]'}`} />
             <datalist id="customer-options">
               {customerOptions.map((name) => <option key={name} value={name} />)}
             </datalist>
+            {requiredFieldErrors.customerName ? <span role="alert" className="block text-xs text-red-600">{requiredFieldErrors.customerName}</span> : null}
           </label>
 
           <label className="space-y-2">
@@ -280,20 +405,29 @@ export default function ActivityFormPage() {
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Activity Type <span className="required-asterisk">*</span></span>
-            <select name="activityType" value={form.activityType} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+            <select ref={activityTypeRef} name="activityType" value={form.activityType} onChange={handleChange} aria-invalid={Boolean(requiredFieldErrors.activityType)} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${requiredFieldErrors.activityType ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-200' : 'border-[#EFECE5]'}`}>
               <option value="">Select</option>
               {activityTypeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
+            {requiredFieldErrors.activityType ? <span role="alert" className="block text-xs text-red-600">{requiredFieldErrors.activityType}</span> : null}
           </label>
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Activity Date <span className="required-asterisk">*</span></span>
-            <input type="date" name="activityDate" value={form.activityDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <input ref={activityDateRef} type="date" name="activityDate" value={form.activityDate} onChange={handleChange} aria-invalid={Boolean(requiredFieldErrors.activityDate)} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${requiredFieldErrors.activityDate ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-200' : 'border-[#EFECE5]'}`} />
+            {requiredFieldErrors.activityDate ? <span role="alert" className="block text-xs text-red-600">{requiredFieldErrors.activityDate}</span> : null}
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Follow-up Date</span>
-            <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Follow-up Date{['Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show'].includes(form.status) ? <span className="required-asterisk"> *</span> : null}</span>
+            <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} required={['Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show'].includes(form.status)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-gray-700">Activity Status <span className="required-asterisk">*</span></span>
+            <select name="status" value={form.status} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+              {statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
           </label>
 
           <label className="space-y-2">
@@ -332,10 +466,11 @@ export default function ActivityFormPage() {
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Product <span className="required-asterisk">*</span></span>
-            <select name="product" value={form.product} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+            <select ref={productRef} name="product" value={form.product} onChange={handleChange} aria-invalid={Boolean(requiredFieldErrors.product)} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${requiredFieldErrors.product ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-200' : 'border-[#EFECE5]'}`}>
               <option value="">Select</option>
               {products.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
+            {requiredFieldErrors.product ? <span role="alert" className="block text-xs text-red-600">{requiredFieldErrors.product}</span> : null}
           </label>
 
           <label className="space-y-2 md:col-span-2 xl:col-span-3">
@@ -344,8 +479,8 @@ export default function ActivityFormPage() {
           </label>
 
           <label className="space-y-2 md:col-span-2 xl:col-span-3">
-            <span className="text-sm font-semibold text-gray-700">Customer Remarks</span>
-            <textarea name="customerRemarks" value={form.customerRemarks} onChange={handleChange} rows={3} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Customer Remarks{['Rescheduled / No-Show', 'Cancelled'].includes(form.status) ? <span className="required-asterisk"> *</span> : null}</span>
+            <textarea name="customerRemarks" value={form.customerRemarks} onChange={handleChange} required={['Rescheduled / No-Show', 'Cancelled'].includes(form.status)} rows={3} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
           </label>
         </div>
 
@@ -357,9 +492,10 @@ export default function ActivityFormPage() {
             <RotateCcw className="h-4 w-4" /> Reset
           </button>
         </div>
+        </fieldset>
       </form>
 
-      {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
     </div>
   );
 }

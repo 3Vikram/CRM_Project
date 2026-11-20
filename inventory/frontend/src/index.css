@@ -352,6 +352,7 @@ aside a {
 .customer-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .customer-form textarea.crm-input,
 .customer-form select.crm-input {
+  box-sizing: border-box;
   display: block;
   width: 100%;
   min-height: 44px;
@@ -360,8 +361,48 @@ aside a {
   border-radius: 0.5rem !important;
   background-color: #ffffff !important;
   color: #0f172a;
+  font-size: 15px !important;
+  line-height: 1.25;
   box-shadow: none !important;
   outline: none !important;
+}
+
+.customer-form select.crm-input {
+  padding-right: 36px;
+  text-align: left;
+  text-align-last: left;
+  appearance: auto;
+}
+
+.customer-form .crm-customer-form label > span:first-child {
+  font-size: 14px !important;
+  line-height: 1.4;
+}
+
+.customer-form .customer-form-steps > button {
+  font-size: 14px !important;
+}
+
+.customer-form .customer-form-steps > button > span:first-child {
+  font-size: 14px !important;
+}
+
+.customer-form .customer-form-steps > button > span:last-child {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+
+.customer-form .crm-customer-form .crm-input {
+  font-size: 15px !important;
+}
+
+.customer-form .crm-customer-form .crm-input::placeholder {
+  font-size: 14px !important;
+}
+
+.customer-form .crm-customer-form .customer-form-section-title {
+  font-size: 18px !important;
+  line-height: 1.35;
 }
 
 .crm-form input.crm-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
@@ -488,6 +529,12 @@ aside a {
   .sales-module-typography select::picker-icon {
     margin-left: auto;
     flex-shrink: 0;
+  }
+
+  .sales-module-typography .customer-form select.crm-input {
+    display: block;
+    appearance: auto;
+    padding-right: 36px;
   }
 
   .sales-module-typography select::picker(select) {

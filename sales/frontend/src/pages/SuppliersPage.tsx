@@ -2,11 +2,12 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Eye, Pencil, Trash2, Building2 } from 'lucide-react'
+import { Search, Plus, Download, Building2 } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteSupplier, fetchSuppliers, type SupplierRecord } from '@/lib/supplierApi'
 import { PermissionGate } from '@/components/PermissionGate'
+import { ActionMenu } from '@/components/ActionMenu'
 import { clearApiCache } from '@/lib/apiCache'
 
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
@@ -203,23 +204,7 @@ export default function SuppliersPage() {
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.emailId}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.contactNumber}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.product}</td>
-                        <td className={`${tableCellClass.replace('py-3','py-4')}`}>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => handleView(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="View">
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
-                            <PermissionGate moduleName="suppliers" action="edit">
-                              <button type="button" onClick={() => handleEdit(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            </PermissionGate>
-                            <PermissionGate moduleName="suppliers" action="delete">
-                              <button type="button" onClick={() => setPendingDeleteSupplier(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </PermissionGate>
-                          </div>
-                        </td>
+                        <td className={`${tableCellClass.replace('py-3','py-4')}`}><ActionMenu moduleName="suppliers" onView={() => handleView(supplier)} onEdit={() => handleEdit(supplier)} onDelete={() => setPendingDeleteSupplier(supplier)} /></td>
                       </tr>
                     ))
                   ) : (

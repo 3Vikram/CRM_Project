@@ -15,6 +15,7 @@ import { Country, State, City } from 'country-state-city'
 import Select from 'react-select'
 import { getStoredAuth } from '@/lib/auth'
 import {
+  checkCustomerDuplicate,
   createCustomer,
   fetchCustomerById,
   updateCustomer,
@@ -77,6 +78,12 @@ interface SelectOption {
 }
 
 type SectionKey = 'company' | 'billing' | 'contact' | 'documents'
+
+const isCustomerApiRecord = (value: unknown): value is CustomerApiRecord =>
+  typeof value === 'object'
+  && value !== null
+  && '_id' in value
+  && typeof value._id === 'string';
 
 const contactTypeOptions = [
   'Accounts',
@@ -203,6 +210,7 @@ export default function CustomerFormPage() {
 
   const [isSaving, setIsSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [duplicateCustomer, setDuplicateCustomer] = useState<CustomerApiRecord | null>(null)
 
   const [countries, setCountries] = useState<LocationOption[]>([])
   const [states, setStates] = useState<LocationOption[]>([])
@@ -617,6 +625,7 @@ export default function CustomerFormPage() {
     const payload: CustomerPayload = {
       companyName: form.companyName,
       customerName: form.companyName,
+      gstNumber: form.gstNumber,
       email: form.billingEmail,
       phone: form.billingContactNumber,
       status: form.status,
@@ -680,6 +689,12 @@ export default function CustomerFormPage() {
           files
         )
       } else {
+        const duplicateCheck = await checkCustomerDuplicate(payload)
+        if (duplicateCheck.duplicate) {
+          setSubmitError('This customer is already created.')
+          setDuplicateCustomer(duplicateCheck.customer)
+          return
+        }
         await createCustomer(
           payload,
           files
@@ -689,6 +704,10 @@ export default function CustomerFormPage() {
       navigate('/sales/customers')
     } catch (error) {
       console.error(error)
+      if (typeof error === 'object' && error !== null && 'duplicateCustomer' in error) {
+        const duplicate = error.duplicateCustomer
+        if (isCustomerApiRecord(duplicate)) setDuplicateCustomer(duplicate)
+      }
 
       setSubmitError(
         error instanceof Error
@@ -727,8 +746,20 @@ export default function CustomerFormPage() {
         className="space-y-4"
       >
         {submitError ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {submitError}
+          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p>{submitError}</p>
+            {duplicateCustomer ? (
+              <div className="mt-3 rounded-md border border-red-100 bg-white p-3 text-xs text-gray-700">
+                <p className="font-semibold">Existing customer information</p>
+                <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                  <div><dt className="inline font-medium">Customer ID: </dt><dd className="inline">{duplicateCustomer.customerId || 'Not available'}</dd></div>
+                  <div><dt className="inline font-medium">Company: </dt><dd className="inline">{duplicateCustomer.companyName || 'Not available'}</dd></div>
+                  <div><dt className="inline font-medium">Contact: </dt><dd className="inline">{duplicateCustomer.contacts?.[0]?.name || duplicateCustomer.customerName || 'Not available'}</dd></div>
+                  <div><dt className="inline font-medium">Email: </dt><dd className="inline">{duplicateCustomer.contacts?.[0]?.email || duplicateCustomer.email || 'Not available'}</dd></div>
+                  <div><dt className="inline font-medium">Phone: </dt><dd className="inline">{duplicateCustomer.contacts?.[0]?.phone || duplicateCustomer.phone || 'Not available'}</dd></div>
+                </dl>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

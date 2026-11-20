@@ -39,6 +39,7 @@ import QuotationFormPage from '@/sales/pages/QuotationFormPage'
 import QuotationEditPage from '@/sales/pages/QuotationEditPage'
 import QuotationViewPage from '@/sales/pages/QuotationViewPage'
 import FunnelPage from '@/sales/pages/FunnelPage'
+import FunnelAnalyticsPage from '@/sales/pages/FunnelAnalyticsPage'
 import FunnelFormPage from '@/sales/pages/FunnelFormPage'
 import OPFPage from '@/sales/pages/OPFPage'
 import OPFGenerateFormPage from '@/sales/pages/OPFGenerateFormPage'
@@ -99,8 +100,9 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
       <Sidebar
         isExpanded={sidebarExpanded}
         isMobileOpen={mobileSidebarOpen}
-        onToggle={() => setSidebarExpanded((expanded) => !expanded)}
         onClose={() => setMobileSidebarOpen(false)}
+        onDesktopHoverEnter={() => setSidebarExpanded(true)}
+        onDesktopHoverLeave={() => setSidebarExpanded(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenuClick={() => {
@@ -402,6 +404,14 @@ export default function App() {
           element={
             <SalesLayout>
               <ActivityFormPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/funnels/analytics"
+          element={
+            <SalesLayout>
+              <FunnelAnalyticsPage />
             </SalesLayout>
           }
         />

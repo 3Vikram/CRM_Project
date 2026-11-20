@@ -30,6 +30,7 @@ import SalesLoginPage from '@/sales/pages/SalesLoginPage'
 import SalesProfilePage from '@/sales/pages/SalesProfilePage'
 import DashboardPage from '@/sales/pages/DashboardPage'
 import CustomersPage from '@/sales/pages/CustomersPage'
+import CustomerAnalyticsPage from '@/sales/pages/CustomerAnalyticsPage'
 import CustomerMappingPage from '@/sales/pages/CustomerMappingPage'
 import CustomerFormPage from '@/sales/pages/CustomerFormPage'
 import ContactsPage from '@/sales/pages/ContactsPage'
@@ -37,6 +38,7 @@ import ContactFormPage from '@/sales/pages/ContactFormPage'
 import SuppliersPage from '@/sales/pages/SuppliersPage'
 import SupplierFormPage from '@/sales/pages/SupplierFormPage'
 import LeadsPage from '@/sales/pages/LeadsPage'
+import LeadAnalyticsPage from '@/sales/pages/LeadAnalyticsPage'
 import LeadFormPage from '@/sales/pages/LeadFormPage'
 import LeadDetailsPage from '@/sales/pages/LeadDetailsPage'
 import MailCampaignPage from '@/sales/pages/MailCampaignPage'
@@ -52,6 +54,7 @@ import SalesPlaceholderPage from '@/sales/pages/PlaceholderPage'
 import QuotationDashboardPage from '@/sales/pages/QuotationDashboardPage'
 import QuotationTypeSelectPage from '@/sales/pages/QuotationTypeSelectPage'
 import ActivityPage from '@/sales/pages/ActivityPage'
+import ActivityAnalyticsPage from '@/sales/pages/ActivityAnalyticsPage'
 import ActivityFormPage from '@/sales/pages/ActivityFormPage'
 import CompanyProfilesPage from '@/sales/pages/CompanyProfilesPage'
 import CompanyProfileFormPage from '@/sales/pages/CompanyProfileFormPage'
@@ -59,6 +62,7 @@ import QuotationFormPage from '@/sales/pages/QuotationFormPage'
 import QuotationEditPage from '@/sales/pages/QuotationEditPage'
 import QuotationViewPage from '@/sales/pages/QuotationViewPage'
 import FunnelPage from '@/sales/pages/FunnelPage'
+import FunnelAnalyticsPage from '@/sales/pages/FunnelAnalyticsPage'
 import FunnelFormPage from '@/sales/pages/FunnelFormPage'
 import OPFPage from '@/sales/pages/OPFPage'
 import OPFGenerateFormPage from '@/sales/pages/OPFGenerateFormPage'
@@ -141,14 +145,14 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="sales-module-typography flex h-screen overflow-hidden bg-[#F8F7F3]">
-      <div className="flex shrink-0 self-stretch">
-        <Sidebar
-          isExpanded={sidebarExpanded}
-          isMobileOpen={mobileSidebarOpen}
-          onToggle={() => setSidebarExpanded((expanded) => !expanded)}
-          onClose={() => setMobileSidebarOpen(false)}
-        />
-      </div>
+      <Sidebar
+        isExpanded={sidebarExpanded}
+        isMobileOpen={mobileSidebarOpen}
+        onToggle={() => setSidebarExpanded((expanded) => !expanded)}
+        onClose={() => setMobileSidebarOpen(false)}
+        onDesktopHoverEnter={() => setSidebarExpanded(true)}
+        onDesktopHoverLeave={() => setSidebarExpanded(false)}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenuClick={() => {
           if (window.matchMedia('(max-width: 767px)').matches) {
@@ -175,6 +179,7 @@ function SalesRoutes() {
     ['/sales/profile', page(<SalesProfilePage />)],
     ['/sales/dashboard', typeof window !== 'undefined' && Boolean(getStoredAuth()?.token) ? page(<DashboardPage />) : <Navigate to="/sales" replace />],
     ['/sales/customers', page(<CustomersPage />)],
+    ['/sales/customers/analytics', page(<CustomerAnalyticsPage />)],
     ['/sales/customer-mapping', page(<CustomerMappingPage />)],
     ['/sales/contacts', page(<ContactsPage />)],
     ['/sales/contacts/new', page(<ContactFormPage />)],
@@ -186,6 +191,7 @@ function SalesRoutes() {
     ['/customers/new', page(<CustomerFormPage />)],
     ['/customers/edit/:id', page(<CustomerFormPage />)],
     ['/sales/leads', page(<LeadsPage />)],
+    ['/sales/leads/analytics', page(<LeadAnalyticsPage />)],
     ['/sales/leads/new', page(<LeadFormPage />)],
     ['/sales/leads/edit/:id', page(<LeadFormPage />)],
     ['/sales/leads/:id', page(<LeadDetailsPage />)],
@@ -201,6 +207,7 @@ function SalesRoutes() {
     ['/sales/dc-tracking', page(<SalesDCTrackingPage />)],
     ['/sales/bill-sale', page(<BillSalePage />)],
     ['/sales/calendar', page(<CalendarPage />)],
+    ['/sales/activities/analytics', page(<ActivityAnalyticsPage />)],
     ['/sales/activities', page(<ActivityPage />)],
     ['/sales/opf', page(<OPFPage />)],
     ['/sales/opf/new', page(<OPFGenerateFormPage />)],
@@ -209,6 +216,7 @@ function SalesRoutes() {
     ['/sales/renewals', page(<RenewalsPage />)],
     ['/sales/activities/new', page(<ActivityFormPage />)],
     ['/sales/activities/edit/:id', page(<ActivityFormPage />)],
+    ['/sales/funnels/analytics', page(<FunnelAnalyticsPage />)],
     ['/sales/funnels', page(<FunnelPage />)],
     ['/sales/funnels/new', page(<FunnelFormPage />)],
     ['/sales/funnels/edit/:id', page(<FunnelFormPage />)],

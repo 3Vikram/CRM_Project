@@ -15,6 +15,18 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     proxy: {
+      '/uploads/products': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+      },
+      '/uploads/documents': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: true,
+      },
       '/api/inventory': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,

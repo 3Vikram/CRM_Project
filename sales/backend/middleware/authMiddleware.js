@@ -101,6 +101,12 @@ const requireFullAccess = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Administrator or manager access is required.' });
 };
 
+const requireReportAccess = (req, res, next) => {
+  const { hasReportFullAccess } = require('../utils/accessScope');
+  if (hasReportFullAccess(req.user) || getPermissionValue(req.user?.permissions, 'reports', 'view')) return next();
+  return res.status(403).json({ success: false, message: 'You do not have permission to view Sales reports.' });
+};
+
 const requireLeadRecordPermission = (action, resource = 'lead') => async (req, res, next) => {
   if (req.user?.role === 'admin') return next();
 
@@ -142,4 +148,4 @@ const requireLeadRecordPermission = (action, resource = 'lead') => async (req, r
   }
 };
 
-module.exports = { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireAdmin, requireFullAccess, requireLeadRecordPermission, getPermissionValue, JWT_SECRET };
+module.exports = { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireAdmin, requireFullAccess, requireReportAccess, requireLeadRecordPermission, getPermissionValue, JWT_SECRET };

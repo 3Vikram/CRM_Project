@@ -17,6 +17,7 @@ export interface ActivityRecord {
   customerRequirements: string;
   customerRemarks: string;
   assignedUser: string;
+  assignedUserId?: string;
   leadIdLabel: string;
   company: string;
   priority: string;
@@ -31,6 +32,7 @@ export interface ActivityRecord {
   followUpDate: string;
   reminder: string;
   status: string;
+  effectiveStatus?: string;
   createdBy: string;
   lastModifiedBy: string;
   createdAt?: string;
@@ -71,21 +73,37 @@ export async function fetchActivities(params: {
 }
 
 export async function createActivity(payload: Partial<ActivityRecord>) {
-  const response = await axios.post(`${API_BASE_URL}/activities`, payload);
+  const response = await axios.post(`${API_BASE_URL}/activities`, payload, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
+export async function checkActivityCompany(companyName: string) {
+  const response = await axios.get(`${API_BASE_URL}/activities/check-company`, {
+    params: { companyName },
+    headers: getAuthHeaders(),
+  });
+  return response.data as { success: boolean; exists: boolean };
+}
+
 export async function updateActivity(id: string, payload: Partial<ActivityRecord>) {
-  const response = await axios.put(`${API_BASE_URL}/activities/${id}`, payload);
+  const response = await axios.put(`${API_BASE_URL}/activities/${id}`, payload, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function deleteActivity(id: string) {
-  const response = await axios.delete(`${API_BASE_URL}/activities/${id}`);
+  const response = await axios.delete(`${API_BASE_URL}/activities/${id}`, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }
 
 export async function fetchActivityById(id: string) {
-  const response = await axios.get(`${API_BASE_URL}/activities/${id}`);
+  const response = await axios.get(`${API_BASE_URL}/activities/${id}`, {
+    headers: getAuthHeaders(),
+  });
   return response.data;
 }

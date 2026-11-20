@@ -8,6 +8,7 @@ interface TopBarProps {
   userName?: string
   userRole?: string
   userInitials?: string
+  onMenuClick?: () => void
 }
 
 export function TopBar({

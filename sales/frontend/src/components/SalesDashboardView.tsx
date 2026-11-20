@@ -114,6 +114,16 @@ export default function SalesDashboardView({ fetchDashboardData }: {
     void loadDashboard()
   }, [period])
 
+  useEffect(() => {
+    const refresh = () => { void loadDashboard(true) }
+    window.addEventListener('sales:lead-converted', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.removeEventListener('sales:lead-converted', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [])
+
   const followUpCounts = data?.followUps.counts
   const filteredFollowUps = useMemo(() => {
     const records = data?.followUps.records || []

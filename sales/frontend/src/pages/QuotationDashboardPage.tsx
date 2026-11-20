@@ -4,17 +4,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Download,
-  Eye,
-  Pencil,
   Plus,
   Search,
-  Trash2,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
 import { Toast } from '@/components/toast'
 import { deleteLead, fetchLeads, type LeadRecord } from '@/lib/leadApi'
 import { PermissionGate } from '@/components/PermissionGate'
+import { ActionMenu } from '@/components/ActionMenu'
 
 const entriesOptions = [10, 25, 50, 100]
 
@@ -61,6 +59,7 @@ export default function QuotationDashboardPage() {
   const [entriesPerPage, setEntriesPerPage] = useState(10)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(true)
 
   useEffect(() => {
     const loadQuotations = async () => {
@@ -172,7 +171,7 @@ export default function QuotationDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <button
             type="button"
@@ -183,12 +182,28 @@ export default function QuotationDashboardPage() {
           </button>
           <h1 className="crm-page-heading">{quotationType === 'sold' ? 'Sold Quotation Dashboard' : 'Rent Quotation Dashboard'}</h1>
         </div>
-        <PermissionGate moduleName="quotations" action="create">
-          <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
-        </PermissionGate>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <div className="relative w-full sm:w-48">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }} placeholder="Search" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
+          </div>
+          <label className="flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-[#EFECE5] bg-white px-3 text-sm text-gray-700">
+            <span>Show</span>
+            <select value={entriesPerPage} onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }} className="bg-transparent outline-none">
+              {entriesOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} className="h-10 rounded-lg border border-[#EFECE5] bg-white px-3 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">Filters</button>
+          <button type="button" onClick={downloadReport} className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-3 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
+            <Download className="h-4 w-4" /> Download Report
+          </button>
+          <PermissionGate moduleName="quotations" action="create">
+            <button onClick={() => navigate(`/sales/quotations/new/${quotationType}`)} className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg bg-[#111827] px-4 text-sm font-medium text-white transition hover:bg-[#1E293B]"><Plus className="h-4 w-4" /> ADD NEW</button>
+          </PermissionGate>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {filtersOpen ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
           <select
@@ -244,43 +259,7 @@ export default function QuotationDashboardPage() {
             ))}
           </select>
         </label>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2 text-sm text-gray-700">
-          <span>Show</span>
-          <select
-            value={entriesPerPage}
-            onChange={(event) => { setEntriesPerPage(Number(event.target.value)); setPage(1) }}
-            className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-          >
-            {entriesOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <span>entries</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={downloadReport}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
-          >
-            <Download className="h-4 w-4" /> Download Report
-          </button>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => { setSearchQuery(event.target.value); setPage(1) }}
-              placeholder="Search"
-              className="w-72 rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
-            />
-          </div>
-        </div>
-      </div>
+      </div> : null}
 
       <div className="overflow-x-auto rounded-lg border border-[#EFECE5] bg-white shadow-sm">
         <table className="min-w-full text-sm">
@@ -323,15 +302,7 @@ export default function QuotationDashboardPage() {
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(quote.createdDate)}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{formatDate(quote.quotationDetails?.expectedClosure)}</td>
                   <td className="border-r border-[#D1D5DB] px-4 py-3 text-gray-700">{quote.quotationDetails?.delivery || '-'}</td>
-                  <td className="px-4 py-3 text-gray-700">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleOpenQuotationPdf(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Open quotation PDF in a new tab">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <PermissionGate moduleName="quotations" action="edit"><button onClick={() => navigate(`/sales/quotations/edit/${quote._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /></button></PermissionGate>
-                      <PermissionGate moduleName="quotations" action="delete"><button onClick={() => handleDelete(quote._id)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]"><Trash2 className="h-4 w-4" /></button></PermissionGate>
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 text-gray-700"><ActionMenu moduleName="quotations" onView={() => handleOpenQuotationPdf(quote._id)} onEdit={() => navigate(`/sales/quotations/edit/${quote._id}`)} onDelete={() => handleDelete(quote._id)} /></td>
                 </tr>
               ))
             )}

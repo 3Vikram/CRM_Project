@@ -1,6 +1,5 @@
 'use client'
 
-import { createPortal } from 'react-dom'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal } from '@/sales/components/modal'
@@ -8,6 +7,7 @@ import { Toast } from '@/sales/components/toast'
 import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 import { deleteCustomer, fetchCustomerSummary, fetchCustomers, type CustomerApiRecord, type CustomerSummary } from '@/sales/lib/customerApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
 import { toExcelDate } from '@/sales/lib/excelFormat'
 import {
@@ -24,13 +24,8 @@ import {
   Hash,
   Calendar,
   Activity,
-  Pencil,
-  Trash2,
-  MoreVertical,
   BarChart3,
   Users,
-  UserCheck,
-  UserX,
   CalendarDays,
   Funnel,
 } from 'lucide-react'
@@ -79,10 +74,7 @@ export default function CustomersPage() {
   const [pendingDeleteCustomer, setPendingDeleteCustomer] = useState<Customer | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false)
-  const [activeMenu, setActiveMenu] = useState<{ customer: Customer; top: number; left: number; width: number } | null>(null)
   const searchTimeoutRef = useRef<number | null>(null)
-  const actionMenuRef = useRef<HTMLDivElement | null>(null)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
@@ -176,17 +168,6 @@ export default function CustomersPage() {
 
   useEffect(() => { void loadSummary() }, [loadSummary])
 
-  useEffect(() => {
-    if (!activeMenu) return
-    const closeWhenOutside = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest('[data-customer-action-menu]')) {
-        setActiveMenu(null)
-      }
-    }
-    document.addEventListener('pointerdown', closeWhenOutside)
-    return () => document.removeEventListener('pointerdown', closeWhenOutside)
-  }, [activeMenu])
-
   const createdByOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.createdBy).filter((value): value is string => Boolean(value)))).sort(), [customers])
   const accountTypeOptions = useMemo(() => Array.from(new Set(customers.map((customer) => customer.accountType).filter((value): value is string => Boolean(value)))).sort(), [customers])
   const customerFilterFields = [
@@ -218,29 +199,7 @@ export default function CustomersPage() {
 
   const handleAddNew = useCallback(() => navigate('/customers/new'), [navigate])
   const handleEdit = useCallback((customer: Customer) => navigate(`/customers/edit/${customer.id}`), [navigate])
-  const handleActionMenu = useCallback((customer: Customer, button: HTMLButtonElement) => {
-    if (activeMenu?.customer.id === customer.id) {
-      setActiveMenu(null)
-      return
-    }
-    const bounds = button.getBoundingClientRect()
-    const menuWidth = Math.min(205, window.innerWidth - 16)
-    const menuHeight = 150
-    const gap = 6
-    const spaceRight = window.innerWidth - bounds.right
-    const left = spaceRight >= menuWidth + gap
-      ? bounds.right + gap
-      : Math.max(8, bounds.left - menuWidth - gap)
-    const top = Math.max(8, Math.min(bounds.top, window.innerHeight - menuHeight - 8))
-    setActiveMenu({
-      customer,
-      top,
-      left: Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8)),
-      width: menuWidth,
-    })
-  }, [activeMenu])
-  const handleConvert = useCallback((action: 'activity' | 'funnel' | 'quotation', customer: Customer) => {
-    setActiveMenu(null)
+  const handleConvert = useCallback((action: 'funnel' | 'quotation', customer: Customer) => {
     const formCustomer = {
       _id: customer.id,
       companyName: customer.companyName,
@@ -251,9 +210,7 @@ export default function CustomersPage() {
       contacts: customer.contacts,
       industry: customer.industry,
     }
-    if (action === 'activity') {
-      navigate('/sales/activities/new', { state: { lead: formCustomer } })
-    } else if (action === 'funnel') {
+    if (action === 'funnel') {
       navigate('/sales/funnels/new', { state: { customer: formCustomer } })
     } else {
       navigate('/sales/quotations/new/rent', { state: { customer: formCustomer } })
@@ -313,13 +270,17 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="crm-page-heading">Customers</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage customer accounts and contacts</p>
+          {/* <p className="mt-1 text-sm text-gray-500">Manage customer accounts and contacts</p> */}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setIsAnalyticsOpen((value) => !value)} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <label className="relative w-full sm:w-52">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search customers..." className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100" />
+          </label>
+          <button type="button" onClick={() => navigate('/sales/customers/analytics')} className="inline-flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
             <BarChart3 className="h-4 w-4 text-blue-600" /> Analytics
           </button>
           <PageFilters fields={customerFilterFields} values={customerFilterValues} onApply={applyCustomerFilters} onClear={() => applyCustomerFilters({})} />
@@ -334,52 +295,27 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Customer summary">
+      <section
+        className="grid w-full grid-cols-2 gap-3"
+        style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
+        aria-label="Customer summary"
+      >
         {[
           { label: 'Total Customers', value: summary.total, icon: Users, tone: 'bg-blue-50 text-blue-600' },
-          { label: 'Active Customers', value: summary.active, icon: UserCheck, tone: 'bg-emerald-50 text-emerald-600' },
-          { label: 'Inactive Customers', value: summary.inactive, icon: UserX, tone: 'bg-pink-50 text-pink-600' },
           { label: 'New Customers (This Month)', value: summary.newThisMonth, icon: CalendarDays, tone: 'bg-orange-50 text-orange-600' },
         ].map(({ label, value, icon: Icon, tone }) => (
-          <article key={label} className="sales-summary-card flex items-center gap-3">
-            <span className={`sales-summary-card-icon ${tone}`}><Icon /></span>
-            <div className="min-w-0">
-              <p className="sales-summary-card-value">{value}</p>
-              <p className="sales-summary-card-label mt-0.5">{label}</p>
+          <article key={label} className="relative flex w-full min-h-20 items-center gap-3 overflow-hidden rounded-xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition-shadow hover:shadow-md">
+            <span aria-hidden="true" className={`absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l ${label.startsWith('New') ? 'from-orange-500/10' : 'from-blue-500/10'} to-transparent`} />
+            <span className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tone}`}><Icon className="h-5 w-5" /></span>
+            <div className="relative min-w-0">
+              <p className="text-2xl font-bold tracking-tight text-slate-900">{value.toLocaleString()}</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
             </div>
           </article>
         ))}
       </section>
 
-      {isAnalyticsOpen ? (
-        <div className="flex flex-wrap items-center gap-5 rounded-xl border border-blue-100 bg-blue-50/60 px-5 py-4 text-sm text-slate-700">
-          <span className="font-semibold text-slate-900">Customer overview</span>
-          <span>Active share: {summary.total ? Math.round((summary.active / summary.total) * 100) : 0}%</span>
-          <span>Inactive: {summary.inactive}</span>
-          <span>Added this month: {summary.newThisMonth}</span>
-        </div>
-      ) : null}
-
       <section className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
-          <div className="flex flex-wrap items-center gap-1">
-            {[
-              ['all', 'All Customers'],
-              ['Active', 'Active'],
-              ['Inactive', 'Inactive'],
-              ['Cancelled', 'Cancelled'],
-            ].map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setStatusFilter(value)} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${statusFilter === value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search customers..." className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100" />
-          </label>
-        </div>
-
         <div className="overflow-x-auto">
           <table className="sales-data-table w-full min-w-[1080px] border-collapse">
             <thead>
@@ -394,7 +330,14 @@ export default function CustomersPage() {
                 Array.from({ length: 5 }).map((_, index) => <tr key={index}><td colSpan={9} className="px-6 py-4"><div className="h-8 animate-pulse rounded bg-slate-100" /></td></tr>)
               ) : customers.length > 0 ? (
                 customers.map((customer) => (
-                  <CustomerTableRow key={customer.id} customer={customer} onView={handleView} onActionMenu={handleActionMenu} />
+                  <CustomerTableRow
+                    key={customer.id}
+                    customer={customer}
+                    onView={handleView}
+                    onEdit={handleEdit}
+                    onDelete={setPendingDeleteCustomer}
+                    onConvert={handleConvert}
+                  />
                 ))
               ) : (
                 <tr><td colSpan={9} className="px-6 py-16 text-center text-sm text-slate-500">
@@ -419,21 +362,6 @@ export default function CustomersPage() {
           </div>
         </div>
       </section>
-
-      {activeMenu ? createPortal(
-        <div ref={actionMenuRef} data-customer-action-menu role="menu" className="fixed whitespace-nowrap rounded-lg border border-slate-100 bg-white py-1 shadow-lg" style={{ top: activeMenu.top, left: activeMenu.left, width: activeMenu.width }}>
-          <PermissionGate moduleName="customers" action="edit">
-            <button type="button" role="menuitem" onClick={() => { const customer = activeMenu.customer; setActiveMenu(null); handleEdit(customer) }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-4 text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5 shrink-0 text-emerald-600" />Edit</button>
-          </PermissionGate>
-          <PermissionGate moduleName="customers" action="delete">
-            <button type="button" role="menuitem" onClick={() => { setPendingDeleteCustomer(activeMenu.customer); setActiveMenu(null) }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-4 text-slate-700 hover:bg-slate-50"><Trash2 className="h-3.5 w-3.5 shrink-0 text-red-500" />Delete</button>
-          </PermissionGate>
-          <button type="button" role="menuitem" onClick={() => handleConvert('activity', activeMenu.customer)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-4 text-slate-700 hover:bg-slate-50"><Activity className="h-3.5 w-3.5 shrink-0 text-slate-500" />Convert to Activity</button>
-          <button type="button" role="menuitem" onClick={() => handleConvert('funnel', activeMenu.customer)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-4 text-slate-700 hover:bg-slate-50"><Funnel className="h-3.5 w-3.5 shrink-0 text-slate-500" />Convert to Funnel</button>
-          <button type="button" role="menuitem" onClick={() => handleConvert('quotation', activeMenu.customer)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-4 text-slate-700 hover:bg-slate-50"><FileText className="h-3.5 w-3.5 shrink-0 text-slate-500" />Convert to Quotation</button>
-        </div>,
-        document.body,
-      ) : null}
 
       <Modal isOpen={!!selectedCustomer} onClose={handleCloseModal} title={selectedCustomer?.companyName || ''}>
         {selectedCustomer && (
@@ -523,11 +451,15 @@ function mapApiCustomer(customer: CustomerApiRecord): Customer {
 const CustomerTableRow = memo(function CustomerTableRow({
   customer,
   onView,
-  onActionMenu,
+  onEdit,
+  onDelete,
+  onConvert,
 }: {
   customer: Customer
   onView: (customer: Customer) => void
-  onActionMenu: (customer: Customer, button: HTMLButtonElement) => void
+  onEdit: (customer: Customer) => void
+  onDelete: (customer: Customer) => void
+  onConvert: (action: 'funnel' | 'quotation', customer: Customer) => void
 }) {
   const approvalStatus = customer.approvalStatus.trim()
   const approvalTone = approvalStatus.toLowerCase() === 'approved'
@@ -544,10 +476,15 @@ const CustomerTableRow = memo(function CustomerTableRow({
 
   return (
     <tr className="border-b border-slate-100 bg-white transition-colors hover:bg-slate-50/70">
-      <td className={`${tableCellClass} text-center`} data-customer-action-menu>
-        <button type="button" onClick={(event) => onActionMenu(customer, event.currentTarget)} className="inline-flex rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" aria-label={`Actions for ${customer.companyName}`} aria-haspopup="menu">
-          <MoreVertical className="h-5 w-5" />
-        </button>
+      <td className={`${tableCellClass} text-center`}>
+        <ActionMenu moduleName="customers" onView={() => onView(customer)} onEdit={() => onEdit(customer)} onDelete={() => onDelete(customer)}>
+          {(closeMenu) => (
+            <>
+              <button type="button" role="menuitem" onClick={() => { closeMenu(); onConvert('funnel', customer) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Funnel className="h-4 w-4" />Move to Funnel</button>
+              <button type="button" role="menuitem" onClick={() => { closeMenu(); onConvert('quotation', customer) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><FileText className="h-4 w-4" />Generate Quotation</button>
+            </>
+          )}
+        </ActionMenu>
       </td>
       <td className={`${tableCellClass} whitespace-nowrap text-sm font-semibold`}>
         <button type="button" onClick={() => onView(customer)} className="text-blue-700 hover:underline">{customer.customerId || '—'}</button>

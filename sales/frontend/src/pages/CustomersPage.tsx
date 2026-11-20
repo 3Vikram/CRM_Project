@@ -6,6 +6,7 @@ import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteCustomer, fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi'
 import { PermissionGate } from '@/components/PermissionGate'
+import { ActionMenu } from '@/components/ActionMenu'
 import {
   Search,
   Plus,
@@ -20,9 +21,6 @@ import {
   Hash,
   Calendar,
   Activity,
-  Eye,
-  Pencil,
-  Trash2,
 } from 'lucide-react'
 
 interface Customer {
@@ -209,7 +207,7 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="crm-page-heading">
             Customer List
@@ -218,33 +216,33 @@ export default function CustomersPage() {
             {/* Manage customer accounts and contacts in one place. */}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <PermissionGate moduleName="customers" action="create">
-            <button
-              onClick={handleAddNew}
-              className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]"
-            >
-              <Plus className="h-4 w-4" />
-              Add New
-            </button>
-          </PermissionGate>
-          <button
-            onClick={handleDownloadReport}
-            className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
-          >
-            <Download className="h-4 w-4" />
-            Download Report
-          </button>
-          <div className="relative w-72">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <div className="relative w-full sm:w-56">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search"
-              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
             />
           </div>
+          <button
+            onClick={handleDownloadReport}
+            className="flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]"
+          >
+            <Download className="h-4 w-4" />
+            Download Report
+          </button>
+          <PermissionGate moduleName="customers" action="create">
+            <button
+              onClick={handleAddNew}
+              className="flex h-10 items-center gap-2 whitespace-nowrap rounded-lg bg-[#111827] px-4 text-sm font-medium text-white transition hover:bg-[#1E293B]"
+            >
+              <Plus className="h-4 w-4" />
+              Add New
+            </button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -499,21 +497,7 @@ const CustomerTableRow = memo(function CustomerTableRow({
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.phone}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{customer.accountType}</td>
       <td className={`${tableCellClass.replace('py-3','py-4')}`}>
-        <div className="flex gap-2">
-          <button onClick={() => onView(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="View">
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-          <PermissionGate moduleName="customers" action="edit">
-            <button onClick={() => onEdit(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </PermissionGate>
-          <PermissionGate moduleName="customers" action="delete">
-            <button onClick={() => onDelete(customer)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </PermissionGate>
-        </div>
+        <ActionMenu moduleName="customers" onView={() => onView(customer)} onEdit={() => onEdit(customer)} onDelete={() => onDelete(customer)} />
       </td>
     </tr>
   )

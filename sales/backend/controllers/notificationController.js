@@ -3,6 +3,12 @@ const Customer = require('../models/Customer');
 const Lead = require('../models/Lead');
 const OPF = require('../models/OPF');
 const { hasFullAccess, ownerScope } = require('../utils/accessScope');
+const {
+  addDateDays,
+  getDateOnly,
+  getEffectiveStatus,
+  getTodayInKolkata,
+} = require('../utils/activityStatus');
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const localDateString = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -105,22 +111,36 @@ exports.getNotifications = async (req, res) => {
       mine: true,
     })));
 
+    const activityToday = getTodayInKolkata(now);
+    const upcomingThrough = addDateDays(activityToday, 7);
     const activityFollowUps = await safeSource('activity follow-ups', () => Activity.find({
-      $and: [ownerScope(req), {
-        status: { $ne: 'Completed' },
-        followUpDate: { $nin: ['', null], $lte: todayStr },
-      }],
-    }).select('_id customerName company contactPerson followUpDate createdBy').sort({ followUpDate: -1 }).limit(20).lean());
-    items.push(...activityFollowUps.map((activity) => ({
-      id: `followup-activity:${activity._id}:${activity.followUpDate}`,
-      category: 'Follow-up',
-      module: 'Activities',
-      title: activity.followUpDate < todayStr ? 'Follow-up overdue' : 'Follow-up due today',
-      description: `${activity.customerName || activity.company || ''} · ${activity.contactPerson || ''} · ${activity.followUpDate}`,
-      createdAt: (parseDate(activity.followUpDate) || now).toISOString(),
-      link: '/sales/activities',
-      mine: sameName(activity.createdBy, name),
-    })));
+      $and: [
+        ownerScope(req),
+        { followUpDate: { $nin: ['', null], $lte: `${upcomingThrough}\uffff` } },
+        { status: { $nin: ['Completed', 'Cancelled'] } },
+      ],
+    }).select('_id status activityDate customerName company contactPerson followUpDate createdBy').sort({ followUpDate: -1 }).limit(500).lean());
+    items.push(...activityFollowUps.flatMap((activity) => {
+      const followUpDate = getDateOnly(activity.followUpDate);
+      if (!followUpDate) return [];
+      const effectiveStatus = getEffectiveStatus(activity, activityToday);
+      const isOverdue = effectiveStatus.startsWith('Overdue - ');
+      const isDueToday = effectiveStatus === 'Follow-Up Today';
+      const isUpcoming = followUpDate > activityToday && followUpDate <= upcomingThrough;
+      if (!isOverdue && !isDueToday && !isUpcoming) return [];
+
+      const reminderDate = parseDate(activity.followUpDate) || new Date(`${followUpDate}T12:00:00.000Z`);
+      return [{
+        id: `followup-activity:${activity._id}:${followUpDate}`,
+        category: 'Follow-up',
+        module: 'Activities',
+        title: isOverdue ? 'Follow-up overdue' : isDueToday ? 'Follow-up due today' : 'Upcoming follow-up',
+        description: `${activity.customerName || activity.company || ''} · ${activity.contactPerson || ''} · ${followUpDate}`,
+        createdAt: reminderDate.toISOString(),
+        link: '/sales/activities',
+        mine: sameName(activity.createdBy, name),
+      }];
+    }));
 
     const leadFollowUps = await safeSource('lead follow-ups', () => Lead.find({
       $and: [

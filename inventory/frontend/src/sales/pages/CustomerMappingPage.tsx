@@ -13,6 +13,7 @@ import {
   type MappingEmployee,
 } from '@/sales/lib/customerMappingApi'
 import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 
 const tableCellClass = 'px-4 py-3 border-r border-[#D1D5DB]'
 const PAGE_SIZES = [10, 25, 50, 100]
@@ -111,24 +112,13 @@ export default function CustomerMappingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="crm-page-heading">Customer Mapping</h1>
         {/* <p className="mt-1 text-sm text-[#6B6657]">Assign customers to employees. Assigned employees can work on these customers.</p> */}
-      </div>
-      {message && (
-        <div className={`flex items-center justify-between rounded-lg px-4 py-3 text-sm ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-          <span>{message.text}</span>
-          <button type="button" onClick={() => setMessage(null)} aria-label="Dismiss message"><X className="h-4 w-4" /></button>
-        </div>
-      )}
-      <div className="rounded-xl border border-[#EFECE5] bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="min-w-[220px] flex-1 text-sm font-medium text-gray-700">
-            Search customer
-            <div className="relative mt-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer" className="w-full rounded-lg border border-[#EFECE5] py-2 pl-9 pr-3 text-sm outline-none focus:border-[#111827]" />
-            </div>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <label className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer" className="w-full rounded-lg border border-[#EFECE5] py-2 pl-9 pr-3 text-sm outline-none focus:border-[#111827]" aria-label="Search customer" />
           </label>
           <PageFilters
             fields={mappingFilterFields}
@@ -143,24 +133,31 @@ export default function CustomerMappingPage() {
             }}
           />
         </div>
+      </div>
+      {message && (
+        <div className={`flex items-center justify-between rounded-lg px-4 py-3 text-sm ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+          <span>{message.text}</span>
+          <button type="button" onClick={() => setMessage(null)} aria-label="Dismiss message"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+      <div className="rounded-xl border border-[#EFECE5] bg-white p-5 shadow-sm">
         {selectedIds.length > 0 && <button type="button" onClick={() => openAssignModal(selectedIds)} className="mt-5 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">Assign selected ({selectedIds.length})</button>}
         <div className="mt-5 overflow-x-auto rounded-lg border border-[#EFECE5]">
           <table className="sales-data-table w-full min-w-[850px]">
             <thead><tr className="border-b border-[#EFECE5] bg-[#F2EFE8]">
               <th className={tableCellClass}><input type="checkbox" checked={allCurrentSelected} onChange={() => setSelectedIds(allCurrentSelected ? selectedIds.filter((id) => !customers.some((customer) => customer._id === id)) : Array.from(new Set([...selectedIds, ...customers.map((customer) => customer._id)])))} aria-label="Select all customers on page" /></th>
-              {['SL No.', 'Customer ID', 'Customer Name', 'Account Type', 'Assigned To', 'Action'].map((heading) => <th key={heading} className={`${tableCellClass} text-left text-xs font-semibold uppercase tracking-wider text-gray-600`}>{heading}</th>)}
+              {['Customer ID', 'Customer Name', 'Account Type', 'Assigned To', 'Action'].map((heading) => <th key={heading} className={`${tableCellClass} text-left text-xs font-semibold uppercase tracking-wider text-gray-600`}>{heading}</th>)}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={7} className="px-6 py-16 text-center text-gray-500">Loading...</td></tr> : customers.length === 0 ? <tr><td colSpan={7} className="px-6 py-16 text-center text-gray-500">No customers found</td></tr> : customers.map((customer, index) => {
+              {loading ? <tr><td colSpan={6} className="px-6 py-16 text-center text-gray-500">Loading...</td></tr> : customers.length === 0 ? <tr><td colSpan={6} className="px-6 py-16 text-center text-gray-500">No customers found</td></tr> : customers.map((customer) => {
                 const assigned = customer.assignedEmployees || []
                 return <tr key={customer._id} className="border-b border-[#EFECE5] text-sm text-gray-700">
                   <td className={tableCellClass}><input type="checkbox" checked={selectedIds.includes(customer._id)} onChange={() => toggleCustomer(customer._id)} aria-label={`Select ${customer.companyName || customer.customerName || 'customer'}`} /></td>
-                  <td className={tableCellClass}>{(page - 1) * limit + index + 1}</td>
                   <td className={tableCellClass}>{customer.customerId || '—'}</td>
                   <td className={tableCellClass}>{customer.companyName || customer.customerName || '—'}</td>
                   <td className={tableCellClass}>{customer.accountType || '—'}</td>
                   <td className={tableCellClass}>{assigned.length ? assigned.map((employee) => employee.employeeName).join(', ') : <span className="text-gray-400">Unassigned</span>}</td>
-                  <td className={tableCellClass}><button type="button" onClick={() => openAssignModal([customer._id])} className="rounded-lg bg-[#111827] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1E293B]">Assign</button></td>
+                  <td className={tableCellClass}><ActionMenu moduleName="customerMapping">{(closeMenu) => <button type="button" role="menuitem" onClick={() => { closeMenu(); openAssignModal([customer._id]) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]">Assign</button>}</ActionMenu></td>
                 </tr>
               })}
             </tbody>

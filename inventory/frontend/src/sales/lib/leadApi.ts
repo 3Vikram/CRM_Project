@@ -93,6 +93,66 @@ export interface LeadListResponse {
   };
 }
 
+export interface LeadAnalytics {
+  filters: {
+    status: string;
+    source: string;
+    employeeId: string;
+    employeeName: string;
+    availableStatuses: string[];
+    availableSources: string[];
+    availableEmployees: Array<{ id: string; name: string }>;
+  };
+  range: { start: string; end: string };
+  kpis: {
+    totalLeads: number;
+    openLeads: number;
+    conversionRate: number;
+    expiringFollowUps: number;
+    leadsThisMonth: number;
+    convertedToActivity: number;
+    convertedToFunnel: number;
+    convertedToQuotation: number;
+    leadsScrapped: number;
+    monthlyFollowUps: number;
+  };
+  charts: {
+    leadsBySource: Array<{ source: string; count: number }>;
+    monthlyTrend: Array<{ month: string; label: string; count: number }>;
+    topEmployees: Array<{ employeeId: string; employee: string; leadCount: number; pipelineValue: number | null; pipelineValueAvailable: boolean }>;
+    leadFunnel: Array<{ stage: string; count: number; percent: number }>;
+    followUpAnalysis: { overdue: number; unscheduled: number };
+    leadAging: {
+      groups: Array<{ age: string; count: number; percent: number }>;
+      activeWithin15Days: number;
+      staleMoreThan30Days: number;
+      totalOpenLeads: number;
+      averageLeadAge: number | null;
+    };
+    productAnalysis: Array<{ name: string; total: number; converted: number; scrapped: number; conversionPercent: number }>;
+    productAvailable: boolean;
+    pipelineValueAvailable: boolean;
+  };
+}
+
+export async function fetchLeadAnalytics(params: {
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  source?: string;
+  employeeId?: string;
+  employeeName?: string;
+}) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) searchParams.set(key, value);
+  });
+  const response = await axios.get(`/api/leads/analytics?${searchParams.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  return response.data as { success: boolean; data: LeadAnalytics };
+}
+
 export async function fetchLeads(params: { page?: number; limit?: number; search?: string; status?: string; priority?: string; source?: string; assignedTo?: string; campaign?: string; quotationType?: 'rent' | 'sold'; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) {
   const searchParams = new URLSearchParams();
   if (params.page) searchParams.set('page', String(params.page));
@@ -183,6 +243,10 @@ export async function convertLeadToCustomer(id: string) {
   const response = await axios.post(`${API_BASE_URL}/leads/convert-customer`, { id }, {
     headers: getAuthHeaders(),
   });
+  if (response.data?.success) {
+    clearApiCache();
+    window.dispatchEvent(new Event('sales:lead-converted'));
+  }
   return response.data;
 }
 

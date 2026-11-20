@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Eye, Pencil, Trash2, UserCog } from 'lucide-react'
+import { Search, Plus, Download, UserCog } from 'lucide-react'
 import { Modal } from '@/components/modal'
 import { Toast } from '@/components/toast'
 import { deleteEmployee, fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi'
 import { PermissionGate } from '@/components/PermissionGate'
+import { ActionMenu } from '@/components/ActionMenu'
 
 const tableCellClass = 'px-3 py-3 border-r border-[#E5E7EB] align-top whitespace-nowrap'
 
@@ -144,15 +145,11 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2">
-          <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">Copy</button>
-          <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">CSV</button>
-          <button type="button" className="rounded border border-[#D1D5DB] bg-white px-2 py-1.5 text-xs font-medium text-slate-700">Print</button>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="w-full md:w-80">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button type="button" className="h-10 rounded border border-[#D1D5DB] bg-white px-3 text-xs font-medium text-slate-700">Copy</button>
+        <button type="button" className="h-10 rounded border border-[#D1D5DB] bg-white px-3 text-xs font-medium text-slate-700">CSV</button>
+        <button type="button" className="h-10 rounded border border-[#D1D5DB] bg-white px-3 text-xs font-medium text-slate-700">Print</button>
+        <div className="w-full sm:w-64">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -160,10 +157,9 @@ export default function EmployeesPage() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search"
-                className="w-full rounded border border-[#D1D5DB] bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                className="h-10 w-full rounded border border-[#D1D5DB] bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200"
               />
             </div>
-          </div>
         </div>
       </div>
 
@@ -219,23 +215,9 @@ export default function EmployeesPage() {
                       <td className={tableCellClass}>{employee.branchCode || '—'}</td>
                       <td className={tableCellClass}>{formatList(employee.crudOption)}</td>
                       <td className={tableCellClass}>{formatList(employee.modulesOption)}</td>
-                      <td className={`${tableCellClass} pr-2`}>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => handleView(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="View">
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                          <PermissionGate moduleName="employees" action="edit">
-                            <button type="button" onClick={() => handleEdit(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Edit">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                          </PermissionGate>
-                          <PermissionGate moduleName="employees" action="delete">
-                            <button type="button" onClick={() => handleDelete(employee)} className="rounded border border-[#E5E7EB] bg-white p-1.5 text-slate-600 hover:bg-slate-100" title="Delete">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </PermissionGate>
-                        </div>
-                      </td>
+                      <td className={`${tableCellClass} pr-2`}><ActionMenu moduleName="employees" onView={() => handleView(employee)} onEdit={() => handleEdit(employee)} onDelete={() => {
+                        if (window.confirm(`Delete ${employee.employeeName || employee.fullName || 'this employee'}?`)) void handleDelete(employee)
+                      }} /></td>
                     </tr>
                   ))
                 ) : (

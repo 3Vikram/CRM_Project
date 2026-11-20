@@ -55,10 +55,10 @@ const numberToWords = (value: number): string => {
 }
 
 const resolveImageUrl = (filePath?: string) => {
-  if (!filePath) return ''
-  if (/^https?:\/\//i.test(filePath)) return filePath
-  const base = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/api$/, '')
-  return `${base}${filePath}`
+  const path = filePath?.trim()
+  if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path
+  return path.startsWith('/') ? path : `/${path}`
 }
 
 const waitForImages = async (element: HTMLElement) => {
@@ -315,6 +315,7 @@ export default function OPFViewPage() {
         .opf-web-card { background:#fff; border:1px solid #e5e7eb; border-radius:4px; padding:55px 31px 28px; color:#212121; box-sizing:border-box; }
         .opf-web-card * { box-sizing:border-box; }
         .opf-web-card .opf-web-head { display:grid; grid-template-columns:minmax(0,1fr) 316px; align-items:center; height:148px; border-top:1px solid #333; border-bottom:1px solid #333; }
+        .opf-web-card .opf-web-head.opf-web-head-no-logo { grid-template-columns:minmax(0,1fr); }
         .opf-web-card .opf-web-head h1 { margin:0; text-align:center; font-size:19px; line-height:24px; font-weight:bold; text-transform:uppercase; }
         .opf-web-card .opf-web-logo { display:flex; align-items:center; padding-left:26px; }
         .opf-web-card .opf-web-logo img { height:100px; width:auto; max-width:200px; object-fit:contain; }
@@ -349,7 +350,7 @@ export default function OPFViewPage() {
     <div className="px-1 py-2">
       {styles}
       <div className="opf-web-card">
-        <div className="opf-web-head"><h1>Order Processing Format</h1><div className="opf-web-logo">{logoUrl && <img src={logoUrl} alt="Company logo" />}</div></div>
+        <div className={`opf-web-head${logoUrl ? '' : ' opf-web-head-no-logo'}`}><h1>Order Processing Format</h1>{logoUrl && <div className="opf-web-logo"><img src={logoUrl} alt="Company logo" /></div>}</div>
         <div className="opf-web-metawrap"><div className="opf-web-meta">
           <div>Quot No: {opf.quotationNumber || quotation?.quotationId || ''}</div>
           <div>PO No: {opf.customerPONo || ''}</div>

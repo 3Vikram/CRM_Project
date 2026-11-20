@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Modal } from '@/sales/components/modal'
 import {
   AlertTriangle,
@@ -224,6 +224,9 @@ const getDashboardDrawerTitle: Record<DashboardDrawerKey, string> = {
 const csvCell = (value: string | undefined) => `"${String(value || '').replace(/"/g, '""')}"`
 
 export default function CalendarPage() {
+  const [searchParams] = useSearchParams()
+  const followUpsTodayView = searchParams.get('view') === 'followups-today'
+  const followUpDate = searchParams.get('date') || formatDate(new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [isLoadingEvents, setIsLoadingEvents] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -311,8 +314,16 @@ export default function CalendarPage() {
   }, [])
 
   useEffect(() => {
+    if (followUpsTodayView) {
+      const selectedDate = new Date(`${followUpDate}T00:00:00`)
+      if (!Number.isNaN(selectedDate.getTime())) setCurrentDate(selectedDate)
+      setSelectedView('List')
+      setFilters({})
+      void loadEvents(true)
+      return
+    }
     void loadEvents()
-  }, [loadEvents])
+  }, [followUpDate, followUpsTodayView, loadEvents])
 
   useEffect(() => {
     if (!actionError) return
@@ -342,13 +353,18 @@ export default function CalendarPage() {
     { key: 'toDate', label: 'To Date', type: 'date' },
   ]
   const filteredEvents = useMemo(() => events.filter((event) => {
+    if (followUpsTodayView && (
+      event.sourceField !== 'followUpDate' ||
+      event.date !== followUpDate ||
+      (event.module !== 'Activities' && event.module !== 'Leads')
+    )) return false
     if (filters.activityType && (event.eventType || event.title) !== filters.activityType) return false
     if (filters.assignedEmployee && event.assignedTo !== filters.assignedEmployee) return false
     if (filters.customer && event.customer !== filters.customer) return false
     if (filters.fromDate && event.date < filters.fromDate) return false
     if (filters.toDate && event.date > filters.toDate) return false
     return true
-  }), [events, filters])
+  }), [events, filters, followUpDate, followUpsTodayView])
 
   const todaysEvents = useMemo(
     () =>
@@ -836,6 +852,11 @@ export default function CalendarPage() {
 
           {selectedView === 'List' && (
             <div className="mt-5 space-y-4">
+              {followUpsTodayView ? (
+                <h2 className="text-base font-semibold text-gray-900">
+                  Follow-ups for {formatDisplayDate(followUpDate)}
+                </h2>
+              ) : null}
               {eventListForList.length ? eventListForList.map((event) => (
                 <button
                   key={event.id}
@@ -846,7 +867,16 @@ export default function CalendarPage() {
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{event.title}</div>
                     <div className="mt-1 text-xs text-gray-500">{event.eventType || event.module} · {formatDisplayDate(event.date)} · {event.time}</div>
-                    <div className="mt-1 text-xs text-gray-600">{event.customer || 'No customer'}{event.recordLabel ? ` · ${event.recordLabel}` : ''}</div>
+                    <div className="mt-1 text-xs text-gray-600">
+                      {followUpsTodayView
+                        ? `Company: ${event.customer || '—'} · Contact: ${event.lead || '—'}`
+                        : `${event.customer || 'No customer'}${event.recordLabel ? ` · ${event.recordLabel}` : ''}`}
+                    </div>
+                    {followUpsTodayView ? (
+                      <div className="mt-1 text-xs text-gray-600">
+                        Assigned: {event.assignedTo} · Status: {event.status}
+                      </div>
+                    ) : null}
                     {formatEventAmount(event.amount, event.amountCurrency) ? <div className="mt-1 text-xs font-semibold text-gray-700">{formatEventAmount(event.amount, event.amountCurrency)}</div> : null}
                   </div>
                   <div className="flex items-center gap-3">

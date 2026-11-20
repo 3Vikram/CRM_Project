@@ -35,6 +35,13 @@ export interface CustomerApiRecord {
   createdById?: string;
 }
 
+export interface CustomerDuplicateCheckResponse {
+  success: boolean;
+  duplicate: boolean;
+  message?: string;
+  customer: CustomerApiRecord | null;
+}
+
 export interface CustomerListResponse {
   success: boolean;
   data: CustomerApiRecord[];
@@ -49,6 +56,7 @@ export interface CustomerListResponse {
 export interface CustomerPayload {
   companyName: string;
   customerName: string;
+  gstNumber?: string;
   state?: string;
   email: string;
   phone: string;
@@ -87,6 +95,26 @@ export interface CustomerPayload {
     mimeType?: string;
     size?: number;
   }>;
+}
+
+export async function checkCustomerDuplicate(payload: CustomerPayload): Promise<CustomerDuplicateCheckResponse> {
+  const response = await fetch(`${API_BASE_URL}/customers/check-duplicate`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      companyName: payload.companyName,
+      customerName: payload.customerName,
+      gstNumber: payload.gstNumber,
+      email: payload.email,
+      phone: payload.phone,
+      contacts: payload.contacts,
+    }),
+  });
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => ({}));
+    throw new Error(errorPayload.message || 'Unable to validate this customer.');
+  }
+  return response.json() as Promise<CustomerDuplicateCheckResponse>;
 }
 
 export async function fetchCustomers(params: { search?: string; page?: number; limit?: number; status?: string; createdBy?: string; accountType?: string; createdDate?: string; fresh?: boolean } = {}) {
@@ -158,7 +186,9 @@ export async function createCustomer(payload: CustomerPayload, files: File[] = [
   });
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload.message || 'Failed to create customer');
+    const error = new Error(errorPayload.message || 'Failed to create customer');
+    Object.assign(error, { duplicateCustomer: errorPayload.duplicateCustomer });
+    throw error;
   }
   return response.json();
 }

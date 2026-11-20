@@ -8,7 +8,12 @@ import { setStoredAuth } from '@/lib/auth'
 
 const SALES_AUTH_KEY = 'sales_logged_in'
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
-const firstAccessiblePath = (permissions?: Record<string, unknown>) => {
+const firstAccessiblePath = (user?: { permissions?: Record<string, unknown>; employeeType?: string; employeeRole?: string }) => {
+  if (
+    ['admin', 'manager'].includes(String(user?.employeeType || '').trim().toLowerCase())
+    || String(user?.employeeRole || '').trim().toLowerCase() === 'sales manager'
+  ) return '/reports'
+  const permissions = user?.permissions
   if (permissions?.dashboard === true) return '/sales/dashboard'
 
   const modulePaths: Array<[string, string]> = [
@@ -70,7 +75,7 @@ export default function SalesLoginPage() {
       }
       setStoredAuth({ token: response.data.token, user: response.data.user }, true)
       localStorage.setItem(SALES_AUTH_KEY, 'true')
-      navigate(firstAccessiblePath(response.data.user?.permissions), { replace: true })
+      navigate(firstAccessiblePath(response.data.user), { replace: true })
     } catch (loginError) {
       if (axios.isAxiosError(loginError)) {
         setError(loginError.response?.data?.message || 'Unable to connect to the server.')

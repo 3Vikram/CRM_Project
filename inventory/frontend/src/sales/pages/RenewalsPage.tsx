@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Eye, Pencil, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { fetchOPFs, type OPFRecord } from '@/sales/lib/opfApi'
 import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
 
@@ -194,7 +195,7 @@ export default function RenewalsPage() {
                 <td className={`border-r border-[#D1D5DB] px-4 py-3 font-semibold ${days < 0 ? 'text-red-600' : 'text-gray-900'}`}>{days}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3">{getRenewalStatus(days)}</td>
                 <td className="border-r border-[#D1D5DB] px-4 py-3 text-xs text-gray-600">Created {formatDate(opf.createdDate)}<br />Updated {formatDate(opf.updatedAt)}</td>
-                <td className="px-4 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => window.open(`/sales/opf/${opf._id}`, '_blank')} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="View OPF"><Eye className="h-4 w-4" /></button><button type="button" onClick={() => navigate(`/sales/opf/edit/${opf._id}`)} className="rounded-lg p-2 text-gray-600 hover:bg-[#F2EFE8]" aria-label="Edit OPF"><Pencil className="h-4 w-4" /></button></div></td>
+                <td className="px-4 py-3"><ActionMenu moduleName="opf" onView={() => window.open(`/sales/opf/${opf._id}`, '_blank')} onEdit={() => navigate(`/sales/opf/edit/${opf._id}`)} /></td>
               </tr>
             ))}
           </tbody>

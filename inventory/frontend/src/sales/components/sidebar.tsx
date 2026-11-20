@@ -14,18 +14,33 @@ import {
   UserCheck,
   Zap,
 } from 'lucide-react'
+import synovLogo from '../assets.png'
 import { hasPermission } from '@/sales/lib/permissions'
 
 interface SidebarProps {
   isExpanded: boolean
   isMobileOpen: boolean
-  onToggle: () => void
+  onToggle?: () => void
   onClose: () => void
+  onDesktopHoverEnter: () => void
+  onDesktopHoverLeave: () => void
 }
 
-export function Sidebar({ isExpanded, isMobileOpen, onToggle, onClose }: SidebarProps) {
+export function Sidebar({
+  isExpanded,
+  isMobileOpen,
+  onClose,
+  onDesktopHoverEnter,
+  onDesktopHoverLeave,
+}: SidebarProps) {
   const { pathname } = useLocation()
   const showLabels = isExpanded || isMobileOpen
+  const handleMouseEnter = () => {
+    if (window.matchMedia('(min-width: 768px)').matches) onDesktopHoverEnter()
+  }
+  const handleMouseLeave = () => {
+    if (window.matchMedia('(min-width: 768px)').matches) onDesktopHoverLeave()
+  }
   const menuItems = [
     { href: '/sales/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard' },
     { href: '/sales/contacts', label: 'Contact', icon: Contact, permission: 'contacts' },
@@ -53,20 +68,28 @@ export function Sidebar({ isExpanded, isMobileOpen, onToggle, onClose }: Sidebar
   return (
     <>
       {isMobileOpen ? <button type="button" aria-label="Close navigation" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/50 md:hidden" /> : null}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#17233B] text-slate-200 shadow-xl transition-all duration-200 md:relative md:inset-y-auto md:z-auto md:shadow-none ${isMobileOpen ? 'w-[176px] translate-x-0' : '-translate-x-full md:translate-x-0'} ${isExpanded ? 'md:w-[176px]' : 'md:w-[72px]'}`}>
+      <aside
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#17233B] text-slate-200 shadow-xl transition-[width,transform] duration-[250ms] ease-in-out md:relative md:inset-y-auto md:z-auto md:shadow-none ${isMobileOpen ? 'w-[176px] translate-x-0' : '-translate-x-full md:translate-x-0'} ${isExpanded ? 'md:w-[176px]' : 'md:w-[72px]'}`}
+      >
         <div className="relative flex h-[72px] shrink-0 items-center justify-center border-b border-white/10 px-3">
           <Link
             to="/sales/dashboard"
             className={`select-none text-center ${showLabels ? 'text-[26px]! tracking-[0.16em] pl-[0.22em]' : 'text-[24px]! tracking-normal'} font-bold uppercase text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60`}
           >
-            {showLabels ? 'SYNOV' : 'S'}
+            {showLabels ? 'SYNOV' : <img src={synovLogo} alt="SYNOV company logo" className="h-12 w-12 object-contain" />}
           </Link>
-          <button type="button" onClick={onToggle} aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'} className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white md:inline-flex">
-            <svg viewBox="0 0 24 24" className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
-          </button>
         </div>
-        <div className={`px-4 pt-5 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 ${showLabels ? 'opacity-100' : 'sr-only'}`}>Sales</div>
-        <nav aria-label="Sales navigation" className="min-h-0 flex-1 space-y-0 overflow-y-auto px-2 py-3 [scrollbar-color:#475569_transparent] [scrollbar-width:thin]">
+        <div
+          aria-hidden={!showLabels}
+          className={`flex w-full min-w-0 shrink-0 items-center overflow-hidden px-4 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 transition-[height,opacity] duration-[200ms] ${
+            showLabels ? 'h-10 opacity-100' : 'h-0 opacity-0'
+          }`}
+        >
+          <span className="block min-w-0 truncate">Sales</span>
+        </div>
+        <nav aria-label="Sales navigation" className="min-h-0 flex-1 space-y-0 overflow-y-auto px-2 py-2 [scrollbar-color:#475569_transparent] [scrollbar-width:thin]">
           {menuItems.filter((item) => hasPermission(item.permission)).map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -77,10 +100,10 @@ export function Sidebar({ isExpanded, isMobileOpen, onToggle, onClose }: Sidebar
                 onClick={onClose}
                 aria-current={isActive ? 'page' : undefined}
                 title={!showLabels ? item.label : undefined}
-                className={`flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-[#EDE7F6] text-[#17233B] shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
+                className={`flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${showLabels ? 'justify-start' : 'md:justify-center'} ${isActive ? 'bg-[#EDE7F6] text-[#17233B] shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                <span className={showLabels ? 'truncate' : 'sr-only md:hidden'}>{item.label}</span>
+                <span className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-[200ms] ${showLabels ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0'}`}>{item.label}</span>
               </Link>
             )
           })}

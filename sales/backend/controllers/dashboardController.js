@@ -89,6 +89,17 @@ const addToGroup = (groups, key, label, amount) => {
   groups.set(key, current);
 };
 
+const getLinkedConvertedLeads = async (leadRecords) => {
+  const candidates = leadRecords.filter((lead) => lead.isConverted && lead.customerId);
+  if (!candidates.length) return [];
+  const linkedCustomers = await Customer.find({
+    sourceLeadId: { $in: candidates.map((lead) => String(lead._id)) },
+    _id: { $in: candidates.map((lead) => lead.customerId) },
+  }).select('_id sourceLeadId').lean();
+  const linkedLeadIds = new Set(linkedCustomers.map((customer) => String(customer.sourceLeadId)));
+  return candidates.filter((lead) => linkedLeadIds.has(String(lead._id)));
+};
+
 exports.getDashboard = async (req, res) => {
   try {
     const period = ['all', 'month', 'quarter', 'year'].includes(String(req.query.period)) ? String(req.query.period) : 'all';
@@ -114,7 +125,7 @@ exports.getDashboard = async (req, res) => {
     const [leadRecords, opfRecords, activityRecords, customers, employee] = await Promise.all([
       canReadLeads || canReadQuotations
         ? Lead.find(leadScope)
-          .select('leadId quotationId leadStatus companyName assignedTo createdBy createdDate createdAt followUpDate products quotationDetails isConverted isScrapped')
+          .select('leadId quotationId leadStatus companyName assignedTo createdBy createdDate createdAt followUpDate products quotationDetails isConverted convertedAt customerId isScrapped')
           .lean()
         : [],
       canReadOPFs || canReadRenewals
@@ -136,6 +147,7 @@ exports.getDashboard = async (req, res) => {
 
     const leads = canReadLeads ? leadRecords.filter((lead) => !isQuotation(lead)) : [];
     const quotations = canReadQuotations ? leadRecords.filter(isQuotation) : [];
+    const convertedLeads = await getLinkedConvertedLeads(canReadLeads ? leadRecords : []);
     const opfs = canReadOPFs ? opfRecords : [];
     const renewals = canReadRenewals ? opfRecords : [];
     const currentYearLeadCount = leads.filter((lead) => recordDate(lead)?.getFullYear() === year).length;
@@ -325,6 +337,11 @@ exports.getDashboard = async (req, res) => {
       },
       summary: {
         opportunities: { total: leads.length, currentYear: currentYearLeadCount, previousYear: previousYearLeadCount, open: leads.filter(isOpenOpportunity).length },
+        convertedLeads: {
+          total: convertedLeads.length,
+          currentYear: convertedLeads.filter((lead) => (dateValue(lead.convertedAt) || recordDate(lead))?.getFullYear() === year).length,
+          previousYear: convertedLeads.filter((lead) => (dateValue(lead.convertedAt) || recordDate(lead))?.getFullYear() === year - 1).length,
+        },
         quotations: { total: quotations.length, currentYear: currentYearQuotationCount, previousYear: previousYearQuotationCount, open: quotations.filter((lead) => !['Won', 'Lost', 'Scrapped'].includes(lead.leadStatus || '')).length },
         opfs: { total: opfs.length, currentYear: currentYearOPFCount, previousYear: previousYearOPFCount },
         meetings: {
@@ -359,3 +376,5 @@ exports.getDashboard = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Unable to load Sales dashboard data.' });
   }
 };
+
+exports._getLinkedConvertedLeads = getLinkedConvertedLeads;

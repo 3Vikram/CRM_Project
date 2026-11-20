@@ -143,8 +143,16 @@ export async function updateContact(id: string, payload: ContactPayload) {
 }
 
 export async function deleteContact(id: string) {
-  const response = await requestWithFallback('delete', `/contacts/${id}`);
-  return response.data;
+  try {
+    const response = await requestWithFallback('delete', `/contacts/${id}`);
+    clearApiCache();
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw error;
+  }
 }
 
 export async function moveContactToCustomer(id: string) {
