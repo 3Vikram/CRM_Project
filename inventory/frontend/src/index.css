@@ -66,6 +66,104 @@ body {
   min-height: 100vh;
 }
 
+.inventory-shell-main {
+  margin-left: 240px;
+  width: calc(100% - 240px);
+  max-width: calc(100% - 240px);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.inventory-shell-content {
+  padding: 24px 24px 32px;
+  background-color: #F4F6F8;
+  min-height: calc(100vh - 64px);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.inventory-overview,
+.inventory-overview * {
+  font-family: "Segoe UI", Arial, sans-serif !important;
+}
+
+.inventory-overview .MuiTypography-body1 {
+  font-size: 0.9375rem !important;
+}
+
+.inventory-overview .MuiTypography-body2 {
+  font-size: 0.875rem !important;
+}
+
+.inventory-overview .MuiTypography-caption {
+  font-size: 0.75rem !important;
+}
+
+.inventory-top-bar .text-xs {
+  font-size: 0.6875rem !important;
+}
+
+.inventory-top-bar .text-sm {
+  font-size: 0.875rem !important;
+}
+
+@media (max-width: 1023px) {
+  .inventory-shell-main {
+    margin-left: 64px;
+    width: calc(100% - 64px);
+    max-width: calc(100% - 64px);
+  }
+
+  .inventory-sidebar {
+    width: 64px !important;
+  }
+
+  .inventory-sidebar > div:first-child {
+    padding: 14px 10px !important;
+  }
+
+  .inventory-sidebar > div:first-child a {
+    justify-content: center;
+  }
+
+  .inventory-sidebar .inventory-brand-copy,
+  .inventory-sidebar .inventory-nav-label,
+  .inventory-sidebar .inventory-section-label {
+    display: none;
+  }
+
+  .inventory-sidebar .flex-1 > div {
+    padding: 10px 6px !important;
+  }
+
+  .inventory-sidebar .flex-1 > div > button {
+    justify-content: center;
+    padding: 8px 0 !important;
+  }
+
+  .inventory-sidebar nav a {
+    justify-content: center;
+    padding: 11px 8px !important;
+  }
+
+  .inventory-top-bar {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .inventory-shell-content {
+    padding: 20px 16px 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .inventory-shell-content {
+    padding: 16px 12px 24px;
+  }
+}
+
 input,
 textarea,
 select,

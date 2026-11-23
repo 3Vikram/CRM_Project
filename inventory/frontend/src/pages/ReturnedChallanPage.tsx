@@ -686,47 +686,51 @@ export default function ReturnedChallanPage() {
         </div>
       </div>
       <style>{`
-        .rc-document { width: 100%; max-width: 190mm; margin: auto; padding: 7mm; background: #fff; color: #17212b; font-family: "Times New Roman", Times, serif; font-size: 9.5px; line-height: 1.35; }
+        .rc-document { position: relative; width: 100%; max-width: 190mm; margin: auto; padding: 7mm; background: #FFFFFF; color: #18233D; font-family: "Times New Roman", Times, serif; font-size: 9.5px; line-height: 1.35; overflow: hidden; }
         .rc-document * { box-sizing: border-box; }
-        .rc-header { position: relative; min-height: 24mm; padding: 0 24mm 3mm; border-bottom: 1px solid #333; text-align: center; }
-        .rc-title { margin: 0 0 1mm; font-size: 18px; font-weight: 700; }
-        .rc-logo { position: absolute; top: 0; right: 0; width: 20mm; height: 20mm; object-fit: contain; }
-        .rc-company { font-size: 12.5px; font-weight: 700; }
+        .rc-header { position: relative; min-height: 24mm; padding: 0 24mm 3mm; border-bottom: 0.35mm solid #A64D68; text-align: center; }
+        .rc-header::before { content: ""; position: absolute; z-index: 0; top: -8mm; left: -6%; width: 112%; height: 17mm; border-radius: 0 0 48% 42% / 0 0 30% 24%; background: #FFF1F5; }
+        .rc-title, .rc-company, .rc-company-address, .rc-header > div:last-child { position: relative; z-index: 1; }
+        .rc-title { margin: 0 0 1mm; color: #8F2445; font-size: 18px; font-weight: 700; }
+        .rc-logo { position: absolute; z-index: 1; top: 0; right: 0; width: 20mm; height: 20mm; object-fit: contain; }
+        .rc-company { color: #18233D; font-size: 12.5px; font-weight: 700; }
         .rc-company-address { margin: 0.5mm auto; max-width: 125mm; font-size: 9.5px; }
         .rc-header > div:last-child { font-size: 9.5px; }
-        .rc-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 3mm; border-top: 1px solid #333; border-left: 1px solid #333; }
-        .rc-field { min-height: 9mm; padding: 1mm 1.5mm; border-right: 1px solid #333; border-bottom: 1px solid #333; overflow-wrap: anywhere; font-size: 9.5px; }
-        .rc-field-label { display: block; margin-bottom: 0.5mm; font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
+        .rc-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 3mm; border-top: 0.25mm solid #D9A1B1; border-left: 0.25mm solid #D9A1B1; }
+        .rc-field { min-width: 0; min-height: 9mm; padding: 1mm 1.5mm; border-right: 0.25mm solid #D9A1B1; border-bottom: 0.25mm solid #D9A1B1; background: #FFFFFF; color: #18233D; overflow-wrap: anywhere; font-size: 9.5px; }
+        .rc-field-label { display: block; margin: -1mm -1.5mm 0.75mm; padding: 0.65mm 1.5mm; background: #F8E3E9; color: #A64D68; font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
         .rc-parties { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 3mm; }
-        .rc-party { min-height: 23mm; padding: 1.5mm; border: 1px solid #333; border-right: 0; overflow-wrap: anywhere; font-size: 9px; }
-        .rc-party:last-child { border-right: 1px solid #333; }
-        .rc-party h2 { margin: 0 0 1mm; padding-bottom: 0.5mm; border-bottom: 1px solid #777; font-size: 9.5px; }
+        .rc-party { min-width: 0; min-height: 23mm; padding: 1.5mm; border: 0.25mm solid #D9A1B1; border-right: 0; background: #FFFFFF; color: #18233D; overflow-wrap: anywhere; font-size: 9px; }
+        .rc-party:last-child { border-right: 0.25mm solid #D9A1B1; }
+        .rc-party h2 { margin: -1.5mm -1.5mm 1mm; padding: 1mm 1.5mm; border-bottom: 0.25mm solid #D9A1B1; background: #F8E3E9; color: #A64D68; font-size: 9.5px; }
         .rc-party p { margin: 0 0 0.5mm; }
         .rc-items { width: 100%; margin-top: 3mm; border-collapse: collapse; table-layout: fixed; }
-        .rc-items th, .rc-items td { padding: 1mm; border: 1px solid #333; text-align: left; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; font-size: 9px !important; line-height: 1.3; }
-        .rc-items th { background: #f1f1f1; font-size: 9px !important; }
+        .rc-items th, .rc-items td { padding: 1mm; border: 0.25mm solid #D9A1B1; color: #18233D; text-align: left; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; font-size: 9px !important; line-height: 1.3; }
+        .rc-items th { background: #F8E3E9; color: #8F2445; font-size: 9px !important; }
         .rc-items th:nth-child(1) { width: 7%; }
-        .rc-items th:nth-child(2) { width: 20%; }
-        .rc-items th:nth-child(3) { width: 28%; }
-        .rc-items th:nth-child(4) { width: 14%; }
-        .rc-items th:nth-child(5) { width: 8%; }
-        .rc-items th:nth-child(6) { width: 23%; }
-        .rc-terms { width: 100%; margin-top: 2mm; padding: 1.5mm; border: 1px solid #333; line-height: 1.35; font-size: 9.5px; overflow-wrap: anywhere; }
-        .rc-terms-title { margin: 0 0 1mm; font-size: 10px; font-weight: 700; }
+        .rc-items th:nth-child(2) { width: 23%; }
+        .rc-items th:nth-child(3) { width: 34%; }
+        .rc-items th:nth-child(4) { width: 10%; }
+        .rc-items th:nth-child(5) { width: 26%; }
+        .rc-terms { width: 100%; margin-top: 2mm; padding: 1.5mm; border: 0.3mm solid #D9A1B1; background: #FFF7F9; color: #18233D; line-height: 1.35; font-size: 9.5px; overflow-wrap: anywhere; }
+        .rc-terms-title { margin: 0 0 1mm; color: #A64D68; font-size: 10px; font-weight: 700; }
         .rc-terms-list { display: block; list-style-type: decimal; list-style-position: outside; margin: 0; padding-left: 5mm; }
         .rc-terms-list li { display: list-item; margin: 0 0 1.2mm; padding-left: 0.5mm; break-inside: avoid; page-break-inside: avoid; }
         .rc-terms-list li:last-child { margin-bottom: 0; }
         .rc-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 3mm; page-break-inside: avoid; }
-        .rc-signature { min-height: 20mm; padding: 1.5mm; border: 1px solid #333; display: flex; flex-direction: column; justify-content: space-between; font-size: 9.5px; }
+        .rc-signature { min-height: 20mm; padding: 1.5mm; border: 0.3mm solid #D9A1B1; background: #FFFFFF; color: #18233D; display: flex; flex-direction: column; justify-content: space-between; font-size: 9.5px; }
         .rc-signature span { align-self: flex-end; }
-        .rc-generated { margin: 2mm 0 0; text-align: center; font-size: 8px; }
+        .rc-generated { margin: 2mm 0 0; color: #526174; text-align: center; font-size: 8px; }
+        .rc-generated::after { content: ""; display: block; height: 4mm; margin: 1.5mm -7mm -7mm; border-radius: 55% 45% 0 0 / 45% 40% 0 0; background: #F8E3E9; }
         @media print {
           @page { size: A4; margin: 8mm 10mm; }
           html, body, #root { width: 100% !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
           body * { visibility: hidden !important; }
           .rc-document, .rc-document * { visibility: visible !important; }
+          .rc-document, .rc-document * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .rc-controls { display: none !important; }
           .rc-document { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+          .rc-generated::after { margin-left: 0 !important; margin-right: 0 !important; margin-bottom: 0 !important; }
           .rc-title { font-size: 24px !important; margin-bottom: 0.5mm !important; }
           .rc-company { font-size: 15px !important; }
           .rc-company-address, .rc-header > div:last-child { font-size: 12px !important; }
@@ -748,16 +752,11 @@ export default function ReturnedChallanPage() {
           .rc-signatures { gap: 4mm !important; margin-top: 2mm !important; }
           .rc-signature { min-height: 18mm !important; padding: 1mm !important; font-size: 11.5px !important; }
           .rc-generated { margin-top: 1.5mm !important; font-size: 10px !important; }
-          .rc-items th:nth-child(1) { width: 7% !important; }
-          .rc-items th:nth-child(2) { width: 23% !important; }
-          .rc-items th:nth-child(3) { width: 34% !important; }
-          .rc-items th:nth-child(4) { width: 10% !important; }
-          .rc-items th:nth-child(5) { width: 26% !important; }
           .rc-items thead { display: table-header-group; }
           .rc-items tr, .rc-party, .rc-terms, .rc-signatures { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
-      <article ref={documentRef} className="rc-document rounded-xl border border-[#E7E3DA] bg-white shadow-sm">
+      <article ref={documentRef} className="rc-document rounded-xl border border-[#D9A1B1] bg-white shadow-sm">
         <header className="rc-header">
           <h1 className="rc-title">Returned Challan</h1>
           <img src={COMPANY_PROFILE.logoUrl} alt={`${COMPANY_PROFILE.name} logo`} className="rc-logo" />
@@ -818,8 +817,8 @@ export default function ReturnedChallanPage() {
           </ol>
         </section>
         <div className="rc-signatures">
-          <section className="rc-signature"><strong>For {COMPANY_PROFILE.name}</strong><span>Authorized Signature</span></section>
-          <section className="rc-signature"><strong>For {selectedRecord.customerName}</strong><span>Authorized Signature</span></section>
+          <section className="rc-signature"><strong>For Synov IT Services Pvt Ltd</strong><span>Authorized Signature</span></section>
+          <section className="rc-signature"><strong>For TERRAY REALTY LLP</strong><span>Authorized Signature</span></section>
         </div>
         <p className="rc-generated">* This is an electronically generated document, signature not required.</p>
       </article>

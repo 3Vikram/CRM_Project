@@ -55,13 +55,13 @@ export function InventorySidebar() {
   ]
 
   return (
-    <div className="w-60 bg-[#06283D] border-r border-[#0F4A63] flex flex-col h-screen fixed left-0 top-0 text-white">
+    <div className="inventory-sidebar w-60 bg-[#06283D] border-r border-[#0F4A63] flex flex-col h-screen fixed left-0 top-0 text-white">
       <div className="p-6 border-b border-[#0F4A63]">
         <Link to="/" className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full border border-white/15 bg-white/10 flex items-center justify-center">
             <span className="text-white font-semibold text-sm">SI</span>
           </div>
-          <div>
+          <div className="inventory-brand-copy">
             <div className="font-semibold text-sm tracking-[0.16em] text-white">SYNOV IT SERVICES</div>
             <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Inventory</div>
           </div>
@@ -73,9 +73,10 @@ export function InventorySidebar() {
           <div key={section.title} className="px-3 py-3">
             <button
               onClick={() => toggleSection(section.title)}
+              aria-label={`Toggle ${section.title.toLowerCase()} navigation`}
               className="flex items-center justify-between w-full px-3 mb-2 text-[11px] font-semibold text-slate-300 uppercase tracking-[0.24em] hover:text-white transition-colors"
             >
-              <span>{section.title}</span>
+              <span className="inventory-section-label">{section.title}</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.includes(section.title) ? 'rotate-180' : ''}`} />
             </button>
             {expandedSections.includes(section.title) && (
@@ -92,9 +93,10 @@ export function InventorySidebar() {
                           ? 'bg-[#124B68] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
                           : 'text-slate-300 hover:text-white hover:bg-[#0B3A53]'
                       }`}
+                      title={item.label}
                     >
                       <Icon className="w-4.5 h-4.5" />
-                      <span className="text-sm font-medium">{item.label}</span>
+                      <span className="inventory-nav-label text-sm font-medium">{item.label}</span>
                     </Link>
                   )
                 })}

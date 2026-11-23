@@ -11,6 +11,10 @@ import { fileURLToPath } from 'node:url';
 
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(serverDirectory, '../.env') });
+console.log("INVENTORY AUTH CHECK:", {
+  loaded: !!process.env.INVENTORY_AUTH_SECRET,
+  length: process.env.INVENTORY_AUTH_SECRET?.length
+});
 
 const MONGO_URI = process.env.MONGO_URI?.trim();
 if (!MONGO_URI) {

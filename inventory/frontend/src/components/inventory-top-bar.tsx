@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronLeft, LogOut, UserRound } from 'lucide-react'
 import { clearInventorySession, type InventoryUser } from '@/lib/inventoryAuth'
 
@@ -12,6 +12,11 @@ export function InventoryTopBar({ user }: InventoryTopBarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const lastPathSegment = pathname.split('/').filter(Boolean).pop() || 'Inventory'
+  const pageTitle = pathname === '/inventory'
+    ? 'Overview'
+    : lastPathSegment.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -37,7 +42,14 @@ export function InventoryTopBar({ user }: InventoryTopBarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-end border-b border-[#DDE4EA] bg-white px-6">
+    <header className="inventory-top-bar sticky top-0 z-40 flex h-16 items-center justify-between border-b border-[#DDE4EA] bg-white px-6">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#3B8A76]" />
+        <div className="min-w-0">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7C8D98]">Inventory workspace</div>
+          <div className="truncate text-sm font-semibold text-[#18394D]">{pageTitle}</div>
+        </div>
+      </div>
       <div className="relative" ref={menuRef}>
         <button
           aria-expanded={isMenuOpen}

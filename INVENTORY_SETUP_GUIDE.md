@@ -106,6 +106,16 @@ Low Stock Alerts shows:
 
 ## Setup & Testing
 
+### Inventory authentication for supplier options
+
+The Add Asset form loads supplier options from the Sales backend at
+`GET /api/suppliers/inventory-options`. Set `INVENTORY_AUTH_SECRET` in both
+`inventory/backend/.env` and `sales/backend/.env` to the same secret of at
+least 32 characters. The deployment scripts validate that both values exist
+and match before reloading the backends. PM2 passes the Inventory secret to the
+Sales API process explicitly so its middleware validates Inventory login tokens
+with the same key.
+
 ### Step 1: Install Backend Dependencies
 
 ```bash

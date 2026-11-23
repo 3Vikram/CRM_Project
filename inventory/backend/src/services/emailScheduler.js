@@ -84,7 +84,7 @@ export const runDailyEmailJob = async ({ testRun = false } = {}) => {
     { timeZone: 'Asia/Kolkata' }
   )
 
-  let emailHistoryRecord
+  
 
   try {
     emailHistoryRecord = await EmailHistory.findOneAndUpdate(
@@ -179,7 +179,7 @@ export const runDailyEmailJob = async ({ testRun = false } = {}) => {
       `${inventoryUpdateMessage ? `${inventoryUpdateMessage}\n` : ''}\n` +
       `Dear Sir/Madam,\n\n` +
       `Please find attached the Daily In Stock Report.\n\n` +
-      `Regards,\n3 Vikram Technologies CRM`
+      `Reglet emailHistoryRecordards,\n3 Vikram Technologies CRM`
 
     console.log('[Daily Email] Sending email...')
     await sendEmailWithAttachment({

@@ -14,7 +14,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
+    fs: {
+      allow: [path.resolve(__dirname, '../..')],
+    },
     proxy: {
+      '/api/accounts': {
+        target: 'http://127.0.0.1:5002',
+        changeOrigin: true,
+      },
       '/api/inventory': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,
@@ -43,12 +50,12 @@ export default defineConfig({
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
-      '/api/suppliers/inventory-options': {
+      '/api/suppliers': {
         target: 'http://127.0.0.1:5001',
         changeOrigin: true,
       },
       '/api/customers/inventory-options': {
-        target: 'http://127.0.0.1:5001',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
       '/api': {
