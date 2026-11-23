@@ -1,5 +1,6 @@
 const express = require('express');
 const { requireLeadRecordPermission } = require('../middleware/authMiddleware');
+const { getLeadAnalytics } = require('../controllers/leadAnalyticsController');
 const router = express.Router();
 const {
   getLeads,
@@ -17,6 +18,7 @@ const {
 } = require('../controllers/leadController');
 
 router.get('/', requireLeadRecordPermission('view', 'list'), getLeads);
+router.get('/analytics', requireLeadRecordPermission('view', 'list'), getLeadAnalytics);
 router.get('/:id', requireLeadRecordPermission('view', 'record'), getLeadById);
 router.post('/', requireLeadRecordPermission('create', 'new-record'), createLead);
 router.put('/:id', requireLeadRecordPermission('edit', 'record'), updateLead);

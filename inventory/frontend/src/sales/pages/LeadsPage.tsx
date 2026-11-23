@@ -1,8 +1,8 @@
 'use client'
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Search,
   Plus,
@@ -15,9 +15,6 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
-  Eye,
-  Pencil,
   Users,
   FileText,
   Calendar,
@@ -27,8 +24,10 @@ import {
 import { StatCard } from '@/sales/components/stat-card'
 import { LeadDetailsDrawer } from '@/sales/components/LeadDetailsDrawer'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { Toast } from '@/sales/components/toast'
-import { fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/sales/lib/leadApi'
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters'
+import { fetchLeadById, fetchLeads, moveLeadToActivity, moveLeadToFunnel, generateLeadQuotation, convertLeadToCustomer, scrapLead, deleteLead, updateLead, type LeadRecord } from '@/sales/lib/leadApi'
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
 import { clearApiCache } from '@/sales/lib/apiCache'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
@@ -64,6 +63,9 @@ export default function LeadsPage({
 }: LeadsPageProps) {
   console.log('LeadsPage Started')
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const kpiFilter = searchParams.get('kpi') || 'all'
+  const selectedRecordId = searchParams.get('recordId')
   const [leads, setLeads] = useState<LeadRecord[]>([])
   const visibleLeads = leads
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null)
@@ -75,35 +77,73 @@ export default function LeadsPage({
   const [ownerMenuPosition, setOwnerMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [isAssigningOwner, setIsAssigningOwner] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [assignedFilter, setAssignedFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all')
+  const [filters, setFilters] = useState<PageFilterValues>({})
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(8)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; placement: 'bottom' | 'top' } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
-  const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   const loadLeads = useCallback(async () => {
     setIsLoading(true)
     try {
-      const params = { page, limit, search: searchQuery, assignedTo: assignedFilter === 'all' ? '' : assignedFilter, source: sourceFilter === 'all' ? '' : sourceFilter }
+      if (selectedRecordId) {
+        const selectedLead = await fetchLeadById(selectedRecordId)
+        const selectedLeads = selectedLead ? [selectedLead] : []
+        setLeads(selectedLeads)
+        setTotalPages(1)
+        setTotalCount(selectedLeads.length)
+        setPage(1)
+        return
+      }
+      if (['new-today', 'converted', 'scrapped'].includes(kpiFilter)) {
+        const allRecords: LeadRecord[] = []
+        let currentPage = 1
+        let totalPages = 1
+        do {
+          const response = await fetchLeads({
+            page: currentPage,
+            limit: 100,
+            search: searchQuery,
+            assignedTo: filters.assignedTo || '',
+            source: filters.source || '',
+          })
+          allRecords.push(...response.data)
+          totalPages = response.pagination.totalPages || 1
+          currentPage += 1
+        } while (currentPage <= totalPages)
+
+        const today = new Date().toDateString()
+        const filteredRecords = allRecords.filter((lead) => {
+          if (kpiFilter === 'new-today') {
+            return Boolean(lead.createdDate && new Date(lead.createdDate).toDateString() === today)
+          }
+          if (kpiFilter === 'converted') return Boolean(lead.isConverted)
+          return Boolean(lead.isScrapped)
+        })
+        setTotalCount(filteredRecords.length)
+        setTotalPages(Math.max(1, Math.ceil(filteredRecords.length / limit)))
+        setLeads(filteredRecords.slice((page - 1) * limit, page * limit))
+        return
+      }
+      const params = { page, limit, search: searchQuery, assignedTo: filters.assignedTo || '', source: filters.source || '' }
       const response = await fetchLeads(params)
       setLeads(response.data)
       setTotalPages(response.pagination.totalPages)
       setTotalCount(response.pagination.total || 0)
     } catch {
+      if (selectedRecordId) {
+        setLeads([])
+        setTotalCount(0)
+      }
       setToast('Unable to load leads')
     } finally {
       setIsLoading(false)
     }
-  }, [assignedFilter, limit, page, searchQuery, sourceFilter])
+  }, [filters, kpiFilter, limit, page, searchQuery, selectedRecordId])
 
   useEffect(() => { void loadLeads() }, [loadLeads])
 
@@ -116,7 +156,16 @@ export default function LeadsPage({
       })
   }, [])
 
-  useEffect(() => { setPage(1) }, [searchQuery, assignedFilter, sourceFilter])
+  useEffect(() => { setPage(1) }, [searchQuery, filters])
+  useEffect(() => {
+    setSearchQuery('')
+    setFilters({})
+    setPage(1)
+  }, [kpiFilter])
+
+  const navigateToKpi = useCallback((path: string) => {
+    navigate(path)
+  }, [navigate])
 
   const assignedOptions = useMemo(() => {
     const employeeNames = employees
@@ -125,8 +174,24 @@ export default function LeadsPage({
     const leadNames = leads
       .map((lead) => lead.assignedTo?.trim())
       .filter((name): name is string => Boolean(name && name !== 'Unassigned'))
-    return Array.from(new Set([...employeeNames, ...leadNames])).sort((a, b) => a.localeCompare(b))
-  }, [employees, leads])
+    const includesUnassigned = leads.some((lead) => !lead.assignedTo?.trim() || lead.assignedTo === 'Unassigned')
+    return Array.from(new Set([
+      ...employeeNames,
+      ...leadNames,
+      ...(filters.assignedTo && filters.assignedTo !== 'Unassigned' ? [filters.assignedTo] : []),
+      ...(includesUnassigned || filters.assignedTo === 'Unassigned' ? ['Unassigned'] : []),
+    ])).sort((a, b) => a.localeCompare(b))
+  }, [employees, filters.assignedTo, leads])
+
+  const sourceOptions = useMemo(() => Array.from(new Set([
+    ...leads.map((lead) => lead.sourceOfLead?.trim()).filter((source): source is string => Boolean(source)),
+    ...(filters.source ? [filters.source] : []),
+  ])).sort((a, b) => a.localeCompare(b)), [filters.source, leads])
+
+  const filterFields: PageFilterField[] = [
+    { key: 'assignedTo', label: 'Assigned To', type: 'select', options: assignedOptions },
+    { key: 'source', label: 'Source', type: 'select', options: sourceOptions },
+  ]
 
   const handleDownloadReport = async () => {
     setIsDownloading(true)
@@ -140,8 +205,8 @@ export default function LeadsPage({
           page: currentPage,
           limit: 100,
           search: searchQuery,
-          assignedTo: assignedFilter === 'all' ? '' : assignedFilter,
-          source: sourceFilter === 'all' ? '' : sourceFilter,
+          assignedTo: filters.assignedTo || '',
+          source: filters.source || '',
         })
         allLeads.push(...response.data)
         totalReportPages = response.pagination.totalPages || 1
@@ -185,61 +250,7 @@ export default function LeadsPage({
     }
   }
 
-  const closeMenu = () => {
-    setOpenMenuId(null)
-    setMenuPosition(null)
-  }
-
-  const updateMenuPosition = (leadId: string) => {
-    const button = menuButtonRefs.current[leadId]
-    if (!button) return
-
-    const rect = button.getBoundingClientRect()
-    const width = 220
-    const menuHeight = 280
-    const padding = 8
-    const spaceBelow = window.innerHeight - rect.bottom
-    const spaceAbove = rect.top
-    const placement = spaceBelow >= menuHeight + padding ? 'bottom' : spaceAbove >= menuHeight + padding ? 'top' : 'bottom'
-    const maxHeight = Math.min(menuHeight, window.innerHeight - padding * 2)
-    const top = placement === 'bottom'
-      ? Math.min(rect.bottom + padding, window.innerHeight - maxHeight - padding)
-      : Math.max(padding, rect.top - maxHeight - padding)
-    const left = Math.min(Math.max(rect.right - width, padding), window.innerWidth - width - padding)
-
-    setMenuPosition({ top, left, placement })
-  }
-
-  useEffect(() => {
-    if (!openMenuId) return
-
-    updateMenuPosition(openMenuId)
-
-    const handleResize = () => updateMenuPosition(openMenuId)
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (menuRef.current && !menuRef.current.contains(target) && !menuButtonRefs.current[openMenuId]?.contains(target)) {
-        closeMenu()
-      }
-    }
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeMenu()
-      }
-    }
-
-    window.addEventListener('resize', handleResize)
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleEscape)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [openMenuId])
-
-  const handleAction = async (action: string, lead: LeadRecord) => {
+  const handleAction = async (action: string, lead: LeadRecord, anchorRect?: DOMRect) => {
     try {
       if (action === 'view') {
         setSelectedLead(lead)
@@ -250,11 +261,15 @@ export default function LeadsPage({
       }
       if (action === 'edit') navigate(`/sales/leads/edit/${lead._id}`)
       if (action === 'owner') {
-        if (menuPosition) {
-          setOwnerMenuPosition({ top: menuPosition.top, left: menuPosition.left })
+        if (anchorRect) {
+          const menuWidth = 224
+          const menuHeight = 280
+          setOwnerMenuPosition({
+            top: Math.max(8, Math.min(anchorRect.bottom + 4, window.innerHeight - menuHeight - 8)),
+            left: Math.max(8, Math.min(anchorRect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+          })
         }
         setOwnerTarget(lead)
-        closeMenu()
         return
       }
       if (action === 'followup') {
@@ -293,7 +308,6 @@ export default function LeadsPage({
       if (action === 'quotation') { await generateLeadQuotation(lead._id); setToast('Quotation generated'); await loadLeads() }
       if (action === 'convert') { await convertLeadToCustomer(lead._id); setToast('Lead converted to customer'); await loadLeads() }
       if (action === 'scrap') { const reason = window.prompt('Enter scrap reason', 'No reason provided') || 'No reason provided'; await scrapLead(lead._id, reason); setToast('Lead scrapped'); await loadLeads() }
-      closeMenu()
       // reload current page after actions that change state
       if (['activity', 'funnel', 'quotation', 'convert', 'scrap'].includes(action)) {
         await loadLeads()
@@ -325,56 +339,55 @@ export default function LeadsPage({
           <h1 className="crm-page-heading">{pageTitle}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
+          </div>
+          {!selectedRecordId ? (
+            <PageFilters
+              fields={filterFields}
+              values={filters}
+              onApply={(nextFilters) => { setFilters(nextFilters); setPage(1) }}
+              onClear={() => { setFilters({}); setPage(1) }}
+            />
+          ) : null}
+          <button type="button" onClick={() => navigate('/sales/leads/analytics')} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-[#F2EFE8]">
+            <BarChart3 className="h-4 w-4 text-blue-600" /> Analytics
+          </button>
+          {selectedRecordId ? (
+            <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('recordId'); setSearchParams(next) }} className="rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#F2EFE8]">
+              Show all leads
+            </button>
+          ) : null}
+          <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA] disabled:opacity-60">
+            <Download className="h-4 w-4" /> {isDownloading ? 'Downloading...' : 'Download Report'}
+          </button>
           {showAddButton && <PermissionGate moduleName="leads" action="create">
-            <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+            <button onClick={() => (onAddButtonClick ? onAddButtonClick() : navigate('/sales/leads/new'))} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> {addButtonLabel}
             </button>
           </PermissionGate>}
-          <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA] disabled:opacity-60">
-            <Download className="h-4 w-4" /> {isDownloading ? 'Downloading...' : 'Download Report'}
-          </button>
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
-          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard labelClassName="stat-card-label-increased" icon={BarChart3} label="Total Leads" value={metrics.total} description="All leads in the CRM" iconBg="bg-blue-100" iconColor="text-blue-700" />
-        <StatCard labelClassName="stat-card-label-increased" icon={Sparkles} label="New Leads Today" value={metrics.newToday} description="Freshly created today" iconBg="bg-emerald-100" iconColor="text-emerald-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={BarChart3} label="Total Leads" value={metrics.total} iconBg="bg-blue-50" iconColor="text-blue-600" onClick={() => navigateToKpi('/sales/leads?kpi=all')} />
+        <StatCard labelClassName="stat-card-label-increased" icon={Sparkles} label="New Leads Today" value={metrics.newToday} iconBg="bg-orange-50" iconColor="text-orange-600" onClick={() => navigateToKpi('/sales/leads?kpi=new-today')} />
         {/* <StatCard icon={Clock3} label="Pending Leads" value={metrics.pending} description="Awaiting attention" iconBg="bg-amber-100" iconColor="text-amber-700" /> */}
         {/* <StatCard icon={Flame} label="Hot Leads" value={metrics.hot} description="Score above 80" iconBg="bg-rose-100" iconColor="text-rose-700" /> */}
-        <StatCard labelClassName="stat-card-label-increased" icon={RefreshCw} label="Follow-ups Today" value={metrics.followUps} description="Scheduled follow ups" iconBg="bg-violet-100" iconColor="text-violet-700" />
-        <StatCard labelClassName="stat-card-label-increased" icon={Activity} label="Total Activities Generated" value={metrics.activities} description="Tracked events" iconBg="bg-sky-100" iconColor="text-sky-700" />
-        <StatCard labelClassName="stat-card-label-increased" icon={Users} label="Total Funnels Generated" value={metrics.funnels} description="Qualified pipeline" iconBg="bg-indigo-100" iconColor="text-indigo-700" />
-        <StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Total Quotations Generated" value={metrics.quotations} description="Proposals sent" iconBg="bg-purple-100" iconColor="text-purple-700" />
-        <StatCard labelClassName="stat-card-label-increased" icon={CheckCircle2} label="Converted Leads" value={metrics.converted} description="Won customers" iconBg="bg-green-100" iconColor="text-green-700" />
-        <StatCard labelClassName="stat-card-label-increased" icon={XCircle} label="Scrapped Leads" value={metrics.scrapped} description="Closed as lost" iconBg="bg-gray-100" iconColor="text-gray-700" />
+        <StatCard labelClassName="stat-card-label-increased" icon={RefreshCw} label="Follow-ups Today" value={metrics.followUps} iconBg="bg-orange-50" iconColor="text-orange-600" onClick={() => {
+          const date = new Date()
+          const today = `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+          navigateToKpi(`/sales/calendar?view=followups-today&date=${today}`)
+        }} />
+        <StatCard labelClassName="stat-card-label-increased" icon={Activity} label="Total Activities Generated" value={metrics.activities} iconBg="bg-blue-50" iconColor="text-blue-600" onClick={() => navigateToKpi('/sales/activities')} />
+        <StatCard labelClassName="stat-card-label-increased" icon={Users} label="Total Funnels Generated" value={metrics.funnels} iconBg="bg-violet-50" iconColor="text-violet-600" onClick={() => navigateToKpi('/sales/funnels')} />
+        <StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Total Quotations Generated" value={metrics.quotations} iconBg="bg-violet-50" iconColor="text-violet-600" onClick={() => navigateToKpi('/sales/quotations/all')} />
+        <StatCard labelClassName="stat-card-label-increased" icon={CheckCircle2} label="Converted Leads" value={metrics.converted} iconBg="bg-green-50" iconColor="text-green-600" onClick={() => navigateToKpi('/sales/leads?kpi=converted')} />
+        <StatCard labelClassName="stat-card-label-increased" icon={XCircle} label="Scrapped Leads" value={metrics.scrapped} iconBg="bg-rose-50" iconColor="text-rose-600" onClick={() => navigateToKpi('/sales/leads?kpi=scrapped')} />
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap gap-3">
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Assigned To</span>
-            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
-              <option value="all">All</option>
-              <option value="Unassigned">Unassigned</option>
-              {assignedOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">Source</span>
-            <select className="w-full rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-              <option value="all">All</option>
-              <option value="Mail Campaign">Mail Campaign</option>
-              <option value="Manual">Manual</option>
-              <option value="Website">Website</option>
-              <option value="Referral">Referral</option>
-            </select>
-          </label>
-        </div>
-
         <div className="overflow-x-auto rounded-lg border border-[#EFECE5]">
           {isLoading ? <div className="p-8 text-center text-sm text-gray-500">Loading leads…</div> : (
             <table className="min-w-full text-sm">
@@ -399,48 +412,17 @@ export default function LeadsPage({
                     <td className={`${tableCellClass} text-gray-700`}>{lead.sourceOfLead || 'Manual'}</td>
                     <td className={`${tableCellClass} text-gray-700`}>{lead.assignedTo || 'Unassigned'}</td>
                     <td className={tableCellClass}>
-                      <div className="relative">
-                        <button
-                          ref={(node) => {
-                            menuButtonRefs.current[lead._id] = node
-                          }}
-                          onClick={() => {
-                            if (openMenuId === lead._id) {
-                              closeMenu()
-                            } else {
-                              setOpenMenuId(lead._id)
-                            }
-                          }}
-                          className="rounded p-2 text-gray-600 hover:bg-[#F2EFE8]"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
-                        {openMenuId === lead._id && menuPosition && createPortal(
-                          <div
-                            ref={menuRef}
-                            className="fixed z-[9999] w-56 overflow-y-auto rounded-lg border border-[#EFECE5] bg-white p-2 shadow-xl"
-                            style={{
-                              top: menuPosition.top,
-                              left: menuPosition.left,
-                              maxHeight: '250px',
-                              scrollbarWidth: 'thin',
-                              msOverflowStyle: 'auto',
-                            }}
-                          >
-                            <button onClick={() => handleAction('view', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Eye className="h-4 w-4" /> View Lead</button>
-                            <PermissionGate moduleName="leads" action="edit"><button onClick={() => handleAction('edit', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Pencil className="h-4 w-4" /> Edit Lead</button></PermissionGate>
-                            <button onClick={() => handleAction('owner', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Users className="h-4 w-4" /> Assign Owner</button>
-                            <button onClick={() => handleAction('followup', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Schedule Follow-up</button>
-                            <button onClick={() => handleAction('activity', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Move To Activity</button>
-                            <button onClick={() => handleAction('funnel', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Users className="h-4 w-4" /> Move To Funnel</button>
-                            <button onClick={() => handleAction('quotation', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><FileText className="h-4 w-4" /> Generate Quotation</button>
-                            <button onClick={() => handleAction('convert', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><CheckCircle2 className="h-4 w-4" /> Convert To Customer</button>
-                            <button onClick={() => handleAction('scrap', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><XCircle className="h-4 w-4" /> Scrap Lead</button>
-                            <PermissionGate moduleName="leads" action="delete"><button onClick={() => handleAction('delete', lead)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" /> Delete</button></PermissionGate>
-                          </div>,
-                          document.body
+                      <ActionMenu moduleName="leads" onView={() => void handleAction('view', lead)} onEdit={() => void handleAction('edit', lead)} onDelete={() => void handleAction('delete', lead)}>
+                        {(closeMenu, buttonRect) => (
+                          <>
+                            <button type="button" role="menuitem" onClick={() => { closeMenu(); void handleAction('owner', lead, buttonRect) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Users className="h-4 w-4" /> Assign Owner</button>
+                            <button type="button" role="menuitem" onClick={() => { closeMenu(); void handleAction('followup', lead) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Schedule Follow-up</button>
+                            <button type="button" role="menuitem" onClick={() => { closeMenu(); void handleAction('activity', lead) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><Calendar className="h-4 w-4" /> Move To Activity</button>
+                            <button type="button" role="menuitem" onClick={() => { closeMenu(); void handleAction('convert', lead) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><CheckCircle2 className="h-4 w-4" /> Convert To Customer</button>
+                            <button type="button" role="menuitem" onClick={() => { closeMenu(); void handleAction('scrap', lead) }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#F2EFE8]"><XCircle className="h-4 w-4" /> Scrap Lead</button>
+                          </>
                         )}
-                      </div>
+                      </ActionMenu>
                     </td>
                   </tr>
                 ))}

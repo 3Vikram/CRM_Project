@@ -22,6 +22,18 @@ export default defineConfig({
         target: 'http://127.0.0.1:5002',
         changeOrigin: true,
       },
+      '/uploads/products': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+      },
+      '/uploads/documents': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: true,
+      },
       '/api/inventory': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,

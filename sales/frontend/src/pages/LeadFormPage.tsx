@@ -13,6 +13,7 @@ const initialState = {
   mobile: '',
   followUpDate: '',
   assignedTo: '',
+  assignedToId: '',
   sourceOfLead: 'Manual',
   customerRequirements: '',
   remarks: '',
@@ -63,6 +64,7 @@ export default function LeadFormPage() {
           mobile: lead.mobile || '',
           followUpDate: lead.followUpDate || '',
           assignedTo: lead.assignedTo || '',
+          assignedToId: lead.assignedToId || '',
           sourceOfLead: lead.sourceOfLead || 'Manual',
           customerRequirements: lead.customerRequirements || '',
           remarks: lead.remarks || '',
@@ -75,8 +77,26 @@ export default function LeadFormPage() {
     void loadLead();
   }, [id, isEditMode]);
 
+  useEffect(() => {
+    if (!form.assignedToId && form.assignedTo) {
+      const assignedEmployee = employees.find((employee) =>
+        (employee.employeeName || employee.fullName || employee.email).toLowerCase() === form.assignedTo.toLowerCase(),
+      );
+      if (assignedEmployee) setForm((prev) => ({ ...prev, assignedToId: assignedEmployee._id }));
+    }
+  }, [employees, form.assignedTo, form.assignedToId]);
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
+    if (name === 'assignedToId') {
+      const employee = employees.find((item) => item._id === value);
+      setForm((prev) => ({
+        ...prev,
+        assignedToId: value,
+        assignedTo: employee?.employeeName || employee?.fullName || employee?.email || '',
+      }));
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -144,11 +164,11 @@ export default function LeadFormPage() {
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Assign To</span>
-            <select name="assignedTo" value={form.assignedTo} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+            <select name="assignedToId" value={form.assignedToId} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
               <option value="">Select Employee</option>
               {employees.map((employee) => {
                 const employeeName = employee.employeeName || employee.fullName || employee.email;
-                return <option key={employee._id} value={employeeName}>{employeeName}</option>;
+                return <option key={employee._id} value={employee._id}>{employeeName}</option>;
               })}
             </select>
           </label>

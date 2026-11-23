@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import { Sidebar } from '@/components/sidebar'
 import { TopBar } from '@/components/top-bar'
 import { getStoredAuth } from '@/lib/auth'
@@ -37,6 +38,7 @@ import QuotationFormPage from '@/pages/QuotationFormPage'
 import QuotationEditPage from '@/pages/QuotationEditPage'
 import QuotationViewPage from '@/pages/QuotationViewPage'
 import FunnelPage from '@/pages/FunnelPage'
+import FunnelAnalyticsPage from '@/pages/FunnelAnalyticsPage'
 import FunnelFormPage from '@/pages/FunnelFormPage'
 import OPFPage from '@/pages/OPFPage'
 import OPFGenerateFormPage from '@/pages/OPFGenerateFormPage'
@@ -79,6 +81,8 @@ function AccessDeniedPage() {
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const session = getStoredAuth()
   const loggedIn = typeof window !== 'undefined' && Boolean(session?.token)
 
@@ -88,13 +92,19 @@ function SalesLayout({ children }: { children: React.ReactNode }) {
 
   const requiredPermission = getRoutePermission(location.pathname)
   const canView = !requiredPermission || hasPermission(requiredPermission)
+  const isDashboardPage = location.pathname.replace(/\/+$/, '') === '/sales/dashboard'
 
   return (
     <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
-      <TopBar />
+      <TopBar onMenuClick={() => setMobileSidebarOpen((open) => !open)} />
       <div className="mt-16 flex h-[calc(100vh-4rem)] overflow-hidden">
-        <Sidebar />
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">{canView ? children : <AccessDeniedPage />}</main>
+        <Sidebar
+          isExpanded={sidebarExpanded}
+          isMobileOpen={mobileSidebarOpen}
+          onToggle={() => setSidebarExpanded((expanded) => !expanded)}
+          onClose={() => setMobileSidebarOpen(false)}
+        />
+        <main className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3 ${isDashboardPage ? '' : 'sales-page-content'}`}>{canView ? children : <AccessDeniedPage />}</main>
       </div>
     </div>
   )
@@ -378,6 +388,14 @@ export default function App() {
           element={
             <SalesLayout>
               <ActivityFormPage />
+            </SalesLayout>
+          }
+        />
+        <Route
+          path="/sales/funnels/analytics"
+          element={
+            <SalesLayout>
+              <FunnelAnalyticsPage />
             </SalesLayout>
           }
         />

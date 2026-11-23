@@ -19,9 +19,24 @@ export interface CustomerApiRecord {
   email?: string;
   phone?: string;
   status?: 'Active' | 'Inactive';
+  industry?: string;
+  assignedEmployees?: Array<{ employeeId?: string; employeeName?: string }>;
+  approvalStatus?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  approval?: { status?: string; approvedBy?: string; approvedAt?: string };
   notes?: string;
   createdAt?: string;
   billToAddress?: {
+    addressLine1?: string;
+    city?: string;
+    state?: string;
+    area?: string;
+    country?: string;
+    pincode?: string;
+  };
+  shipToSameAsBilling?: boolean;
+  shipToAddress?: {
     addressLine1?: string;
     city?: string;
     state?: string;
@@ -46,9 +61,59 @@ export interface CustomerListResponse {
   };
 }
 
+export interface CustomerSummary {
+  total: number;
+  active: number;
+  inactive: number;
+  newThisMonth: number;
+}
+
+export interface CustomerAnalytics {
+  range: { start: string; end: string };
+  kpis: {
+    totalCustomers: number;
+    totalChangePercent: number | null;
+    leadingSector: {
+      name: string;
+      count: number;
+      changePercent: number | null;
+    } | null;
+    leadingIndustryRevenue: { industry: string; revenue: number } | null;
+    activeCustomers: number;
+    inactiveCustomers: number;
+  };
+  charts: {
+    sectorDistribution: Array<{ industry: string; count: number }>;
+    topCustomers: Array<{ customer: string; revenue: number; marginPercent?: number }>;
+    growthTrend: Array<{ month: string; label: string; customers: number }>;
+    statusDistribution: Array<{ status: 'Active' | 'Inactive'; count: number }>;
+    conversionOverview: {
+      convertedLeads: number;
+      directCustomers: number;
+      convertedActivitiesAvailable: boolean;
+    };
+    leadAcquisitionSources: Array<{ source: string; count: number }>;
+    marginAvailable: boolean;
+  };
+}
+
+export async function fetchCustomerAnalytics(params: { startDate: string; endDate: string }) {
+  const searchParams = new URLSearchParams(params);
+  const response = await fetch(`${API_BASE_URL}/customers/analytics?${searchParams.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => ({}));
+    throw new Error(errorPayload.message || 'Failed to load customer analytics');
+  }
+  const result = await response.json() as { success: boolean; data: CustomerAnalytics };
+  return result.data;
+}
+
 export interface CustomerPayload {
   companyName: string;
   customerName: string;
+  industry?: string;
   state?: string;
   gstNumber?: string;
   email: string;
@@ -122,6 +187,18 @@ export async function fetchCustomers(params: { search?: string; page?: number; l
     }
     return response.json() as Promise<CustomerListResponse>;
   }, 30_000);
+}
+
+export async function fetchCustomerSummary() {
+  const response = await fetch(`${API_BASE_URL}/customers/summary`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => ({}));
+    throw new Error(errorPayload.message || 'Failed to load customer summary');
+  }
+  const result = await response.json() as { success: boolean; data: CustomerSummary };
+  return result.data;
 }
 
 export async function fetchCustomerById(id: string) {

@@ -7,7 +7,8 @@ const { resolveCustomerCreator } = require('../services/customerCreator');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { DEFAULT_PAGE_SIZE, parsePagination, normalizeSort, regexFromSearch } = require('../utils/queryUtils');
-const { resolveCreatorNames } = require('../utils/accessScope');
+const { ownerScope, resolveCreatorNames } = require('../utils/accessScope');
+const { customerDuplicateConditions, customerIdentityKeys } = require('../utils/customerDuplicates');
 
 const normalizePhone = (value = '') => value.replace(/[^\d+]/g, '').trim();
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -324,15 +325,36 @@ exports.moveContactToCustomer = async (req, res) => {
       designation: contact.designation || '',
     };
 
+    let newCustomerPayload;
+    let duplicateConditions = [];
     if (!customer) {
-      const creator = await resolveCustomerCreator(req.user);
-      customer = await Customer.create({
+      newCustomerPayload = {
         companyName: customerName || contact.contactName,
+        customerName: contact.contactName,
+        email: contact.email,
+        phone: contact.contactNumber,
         contacts: [contactData],
         status: 'Active',
         accountType: 'Individual',
-        ...creator,
-      });
+        ...await resolveCustomerCreator(req.user),
+      };
+      duplicateConditions = customerDuplicateConditions(newCustomerPayload);
+      if (duplicateConditions.length) {
+        customer = await Customer.findOne({ $or: duplicateConditions });
+      }
+    }
+
+    if (!customer) {
+      try {
+        customer = await Customer.create({
+          ...newCustomerPayload,
+          duplicateKeys: customerIdentityKeys(newCustomerPayload),
+        });
+      } catch (error) {
+        if (error.code !== 11000 || !error.keyPattern?.duplicateKeys) throw error;
+        customer = await Customer.findOne({ $or: duplicateConditions });
+        if (!customer) throw error;
+      }
     } else {
       const normalizedEmail = contact.email.toLowerCase();
       const normalizedPhone = contact.contactNumber.replace(/\D/g, '');
@@ -552,8 +574,12 @@ exports.updateContact = async (req, res) => {
 
 exports.deleteContact = async (req, res) => {
   try {
-    const identity = await getEmployeeIdentity(req);
-    const contact = await Contact.findOneAndDelete({ _id: req.params.id, employeeId: identity.employeeId });
+    const contactId = String(req.params.id || '').trim();
+    if (!/^[a-f\d]{24}$/i.test(contactId)) {
+      return res.status(400).json({ success: false, message: 'Invalid contact ID.' });
+    }
+
+    const contact = await Contact.findOneAndDelete({ $and: [{ _id: contactId }, ownerScope(req)] });
     if (!contact) {
       return res.status(404).json({ success: false, message: 'Contact not found' });
     }

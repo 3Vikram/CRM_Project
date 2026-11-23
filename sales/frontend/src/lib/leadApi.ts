@@ -1,8 +1,15 @@
 import axios from 'axios';
 import { getAuthHeaders } from './apiAuth';
-import { getCachedResponse } from './apiCache';
+import { clearApiCache, getCachedResponse } from './apiCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+
+export const LEAD_ASSIGNMENT_REQUIRED_MESSAGE = 'Please assign this lead to an employee before creating an activity.';
+
+export const isLeadAssigned = (value: string | null | undefined) => {
+  const assignedTo = String(value || '').trim();
+  return Boolean(assignedTo && !/^(unassigned|none|select|n\/a|-)$/i.test(assignedTo));
+};
 
 export interface LeadRecord {
   _id: string;
@@ -29,6 +36,7 @@ export interface LeadRecord {
   priority?: string;
   leadStatus?: string;
   assignedTo?: string;
+  assignedToId?: string;
   createdBy?: string;
   createdDate?: string;
   followUpDate?: string;
@@ -180,6 +188,10 @@ export async function convertLeadToCustomer(id: string) {
   const response = await axios.post(`${API_BASE_URL}/leads/convert-customer`, { id }, {
     headers: getAuthHeaders(),
   });
+  if (response.data?.success) {
+    clearApiCache();
+    window.dispatchEvent(new Event('sales:lead-converted'));
+  }
   return response.data;
 }
 

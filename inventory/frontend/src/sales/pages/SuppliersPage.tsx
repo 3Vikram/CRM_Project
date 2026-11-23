@@ -1,14 +1,16 @@
 'use client'
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Search, Plus, Download, Eye, Pencil, Trash2, Building2 } from 'lucide-react'
+import { Search, Plus, Download, Building2 } from 'lucide-react'
 import { Modal } from '@/sales/components/modal'
 import { Toast } from '@/sales/components/toast'
 import { deleteSupplier, fetchSuppliers, type SupplierRecord } from '@/sales/lib/supplierApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { clearApiCache } from '@/sales/lib/apiCache'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 
 const tableCellClass = 'px-6 py-3 border-r border-[#D1D5DB]'
 
@@ -16,8 +18,11 @@ export default function SuppliersPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([])
+  const [knownProductOptions, setKnownProductOptions] = useState<string[]>([])
+  const [knownCreatorOptions, setKnownCreatorOptions] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [productFilter, setProductFilter] = useState('all')
+  const [createdByFilter, setCreatedByFilter] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
@@ -38,11 +43,13 @@ export default function SuppliersPage() {
     setShowToast(true)
   }, [])
 
-  const loadSuppliers = useCallback(async (nextPage = page, nextLimit = pageSize, query = searchQuery, product = productFilter) => {
+  const loadSuppliers = useCallback(async (nextPage = page, nextLimit = pageSize, query = searchQuery, product = productFilter, creator = createdByFilter) => {
     setIsLoading(true)
     try {
-      const response = await fetchSuppliers({ search: query, product: product === 'all' ? '' : product, page: nextPage, limit: nextLimit })
+      const response = await fetchSuppliers({ search: query, product: product === 'all' ? '' : product, createdBy: creator, page: nextPage, limit: nextLimit })
       setSuppliers(response.data || [])
+      setKnownProductOptions((current) => Array.from(new Set([...current, ...(response.data || []).map((supplier: SupplierRecord) => supplier.product).filter((value: string | undefined): value is string => Boolean(value))])).sort())
+      setKnownCreatorOptions((current) => Array.from(new Set([...current, ...(response.data || []).map((supplier: SupplierRecord) => supplier.createdBy).filter((value: string | undefined): value is string => Boolean(value))])).sort())
       setTotalPages(response.pagination?.totalPages || 1)
       setTotalCount(response.pagination?.total || 0)
     } catch (error) {
@@ -50,7 +57,7 @@ export default function SuppliersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [notify, page, pageSize, searchQuery, productFilter])
+  }, [notify, page, pageSize, searchQuery, productFilter, createdByFilter])
 
   useEffect(() => {
     if (searchTimeoutRef.current) window.clearTimeout(searchTimeoutRef.current)
@@ -62,7 +69,7 @@ export default function SuppliersPage() {
     return () => {
       if (searchTimeoutRef.current) window.clearTimeout(searchTimeoutRef.current)
     }
-  }, [page, pageSize, searchQuery, productFilter, loadSuppliers])
+  }, [page, pageSize, searchQuery, productFilter, createdByFilter, loadSuppliers])
 
   useEffect(() => {
     if (location.state?.message) {
@@ -71,11 +78,17 @@ export default function SuppliersPage() {
     }
   }, [location.pathname, location.state])
 
-  const productOptions = useMemo(() => Array.from(new Set(suppliers.map((supplier) => supplier.product).filter(Boolean))).sort(), [suppliers])
+  const productOptions = knownProductOptions
+  const createdByOptions = knownCreatorOptions
+  const visibleSuppliers = suppliers
+  const supplierFilterFields = [
+    { key: 'product', label: 'Product', type: 'select' as const, options: productOptions },
+    { key: 'createdBy', label: 'Created By', type: 'select' as const, options: createdByOptions },
+  ]
 
   useEffect(() => {
     setPage(1)
-  }, [searchQuery, productFilter, pageSize])
+  }, [searchQuery, productFilter, createdByFilter, pageSize])
 
   const handleAddNew = () => navigate('/sales/suppliers/new')
   const handleEdit = (supplier: SupplierRecord) => navigate(`/sales/suppliers/edit/${supplier._id}`)
@@ -100,7 +113,7 @@ export default function SuppliersPage() {
 
   const handleDownloadReport = async () => {
     const headers = ['SL No.', 'Supplier Name', 'Contact Name', 'Email', 'Contact Number', 'Product', 'Created By']
-    const rows = suppliers.map((supplier, index) => [
+    const rows = visibleSuppliers.map((supplier, index) => [
       index + 1,
       supplier.supplierName || '',
       supplier.contactName || '',
@@ -135,16 +148,6 @@ export default function SuppliersPage() {
           <h1 className="crm-page-heading">Supplier List</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <PermissionGate moduleName="suppliers" action="create">
-            <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#1E293B]">
-              <Plus className="h-4 w-4" />
-              ADD NEW
-            </button>
-          </PermissionGate>
-          <button onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
-            <Download className="h-4 w-4" />
-            Download Report
-          </button>
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -152,9 +155,31 @@ export default function SuppliersPage() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search"
-              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
+              className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]"
             />
           </div>
+          <PageFilters
+            fields={supplierFilterFields}
+            values={{ product: productFilter === 'all' ? '' : productFilter, createdBy: createdByFilter }}
+            onApply={(values: PageFilterValues) => {
+              setProductFilter(values.product || 'all')
+              setCreatedByFilter(values.createdBy || '')
+            }}
+            onClear={() => {
+              setProductFilter('all')
+              setCreatedByFilter('')
+            }}
+          />
+          <button onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-[#E7E3DA]">
+            <Download className="h-4 w-4" />
+            Download Report
+          </button>
+          <PermissionGate moduleName="suppliers" action="create">
+            <button onClick={handleAddNew} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1E293B]">
+              <Plus className="h-4 w-4" />
+              ADD NEW
+            </button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -163,18 +188,6 @@ export default function SuppliersPage() {
       ) : null}
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <div className="mb-4">
-          <label className="flex flex-col gap-1 text-sm text-gray-600">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Product Filter</span>
-            <select value={productFilter} onChange={(event) => setProductFilter(event.target.value)} className="w-full max-w-xs rounded-lg border border-[#EFECE5] bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]">
-              <option value="all">All Products</option>
-              {productOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
         <div className="overflow-hidden rounded-lg border border-[#EFECE5]">
           {isLoading ? (
             <div className="space-y-2 py-8">
@@ -184,7 +197,7 @@ export default function SuppliersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="sales-data-table w-full">
                 <thead>
                   <tr className="border-b border-[#EFECE5] bg-[#F2EFE8]">
                     <th className={tableCellClass + ' text-left text-xs font-semibold uppercase tracking-wider text-gray-600'}>Supplier ID</th>
@@ -198,8 +211,8 @@ export default function SuppliersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {suppliers.length > 0 ? (
-                    suppliers.map((supplier) => (
+                  {visibleSuppliers.length > 0 ? (
+                    visibleSuppliers.map((supplier) => (
                       <tr key={supplier._id} className="border-b border-[#F2EFE8] transition-colors hover:bg-[#F2EFE8]">
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm font-semibold text-gray-900`}>{supplier.supplierId}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.createdBy || 'Admin'}</td>
@@ -208,23 +221,7 @@ export default function SuppliersPage() {
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.emailId}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.contactNumber}</td>
                         <td className={`${tableCellClass.replace('py-3','py-4')} text-sm text-gray-700`}>{supplier.product}</td>
-                        <td className={`${tableCellClass.replace('py-3','py-4')}`}>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => handleView(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="View">
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
-                            <PermissionGate moduleName="suppliers" action="edit">
-                              <button type="button" onClick={() => handleEdit(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Edit">
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            </PermissionGate>
-                            <PermissionGate moduleName="suppliers" action="delete">
-                              <button type="button" onClick={() => setPendingDeleteSupplier(supplier)} className="rounded border border-[#EFECE5] bg-white p-2 text-gray-600 transition hover:bg-[#F2EFE8]" title="Delete">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </PermissionGate>
-                          </div>
-                        </td>
+                        <td className={`${tableCellClass.replace('py-3','py-4')}`}><ActionMenu moduleName="suppliers" onView={() => handleView(supplier)} onEdit={() => handleEdit(supplier)} onDelete={() => setPendingDeleteSupplier(supplier)} /></td>
                       </tr>
                     ))
                   ) : (

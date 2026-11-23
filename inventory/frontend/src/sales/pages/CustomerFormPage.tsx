@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, ChevronRight, Plus, RefreshCcw, Save, Upload } from 'lucide-react'
+import { ArrowLeft, Plus, RefreshCcw, Save, Upload } from 'lucide-react'
 import { Country, State, City } from 'country-state-city'
 import Select from 'react-select'
 import {
@@ -41,6 +41,7 @@ interface DocumentItem {
 
 interface CustomerFormState {
   companyName: string
+  industry: string
   state: string
   gstNumber: string
   billingAddressLine: string
@@ -76,12 +77,39 @@ interface SelectOption {
 }
 
 type SectionKey = 'company' | 'billing' | 'contact' | 'documents'
+const FORM_STEPS: Array<{ key: SectionKey; title: string }> = [
+  { key: 'company', title: 'Company Information' },
+  { key: 'billing', title: 'Billing Address' },
+  { key: 'contact', title: 'Contact Information' },
+  { key: 'documents', title: 'Documents' },
+]
 
 const contactTypeOptions = ['Accounts', 'Production', 'Marketing', 'Finance', 'Management']
+const natureOfBusinessOptions = [
+  'Auto',
+  'Education',
+  'Fashion/ clothing',
+  'Govt',
+  'Hardware Seller',
+  'IT',
+  'ITES',
+  'Manufacturing',
+  'Realestate',
+  'Reseller',
+]
+
+const toSelectOptions = (values: string[]): SelectOption[] =>
+  values.map((value) => ({ label: value, value }))
+
+const natureOfBusinessSelectOptions = toSelectOptions(natureOfBusinessOptions)
+const accountTypeSelectOptions = toSelectOptions(ACCOUNT_TYPE_OPTIONS)
 
 const selectStyles = {
   control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
     ...base,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     minHeight: '44px',
     borderRadius: '0.5rem',
     borderColor: state.isFocused ? '#111827' : '#e2e8f0',
@@ -90,9 +118,18 @@ const selectStyles = {
       borderColor: '#111827',
     },
     backgroundColor: '#ffffff',
+    paddingLeft: '12px',
   }),
-  placeholder: (base: Record<string, unknown>) => ({ ...base, color: '#94a3b8' }),
-  singleValue: (base: Record<string, unknown>) => ({ ...base, color: '#0f172a' }),
+  valueContainer: (base: Record<string, unknown>) => ({ ...base, minWidth: 0, padding: 0 }),
+  indicatorsContainer: (base: Record<string, unknown>) => ({
+    ...base,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginLeft: 'auto',
+  }),
+  placeholder: (base: Record<string, unknown>) => ({ ...base, color: '#94a3b8', fontSize: '15px' }),
+  singleValue: (base: Record<string, unknown>) => ({ ...base, color: '#0f172a', fontSize: '15px' }),
   menu: (base: Record<string, unknown>) => ({ ...base, zIndex: 50, borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid #EFECE5' }),
   menuPortal: (base: Record<string, unknown>) => ({ ...base, zIndex: 9999 }),
   option: (base: Record<string, unknown>, state: { isFocused: boolean; isSelected: boolean }) => ({
@@ -108,6 +145,7 @@ const filterByInput = (option: { label: string }, inputValue: string) => {
 
 const emptyForm: CustomerFormState = {
   companyName: '',
+  industry: '',
   state: '',
   gstNumber: '',
   billingAddressLine: '',
@@ -140,7 +178,9 @@ export default function CustomerFormPage() {
   const isEditing = Boolean(id)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [form, setForm] = useState<CustomerFormState>(emptyForm)
-  const [activeSection, setActiveSection] = useState<SectionKey | null>('company')
+  const [activeSection, setActiveSection] = useState<SectionKey>('company')
+  const [savedShippingAddress, setSavedShippingAddress] = useState<CustomerApiRecord['shipToAddress'] | null>(null)
+  const [savedShipToSameAsBilling, setSavedShipToSameAsBilling] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [countries, setCountries] = useState<LocationOption[]>([])
@@ -234,6 +274,7 @@ export default function CustomerFormPage() {
         const primaryContact = customer.contacts?.[0]
         setForm({
           companyName: customer.companyName || customer.customerName || '',
+          industry: customer.industry || '',
           state: customer.state || '',
           gstNumber: customer.gstNumber || '',
           billingAddressLine: customer.billToAddress?.addressLine1 || '',
@@ -257,6 +298,8 @@ export default function CustomerFormPage() {
           })),
           documents: [],
         })
+        setSavedShippingAddress(customer.shipToAddress || null)
+        setSavedShipToSameAsBilling(customer.shipToSameAsBilling ?? true)
       } catch (error) {
         console.error(error)
       }
@@ -397,6 +440,7 @@ export default function CustomerFormPage() {
 
     const payload: CustomerPayload = {
       companyName: form.companyName,
+      industry: form.industry,
       customerName: form.companyName,
       email: form.billingEmail,
       phone: form.billingContactNumber,
@@ -420,8 +464,15 @@ export default function CustomerFormPage() {
         city: form.billingCity,
         pincode: form.billingPinCode,
       },
-      shipToSameAsBilling: true,
-      shipToAddress: {
+      shipToSameAsBilling: isEditing ? savedShipToSameAsBilling : true,
+      shipToAddress: isEditing && savedShippingAddress ? {
+        addressLine1: savedShippingAddress.addressLine1 || '',
+        area: savedShippingAddress.area || '',
+        country: savedShippingAddress.country || '',
+        state: savedShippingAddress.state || '',
+        city: savedShippingAddress.city || '',
+        pincode: savedShippingAddress.pincode || '',
+      } : {
         addressLine1: form.billingAddressLine,
         area: form.billingArea,
         country: form.billingCountry,
@@ -456,8 +507,8 @@ export default function CustomerFormPage() {
   }
 
   return (
-    <div className="customer-form w-full rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="customer-form w-full rounded-xl border border-[#EFECE5] bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <button onClick={() => navigate('/sales/customers')} className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#111827]">
             <ArrowLeft className="h-4 w-4" />
@@ -467,19 +518,58 @@ export default function CustomerFormPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="crm-customer-form space-y-4">
+      <form onSubmit={handleSubmit} className="crm-customer-form space-y-3">
         {submitError ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div>
         ) : null}
 
-        <SectionCard
+        <div className="customer-form-steps grid grid-cols-4 gap-2">
+          {FORM_STEPS.map((step, index) => {
+            const isActive = activeSection === step.key
+            const isComplete = FORM_STEPS.findIndex((item) => item.key === activeSection) > index
+            return (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => setActiveSection(step.key)}
+                aria-current={isActive ? 'step' : undefined}
+                className={`flex min-h-[56px] min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left transition sm:gap-2 sm:px-3 sm:py-2 ${isActive ? 'border-[#111827] bg-[#111827] text-white shadow-sm' : isComplete ? 'border-emerald-200 bg-emerald-50 text-slate-800' : 'border-[#EFECE5] bg-[#F8F7F3] text-slate-700 hover:bg-[#F2EFE8]'}`}
+              >
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${isActive ? 'bg-white text-[#111827]' : isComplete ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600'}`}>
+                  {index + 1}
+                </span>
+                <span className="min-w-0 text-[10px] font-semibold leading-tight sm:text-sm">{step.title}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {activeSection === 'company' && <SectionCard
           title="Company Information"
-          isOpen={activeSection === 'company'}
-          onToggle={() => setActiveSection((current) => (current === 'company' ? null : 'company'))}
         >
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             <Field label="Company Name" required>
               <input value={form.companyName} onChange={(event) => handleFieldChange('companyName', event.target.value)} placeholder="Company Name" className="crm-input form-control" />
+            </Field>
+            <Field label="Nature of Business">
+              <Select
+                value={form.industry
+                  ? { label: form.industry, value: form.industry }
+                  : null}
+                onChange={(option) => handleFieldChange('industry', option?.value ?? '')}
+                options={form.industry && !natureOfBusinessOptions.includes(form.industry)
+                  ? [{ label: form.industry, value: form.industry }, ...natureOfBusinessSelectOptions]
+                  : natureOfBusinessSelectOptions}
+                isSearchable
+                isClearable
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
+                placeholder="Select Nature of Business..."
+                className="text-sm"
+                classNamePrefix="crm-select"
+                styles={selectStyles as never}
+                filterOption={filterByInput as never}
+              />
             </Field>
             <Field label="State" required>
               <Select
@@ -501,29 +591,32 @@ export default function CustomerFormPage() {
               <input value={form.gstNumber} onChange={(event) => handleFieldChange('gstNumber', event.target.value)} placeholder="GST Number" className="crm-input form-control" />
             </Field>
             <Field label="Account Type">
-              <select
-                value={form.accountType}
-                onChange={(event) => handleFieldChange('accountType', event.target.value)}
-                className="crm-input form-select"
-              >
-                <option value="">Select account type</option>
-                {form.accountType && !ACCOUNT_TYPE_OPTIONS.includes(form.accountType) ? (
-                  <option value={form.accountType}>{form.accountType}</option>
-                ) : null}
-                {ACCOUNT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+              <Select
+                value={form.accountType
+                  ? { label: form.accountType, value: form.accountType }
+                  : null}
+                onChange={(option) => handleFieldChange('accountType', option?.value ?? '')}
+                options={form.accountType && !ACCOUNT_TYPE_OPTIONS.includes(form.accountType)
+                  ? [{ label: form.accountType, value: form.accountType }, ...accountTypeSelectOptions]
+                  : accountTypeSelectOptions}
+                isSearchable
+                isClearable
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
+                placeholder="Select account type"
+                className="text-sm"
+                classNamePrefix="crm-select"
+                styles={selectStyles as never}
+                filterOption={filterByInput as never}
+              />
             </Field>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard
+        {activeSection === 'billing' && <SectionCard
           title="Billing Address"
-          isOpen={activeSection === 'billing'}
-          onToggle={() => setActiveSection((current) => (current === 'billing' ? null : 'billing'))}
         >
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             <Field label="Address Line" required>
               <input value={form.billingAddressLine} onChange={(event) => handleFieldChange('billingAddressLine', event.target.value)} placeholder="Address Line" className="crm-input form-control" />
             </Field>
@@ -600,23 +693,21 @@ export default function CustomerFormPage() {
               <input type="email" value={form.billingEmail} onChange={(event) => handleFieldChange('billingEmail', event.target.value)} placeholder="Email" className="crm-input form-control" />
             </Field>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard
+        {activeSection === 'contact' && <SectionCard
           title="Contact Information"
-          isOpen={activeSection === 'contact'}
-          onToggle={() => setActiveSection((current) => (current === 'contact' ? null : 'contact'))}
         >
-          <div className="space-y-4">
+          <div className="space-y-3">
             {form.contacts.map((contact, index) => (
-              <div key={contact.id} className="rounded-lg border border-[#EFECE5] bg-[#F8F7F3] p-4">
-                <div className="mb-3 flex items-center justify-between">
+              <div key={contact.id} className="rounded-lg border border-[#EFECE5] bg-[#F8F7F3] p-3">
+                <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-700">Contact {index + 1}</span>
                   {form.contacts.length > 1 ? (
                     <button type="button" onClick={() => removeContact(index)} className="text-sm text-[#111827]">Remove</button>
                   ) : null}
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Contact Type" required>
                     <select value={contact.contactType} onChange={(event) => handleContactChange(index, 'contactType', event.target.value)} className="crm-input form-select">
                       <option value="">Select</option>
@@ -645,12 +736,10 @@ export default function CustomerFormPage() {
               Add Contact
             </button>
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard
+        {activeSection === 'documents' && <SectionCard
           title="Documents"
-          isOpen={activeSection === 'documents'}
-          onToggle={() => setActiveSection((current) => (current === 'documents' ? null : 'documents'))}
         >
           <div className="space-y-3">
             <div className="flex items-center gap-3">
@@ -671,9 +760,20 @@ export default function CustomerFormPage() {
               </div>
             ) : null}
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <div className="flex items-center justify-end gap-3 border-t border-[#EFECE5] pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFECE5] pt-4">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setActiveSection(FORM_STEPS[Math.max(0, FORM_STEPS.findIndex((step) => step.key === activeSection) - 1)].key)} disabled={activeSection === FORM_STEPS[0].key} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+              Previous
+            </button>
+            {activeSection !== FORM_STEPS[FORM_STEPS.length - 1].key ? (
+              <button type="button" onClick={() => setActiveSection(FORM_STEPS[Math.min(FORM_STEPS.length - 1, FORM_STEPS.findIndex((step) => step.key === activeSection) + 1)].key)} className="rounded-lg border border-[#EFECE5] bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-[#F2EFE8]">
+                Next
+              </button>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-end gap-3">
           <button type="button" onClick={resetForm} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-semibold text-slate-700">
             <RefreshCcw className="h-4 w-4" />
             Reset
@@ -682,6 +782,7 @@ export default function CustomerFormPage() {
             <Save className="h-4 w-4" />
             {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Submit'}
           </button>
+          </div>
         </div>
       </form>
     </div>
@@ -690,29 +791,24 @@ export default function CustomerFormPage() {
 
 function SectionCard({
   title,
-  isOpen,
-  onToggle,
   children,
 }: {
   title: string
-  isOpen: boolean
-  onToggle: () => void
   children: React.ReactNode
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[#EFECE5] bg-white">
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between bg-[#F8F7F3] px-4 py-3 text-left">
-        <span className="text-sm font-semibold text-slate-800">{title}</span>
-        {isOpen ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
-      </button>
-      {isOpen ? <div className="p-4">{children}</div> : null}
+      <div className="flex w-full items-center bg-[#F8F7F3] px-4 py-2.5">
+        <span className="customer-form-section-title text-base font-semibold text-slate-800">{title}</span>
+      </div>
+      <div className="p-3">{children}</div>
     </div>
   )
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <label className="block">
+    <label className="customer-form-field block">
       <span className="mb-1 block text-sm font-medium text-slate-700">
         {label}
         {required ? <span className="ml-1 text-red-500">*</span> : null}

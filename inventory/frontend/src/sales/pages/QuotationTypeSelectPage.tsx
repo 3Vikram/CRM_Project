@@ -1,52 +1,44 @@
 'use client'
 
-import { useNavigate } from 'react-router-dom'
-import { ArrowRightLeft, Building2, Building } from 'lucide-react'
+import { useState } from 'react'
+import QuotationDashboardPage from '@/sales/pages/QuotationDashboardPage'
 
-const options = [
-  {
-    key: 'rent',
-    title: 'Rent',
-    description: 'Create rent quotations for equipment or rental work.',
-    icon: Building2,
-  },
-  {
-    key: 'sold',
-    title: 'Sold',
-    description: 'Create sale quotations for direct product sales.',
-    icon: Building,
-  },
-] as const
+type QuotationType = 'rent' | 'sold'
 
 export default function QuotationTypeSelectPage() {
-  const navigate = useNavigate()
+  const [selectedType, setSelectedType] = useState<QuotationType>('rent')
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="crm-page-heading">Quotation</h1>
-        {/* <p className="mt-2 text-sm text-gray-600">Select the quotation category to continue.</p> */}
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {options.map(({ key, title, description, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => navigate(`/sales/quotations/${key}`, { state: { quotationType: key } })}
-            className="group rounded-2xl border border-[#EFECE5] bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#F2EFE8] text-[#111827]">
-              <Icon className="h-6 w-6" />
-            </div>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-semibold text-gray-900">{title}</h2>
-              <ArrowRightLeft className="h-5 w-5 text-gray-500 transition group-hover:translate-x-1 group-hover:-translate-y-0.5" />
-            </div>
-            <p className="text-sm leading-6 text-gray-600">{description}</p>
-          </button>
-        ))}
-      </div>
-    </div>
+    <QuotationDashboardPage
+      quotationTypeOverride={selectedType}
+      embedded
+      tabs={
+        <div
+          role="tablist"
+          aria-label="Quotation type"
+          className="flex w-fit items-center gap-2 rounded-xl border border-[#E7E3DA] bg-[#F2EFE8] p-1.5"
+        >
+          {(['rent', 'sold'] as const).map((type) => {
+            const isSelected = selectedType === type
+            return (
+              <button
+                key={type}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                onClick={() => setSelectedType(type)}
+                className={`min-w-24 rounded-lg border px-5 py-2.5 text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CEC9BD] ${
+                  isSelected
+                    ? 'border-[#17233B] bg-[#17233B] font-semibold text-white shadow-sm'
+                    : 'border-[#E7E3DA] bg-white/70 font-medium text-[#1F2937] hover:border-[#CEC9BD] hover:bg-white hover:shadow-sm'
+                }`}
+              >
+                {type === 'rent' ? 'Rent' : 'Sold'}
+              </button>
+            )
+          })}
+        </div>
+      }
+    />
   )
 }

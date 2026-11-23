@@ -20,6 +20,7 @@ const contactRoutes = require('./routes/contactRoutes');
 const supplierRoutes = require('./routes/supplierRoutes');
 const mailCampaignRoutes = require('./routes/mailCampaignRoutes');
 const leadRoutes = require('./routes/leadRoutes');
+const funnelRoutes = require('./routes/funnelRoutes');
 const activityRoutes = require('./routes/activityRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const locationRoutes = require('./routes/locationRoutes');
@@ -29,10 +30,13 @@ const { getInventoryOPFOptions } = require('./controllers/opfController');
 const employeeRoutes = require('./routes/employeeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const Activity = require('./models/Activity');
+const Customer = require('./models/Customer');
 const { processScheduledCampaigns } = require('./controllers/mailCampaignController');
 const { processScheduledRenewalReminders } = require('./services/renewalReminderService');
-const { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireFullAccess } = require('./middleware/authMiddleware');
+const { authMiddleware, inventoryAuthMiddleware, requirePermission, requireAnyPermission, requireFullAccess, requireReportAccess } = require('./middleware/authMiddleware');
 const { getInventorySupplierOptions } = require('./controllers/supplierController');
 const { getInventoryCustomerOptions } = require('./controllers/customerController');
 const { getInventoryProductOptions } = require('./controllers/inventoryProductController');
@@ -62,6 +66,7 @@ console.info('Registered GET /api/suppliers/inventory-options with Inventory aut
 app.use('/api/suppliers', authMiddleware, requirePermission('suppliers'), supplierRoutes);
 app.use('/api/mail-campaigns', mailCampaignRoutes);
 app.use('/api/leads', authMiddleware, leadRoutes);
+app.use('/api/funnels', authMiddleware, requirePermission('funnels'), funnelRoutes);
 app.use('/api/activities', authMiddleware, requirePermission('activities'), activityRoutes);
 app.use('/api/calendar', authMiddleware, requirePermission('calendar'), calendarRoutes);
 app.use('/api/company-profiles', authMiddleware, requirePermission('companyProfiles'), companyProfileRoutes);
@@ -70,7 +75,9 @@ app.get('/api/opf/inventory-options/:id', inventoryAuthMiddleware, getInventoryO
 app.use('/api/opf', authMiddleware, requirePermission('opf'), opfRoutes);
 app.use('/api/employees', authMiddleware, employeeRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/reports', authMiddleware, requirePermission('reports'), reportRoutes);
+app.use('/api/dashboard', authMiddleware, requirePermission('dashboard'), dashboardRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
+app.use('/api/reports', authMiddleware, requireReportAccess, reportRoutes);
 app.use('/api/locations', authMiddleware, locationRoutes);
 
 app.use((error, _req, res, _next) => {
@@ -197,6 +204,10 @@ const initializeDatabase = async () => {
     if (error?.codeName !== 'IndexNotFound' && error?.code !== 27) throw error;
   });
   await Activity.syncIndexes();
+  await Customer.collection.createIndex(
+    { duplicateKeys: 1 },
+    { unique: true, sparse: true, name: 'unique_customer_duplicate_keys' }
+  );
   console.log('MongoDB connected');
 };
 

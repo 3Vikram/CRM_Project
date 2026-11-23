@@ -32,6 +32,7 @@ const ContactSchema = new mongoose.Schema(
 const CustomerSchema = new mongoose.Schema(
   {
     customerId: { type: String, trim: true },
+    duplicateKeys: { type: [String], default: undefined, select: false },
     companyName: {
       type: String,
       required: [true, 'Company name is required'],
@@ -86,6 +87,7 @@ const CustomerSchema = new mongoose.Schema(
       trim: true,
     },
     createdById: { type: String, trim: true, default: '', index: true },
+    sourceLeadId: { type: String, trim: true, default: undefined },
     notes: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
@@ -111,5 +113,7 @@ CustomerSchema.index({ 'assignedEmployees.employeeId': 1 });
 CustomerSchema.index({ email: 1, phone: 1, companyName: 1 });
 CustomerSchema.index({ companyName: 1, email: 1, status: 1 });
 CustomerSchema.index({ customerId: 1 }, { unique: true, sparse: true });
+CustomerSchema.index({ duplicateKeys: 1 }, { unique: true, sparse: true, name: 'unique_customer_duplicate_keys' });
+CustomerSchema.index({ sourceLeadId: 1 }, { unique: true, sparse: true, name: 'unique_customer_source_lead' });
 
 module.exports = mongoose.model('Customer', CustomerSchema);

@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Download, Search, Mail, FileText, Clock3, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Download, Search, Mail, FileText, Send } from 'lucide-react'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import { StatCard } from '@/sales/components/stat-card'
 import { deleteCampaign, getCampaigns, MailCampaignRecord } from '@/sales/lib/mailCampaignApi'
 import { PermissionGate } from '@/sales/components/PermissionGate'
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { downloadExcelReport } from '@/lib/downloadExcelReport'
+import { PageFilters, type PageFilterValues } from '@/sales/components/PageFilters'
 
 type CampaignStatus = 'Draft' | 'Scheduled' | 'Sent'
 
@@ -18,6 +20,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [campaignFilters, setCampaignFilters] = useState<PageFilterValues>({})
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null)
@@ -27,7 +30,54 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
   const [stats, setStats] = useState({ total: 0, drafts: 0, scheduled: 0, sent: 0 })
   const [isDownloading, setIsDownloading] = useState(false)
 
+  const campaignFilterFields = useMemo(() => {
+    const fields = [
+      { key: 'createdBy', label: 'Created By', type: 'select' as const, options: Array.from(new Set(campaigns.map((campaign) => campaign.createdBy).filter(Boolean))).sort() },
+      { key: 'campaignDate', label: statusFilter === 'Scheduled' ? 'Scheduled Date' : 'Created Date', type: 'date' as const },
+    ]
+    if (!statusFilter) {
+      fields.unshift({
+        key: 'status',
+        label: 'Status',
+        type: 'select' as const,
+        options: Array.from(new Set(campaigns.map((campaign) => campaign.status).filter(Boolean))).sort(),
+      })
+    }
+    return fields
+  }, [campaigns, statusFilter])
+
   const loadCampaigns = async (nextPage = page, nextLimit = pageSize) => {
+    const hasFilters = Object.values(campaignFilters).some(Boolean)
+    if (hasFilters) {
+      const allCampaigns: MailCampaignRecord[] = []
+      let currentPage = 1
+      let lastPage = 1
+      do {
+        const data = await getCampaigns({
+          search,
+          page: currentPage,
+          limit: 100,
+          ...(statusFilter ? { status: statusFilter } : {}),
+        })
+        allCampaigns.push(...(data.data || []))
+        lastPage = data.pagination?.totalPages || 1
+        currentPage += 1
+      } while (currentPage <= lastPage)
+
+      const filtered = allCampaigns.filter((campaign) => {
+        const campaignDate = statusFilter === 'Scheduled'
+          ? campaign.scheduledDate
+          : campaign.createdDate || campaign.createdAt
+        return (!campaignFilters.createdBy || campaign.createdBy === campaignFilters.createdBy)
+          && (!campaignFilters.status || campaign.status === campaignFilters.status)
+          && (!campaignFilters.campaignDate || String(campaignDate || '').slice(0, 10) === campaignFilters.campaignDate)
+      })
+      setTotalCount(filtered.length)
+      setTotalPages(Math.max(1, Math.ceil(filtered.length / nextLimit)))
+      setCampaigns(filtered.slice((nextPage - 1) * nextLimit, nextPage * nextLimit))
+      return
+    }
+
     const data = await getCampaigns({ search, page: nextPage, limit: nextLimit, ...(statusFilter ? { status: statusFilter } : {}) })
     setCampaigns(data.data || [])
     setTotalPages(data.pagination?.totalPages || 1)
@@ -39,7 +89,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       void loadCampaigns(1, pageSize)
     }, 200)
     return () => window.clearTimeout(timer)
-  }, [search, pageSize])
+  }, [search, pageSize, campaignFilters, statusFilter])
 
   useEffect(() => {
     void loadCampaigns(page, pageSize)
@@ -151,11 +201,27 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       {statusFilter === 'Draft' || statusFilter === 'Scheduled' ? (
         <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
       ) : null}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="crm-page-heading">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaigns'}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <label className="relative w-full sm:w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-[#CEC9BD]" placeholder="Search campaign" aria-label="Search campaign" />
+          </label>
+          <PageFilters
+            fields={campaignFilterFields}
+            values={campaignFilters}
+            onApply={(values) => {
+              setCampaignFilters(values)
+              setPage(1)
+            }}
+            onClear={() => {
+              setCampaignFilters({})
+              setPage(1)
+            }}
+          />
           <button type="button" onClick={() => void handleDownloadReport()} disabled={isDownloading} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm disabled:opacity-60">
             <Download className="h-4 w-4" />
             {isDownloading ? 'Downloading...' : 'Download Report'}
@@ -167,24 +233,14 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       </div>
 
       {!statusFilter ? (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} description="All active campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-[#111827]" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} description="Saved for later review" iconBg="bg-[#F2EFE8]" iconColor="text-gray-700" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/scheduled')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Clock3} label="Scheduled Campaigns" value={stats.scheduled} description="Queued for sending" iconBg="bg-[#F2EFE8]" iconColor="text-amber-700" /></button>
-          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} description="Completed campaigns" iconBg="bg-[#F2EFE8]" iconColor="text-green-700" /></button>
+        <div className="grid gap-6 md:grid-cols-3">
+          <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Mail} label="Total Campaigns" value={stats.total} iconBg="bg-blue-50" iconColor="text-blue-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/drafts')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={FileText} label="Draft Campaigns" value={stats.drafts} iconBg="bg-violet-50" iconColor="text-violet-600" /></button>
+          <button type="button" onClick={() => navigate('/sales/mail-campaign/sent')} className="text-left"><StatCard labelClassName="stat-card-label-increased" icon={Send} label="Sent Campaigns" value={stats.sent} iconBg="bg-green-50" iconColor="text-green-600" /></button>
         </div>
       ) : null}
 
       <div className="rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <div className="mb-6">
-          <div className="max-w-xl">
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">Search Campaign</label>
-            <div className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-3 py-2">
-              <Search className="h-4 w-4 text-gray-400" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="Search campaign" />
-            </div>
-          </div>
-        </div>
         {message ? <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
         {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
@@ -192,10 +248,9 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
           {campaigns.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[#EFECE5] bg-[#FAF8F2] px-6 py-12 text-center text-sm text-gray-500">No campaigns found.</div>
           ) : (
-          <table className="w-full min-w-[900px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
+          <table className="sales-data-table sales-mail-campaign-table w-full min-w-[900px] border-separate border-spacing-0 overflow-hidden rounded-lg border border-[#E5E7EB] text-sm">
             <thead>
               <tr className="text-left text-xs font-semibold uppercase tracking-wider">
-                <th className={`${tableHeaderCellClass} w-[7%] text-center`}>Sl No.</th>
                 <th className={`${tableHeaderCellClass} w-[12%]`}>Campaign ID</th>
                 <th className={`${tableHeaderCellClass} w-[30%]`}>Campaign Name</th>
                 <th className={`${tableHeaderCellClass} w-[15%]`}>Date</th>
@@ -203,13 +258,12 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
                 <th className={`${tableHeaderCellClass} w-[9%] text-center`}>View Report</th>
                 <th className={`${tableHeaderCellClass} w-[7%] text-center`}>Opens (Total)</th>
                 <th className={`${tableHeaderCellClass} w-[6%] text-center`}>Clicks (Total)</th>
-                <th className={`${tableHeaderCellClass} w-[8%] text-center`}>Delete</th>
+                <th className={`${tableHeaderCellClass} w-[8%] text-center`}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((campaign, index) => (
+              {campaigns.map((campaign) => (
                 <tr key={campaign._id} className="hover:bg-[#FAF8F2]">
-                  <td className={`${tableCellClass} text-center font-medium text-gray-900`}>{(page - 1) * pageSize + index + 1}</td>
                   <td className={`${tableCellClass} font-medium text-gray-900`}>{campaign.campaignId}</td>
                   <td className={tableCellClass}>{campaign.campaignName}</td>
                   <td className={`${tableCellClass} whitespace-nowrap`}>{statusFilter === 'Scheduled' ? `${formatDate(campaign.scheduledDate)} ${campaign.scheduledTime || ''}` : formatDate(campaign.createdDate || campaign.createdAt)}</td>
@@ -225,12 +279,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
                   <td className={`${tableCellClass} text-center`}>{campaign.opens}</td>
                   <td className={`${tableCellClass} text-center`}>{campaign.clicks}</td>
                   <td className={`${tableCellClass} text-center`}>
-                    <PermissionGate moduleName="mailCampaign" action="delete">
-                      <button type="button" onClick={() => setDeleteTarget(campaign)} disabled={deletingCampaignId === campaign.campaignId} className="inline-flex items-center gap-1 rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60" aria-label={`Delete ${campaign.campaignName}`}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                        {deletingCampaignId === campaign.campaignId ? 'Deleting...' : 'Delete'}
-                      </button>
-                    </PermissionGate>
+                    <ActionMenu moduleName="mailCampaign" disabled={deletingCampaignId === campaign.campaignId} onDelete={() => setDeleteTarget(campaign)} />
                   </td>
                 </tr>
               ))}

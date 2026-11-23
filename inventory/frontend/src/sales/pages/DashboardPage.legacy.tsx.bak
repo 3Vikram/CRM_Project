@@ -1,0 +1,6 @@
+import SalesDashboardView from '../../../../../sales/frontend/src/components/SalesDashboardView'
+import { fetchDashboard } from '@/sales/lib/dashboardApi'
+
+export default function DashboardPage() {
+  return <SalesDashboardView fetchDashboardData={fetchDashboard} />
+}

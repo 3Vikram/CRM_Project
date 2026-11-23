@@ -7,6 +7,8 @@ export interface AuthSessionData {
     name: string;
     email: string;
     role: AuthRole;
+    employeeType?: string;
+    employeeRole?: string;
     permissions?: EmployeePermissions;
   };
 }

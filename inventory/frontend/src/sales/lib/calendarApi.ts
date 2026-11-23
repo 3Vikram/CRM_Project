@@ -8,6 +8,7 @@ export interface CalendarApiEvent {
   module: string
   date: string
   time: string
+  endTime?: string
   customerName?: string
   contactName?: string
   assignedTo?: string
@@ -16,14 +17,20 @@ export interface CalendarApiEvent {
   description?: string
   referenceId?: string
   referenceModule?: string
+  targetId?: string
+  recordLabel?: string
+  quotationType?: 'rent' | 'sold'
   sourceField?: string
   eventType?: string
+  amount?: number | string | null
+  amountCurrency?: string
   color?: string
 }
 
 export const fetchCalendarEvents = async (): Promise<CalendarApiEvent[]> => {
   const { data } = await axios.get(`${API_BASE_URL}/calendar/events`)
-  return Array.isArray(data?.data) ? data.data : []
+  if (!Array.isArray(data?.data)) throw new Error('Calendar API returned an invalid events response.')
+  return data.data
 }
 
 export const completeCalendarEvent = async (module: string, id: string) => {

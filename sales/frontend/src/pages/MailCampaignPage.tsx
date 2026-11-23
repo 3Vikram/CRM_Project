@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Download, Search, Mail, FileText, Clock3, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Download, Search, Mail, FileText, Clock3, Send } from 'lucide-react'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import { StatCard } from '@/components/stat-card'
 import { deleteCampaign, getCampaigns, MailCampaignRecord } from '@/lib/mailCampaignApi'
 import { PermissionGate } from '@/components/PermissionGate'
+import { ActionMenu } from '@/components/ActionMenu'
 
 type CampaignStatus = 'Draft' | 'Scheduled' | 'Sent'
 
@@ -90,11 +91,15 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       {statusFilter === 'Draft' || statusFilter === 'Scheduled' ? (
         <button type="button" onClick={() => navigate('/sales/mail-campaign')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#111827]"><ArrowLeft className="h-4 w-4" /> Back to Mail Campaigns</button>
       ) : null}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="crm-page-heading">{statusFilter ? `${statusFilter} Campaigns` : 'Mail Campaigns'}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <label className="relative w-full sm:w-56">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-[#CEC9BD]" placeholder="Search campaign" aria-label="Search campaign" />
+          </label>
           <button className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm">
             <Download className="h-4 w-4" />
             Download Report
@@ -115,15 +120,6 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
       ) : null}
 
       <div className="rounded-xl border border-[#EFECE5] bg-white p-6 shadow-sm">
-        <div className="mb-6">
-          <div className="max-w-xl">
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">Search Campaign</label>
-            <div className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#FAF8F2] px-3 py-2">
-              <Search className="h-4 w-4 text-gray-400" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="Search campaign" />
-            </div>
-          </div>
-        </div>
         {message ? <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
         {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
@@ -142,7 +138,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
                 <th className={`${tableHeaderCellClass} w-[9%] text-center`}>View Report</th>
                 <th className={`${tableHeaderCellClass} w-[7%] text-center`}>Opens (Total)</th>
                 <th className={`${tableHeaderCellClass} w-[6%] text-center`}>Clicks (Total)</th>
-                <th className={`${tableHeaderCellClass} w-[8%] text-center`}>Delete</th>
+                <th className={`${tableHeaderCellClass} w-[8%] text-center`}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -164,12 +160,7 @@ export default function MailCampaignPage({ statusFilter }: { statusFilter?: Camp
                   <td className={`${tableCellClass} text-center`}>{campaign.opens}</td>
                   <td className={`${tableCellClass} text-center`}>{campaign.clicks}</td>
                   <td className={`${tableCellClass} text-center`}>
-                    <PermissionGate moduleName="mailCampaign" action="delete">
-                      <button type="button" onClick={() => setDeleteTarget(campaign)} disabled={deletingCampaignId === campaign.campaignId} className="inline-flex items-center gap-1 rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60" aria-label={`Delete ${campaign.campaignName}`}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                        {deletingCampaignId === campaign.campaignId ? 'Deleting...' : 'Delete'}
-                      </button>
-                    </PermissionGate>
+                    <ActionMenu moduleName="mailCampaign" disabled={deletingCampaignId === campaign.campaignId} onDelete={() => setDeleteTarget(campaign)} />
                   </td>
                 </tr>
               ))}

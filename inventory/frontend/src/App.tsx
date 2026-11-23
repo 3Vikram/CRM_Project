@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { clearInventorySession, installInventoryApiAuthorization } from '@/lib/inventoryAuth'
 import { AccountsRoutes } from '../../../accounts/frontend/src/App'
 import '../../../accounts/frontend/src/index.css'
@@ -32,6 +32,7 @@ import SalesLoginPage from '@/sales/pages/SalesLoginPage'
 import SalesProfilePage from '@/sales/pages/SalesProfilePage'
 import DashboardPage from '@/sales/pages/DashboardPage'
 import CustomersPage from '@/sales/pages/CustomersPage'
+import CustomerAnalyticsPage from '@/sales/pages/CustomerAnalyticsPage'
 import CustomerMappingPage from '@/sales/pages/CustomerMappingPage'
 import CustomerFormPage from '@/sales/pages/CustomerFormPage'
 import ContactsPage from '@/sales/pages/ContactsPage'
@@ -39,6 +40,7 @@ import ContactFormPage from '@/sales/pages/ContactFormPage'
 import SuppliersPage from '@/sales/pages/SuppliersPage'
 import SupplierFormPage from '@/sales/pages/SupplierFormPage'
 import LeadsPage from '@/sales/pages/LeadsPage'
+import LeadAnalyticsPage from '@/sales/pages/LeadAnalyticsPage'
 import LeadFormPage from '@/sales/pages/LeadFormPage'
 import LeadDetailsPage from '@/sales/pages/LeadDetailsPage'
 import MailCampaignPage from '@/sales/pages/MailCampaignPage'
@@ -54,6 +56,7 @@ import SalesPlaceholderPage from '@/sales/pages/PlaceholderPage'
 import QuotationDashboardPage from '@/sales/pages/QuotationDashboardPage'
 import QuotationTypeSelectPage from '@/sales/pages/QuotationTypeSelectPage'
 import ActivityPage from '@/sales/pages/ActivityPage'
+import ActivityAnalyticsPage from '@/sales/pages/ActivityAnalyticsPage'
 import ActivityFormPage from '@/sales/pages/ActivityFormPage'
 import CompanyProfilesPage from '@/sales/pages/CompanyProfilesPage'
 import CompanyProfileFormPage from '@/sales/pages/CompanyProfileFormPage'
@@ -61,6 +64,7 @@ import QuotationFormPage from '@/sales/pages/QuotationFormPage'
 import QuotationEditPage from '@/sales/pages/QuotationEditPage'
 import QuotationViewPage from '@/sales/pages/QuotationViewPage'
 import FunnelPage from '@/sales/pages/FunnelPage'
+import FunnelAnalyticsPage from '@/sales/pages/FunnelAnalyticsPage'
 import FunnelFormPage from '@/sales/pages/FunnelFormPage'
 import OPFPage from '@/sales/pages/OPFPage'
 import OPFGenerateFormPage from '@/sales/pages/OPFGenerateFormPage'
@@ -96,6 +100,7 @@ const getSalesRoutePermission = (pathname: string): { moduleName: string; action
     ['/sales/calendar', 'calendar'],
     ['/sales/mail-campaign', 'mailCampaign'],
     ['/sales/quotations', 'quotations'],
+    ['/sales/quotation', 'quotations'],
     ['/sales/opf', 'opf'],
     ['/sales/funnels', 'funnels'],
     ['/sales/renewals', 'renewals'],
@@ -123,26 +128,46 @@ const getSalesRoutePermission = (pathname: string): { moduleName: string; action
 }
 
 function SalesAccessDeniedPage() {
-  return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center"><div className="rounded-lg border border-[#E7E3DA] bg-white px-8 py-10 text-center shadow-sm"><h1 className="text-2xl font-semibold text-[#1F1D1A]">Access denied</h1><p className="mt-2 text-sm text-[#6B6657]">You do not have permission to view this module.</p></div></div>
+  return <div className="flex min-h-full items-center justify-center"><div className="rounded-lg border border-[#E7E3DA] bg-white px-8 py-10 text-center shadow-sm"><h1 className="text-2xl font-semibold text-[#1F1D1A]">Access denied</h1><p className="mt-2 text-sm text-[#6B6657]">You do not have permission to view this module.</p></div></div>
 }
 
 function SalesLayout({ children }: { children: React.ReactNode }) {
-  const location = useLocation()
+  const { pathname } = useLocation()
+  const [sidebarExpanded, setSidebarExpanded] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const loggedIn = typeof window !== 'undefined' && Boolean(getStoredAuth()?.token)
 
   if (!loggedIn) {
-    return <Navigate to="/sales" replace state={{ from: location.pathname }} />
+    return <Navigate to="/sales" replace state={{ from: pathname }} />
   }
 
-  const requiredPermission = getSalesRoutePermission(location.pathname)
+  const isDashboard = pathname === '/sales' || pathname.startsWith('/sales/dashboard')
+  const requiredPermission = getSalesRoutePermission(pathname)
   const canView = !requiredPermission || hasPermission(requiredPermission.moduleName, requiredPermission.action)
 
   return (
-    <div className="sales-module-typography h-screen overflow-hidden bg-[#F8F7F3]">
-      <TopBar />
-      <div className="mt-16 flex h-[calc(100vh-4rem)] overflow-hidden">
-        <Sidebar />
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">{canView ? children : <SalesAccessDeniedPage />}</main>
+    <div className="sales-module-typography flex h-screen overflow-hidden bg-[#F8F7F3]">
+      <Sidebar
+        isExpanded={sidebarExpanded}
+        isMobileOpen={mobileSidebarOpen}
+        onToggle={() => setSidebarExpanded((expanded) => !expanded)}
+        onClose={() => setMobileSidebarOpen(false)}
+        onDesktopHoverEnter={() => setSidebarExpanded(true)}
+        onDesktopHoverLeave={() => setSidebarExpanded(false)}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar onMenuClick={() => {
+          if (window.matchMedia('(max-width: 767px)').matches) {
+            setMobileSidebarOpen((open) => !open)
+          } else {
+            setSidebarExpanded((expanded) => !expanded)
+          }
+        }} />
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-3">
+          {canView
+            ? isDashboard ? children : <div className="sales-page-content">{children}</div>
+            : <SalesAccessDeniedPage />}
+        </main>
       </div>
     </div>
   )
@@ -156,6 +181,7 @@ function SalesRoutes() {
     ['/sales/profile', page(<SalesProfilePage />)],
     ['/sales/dashboard', typeof window !== 'undefined' && Boolean(getStoredAuth()?.token) ? page(<DashboardPage />) : <Navigate to="/sales" replace />],
     ['/sales/customers', page(<CustomersPage />)],
+    ['/sales/customers/analytics', page(<CustomerAnalyticsPage />)],
     ['/sales/customer-mapping', page(<CustomerMappingPage />)],
     ['/sales/contacts', page(<ContactsPage />)],
     ['/sales/contacts/new', page(<ContactFormPage />)],
@@ -167,6 +193,7 @@ function SalesRoutes() {
     ['/customers/new', page(<CustomerFormPage />)],
     ['/customers/edit/:id', page(<CustomerFormPage />)],
     ['/sales/leads', page(<LeadsPage />)],
+    ['/sales/leads/analytics', page(<LeadAnalyticsPage />)],
     ['/sales/leads/new', page(<LeadFormPage />)],
     ['/sales/leads/edit/:id', page(<LeadFormPage />)],
     ['/sales/leads/:id', page(<LeadDetailsPage />)],
@@ -182,6 +209,7 @@ function SalesRoutes() {
     ['/sales/dc-tracking', page(<SalesDCTrackingPage />)],
     ['/sales/bill-sale', page(<BillSalePage />)],
     ['/sales/calendar', page(<CalendarPage />)],
+    ['/sales/activities/analytics', page(<ActivityAnalyticsPage />)],
     ['/sales/activities', page(<ActivityPage />)],
     ['/sales/opf', page(<OPFPage />)],
     ['/sales/opf/new', page(<OPFGenerateFormPage />)],
@@ -190,6 +218,7 @@ function SalesRoutes() {
     ['/sales/renewals', page(<RenewalsPage />)],
     ['/sales/activities/new', page(<ActivityFormPage />)],
     ['/sales/activities/edit/:id', page(<ActivityFormPage />)],
+    ['/sales/funnels/analytics', page(<FunnelAnalyticsPage />)],
     ['/sales/funnels', page(<FunnelPage />)],
     ['/sales/funnels/new', page(<FunnelFormPage />)],
     ['/sales/funnels/edit/:id', page(<FunnelFormPage />)],
@@ -197,6 +226,7 @@ function SalesRoutes() {
     ['/sales/company-profiles/new', page(<CompanyProfileFormPage />)],
     ['/sales/company-profiles/edit/:id', page(<CompanyProfileFormPage />)],
     ['/sales/quotations', page(<QuotationTypeSelectPage />)],
+    ['/sales/quotation', page(<QuotationDashboardPage />)],
     ['/sales/quotations/new/:type', page(<QuotationFormPage />)],
     ['/sales/quotations/view/:id', page(<QuotationViewPage />)],
     ['/sales/quotations/edit/:id', page(<QuotationEditPage />)],

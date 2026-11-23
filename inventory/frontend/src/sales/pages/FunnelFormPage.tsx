@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Plus, RotateCcw, Save } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Toast } from '@/sales/components/toast'
 import { fetchCustomers, type CustomerApiRecord } from '@/sales/lib/customerApi'
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi'
@@ -35,6 +35,8 @@ const initialState = {
 
 export default function FunnelFormPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const conversionCustomer = (location.state as { customer?: { _id?: string; id?: string; companyName?: string; customerName?: string; contactPerson?: string; email?: string; mobile?: string; phone?: string } } | null)?.customer
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
   const [form, setForm] = useState(initialState)
@@ -52,7 +54,21 @@ export default function FunnelFormPage() {
           fetchEmployees({ limit: 1000, status: 'Active' }),
         ])
 
-        setCustomers(customerResponse.data || [])
+        setCustomers((current) => {
+          const records = customerResponse.data || []
+          if (!conversionCustomer) return records
+          const id = conversionCustomer._id || conversionCustomer.id || ''
+          const companyName = conversionCustomer.companyName || conversionCustomer.customerName || ''
+          if (records.some((customer) => (id && customer._id === id) || (customer.companyName || customer.customerName) === companyName)) return records
+          return [{
+            _id: id,
+            companyName,
+            customerName: companyName,
+            email: conversionCustomer.email || '',
+            phone: conversionCustomer.mobile || conversionCustomer.phone || '',
+            contacts: conversionCustomer.contactPerson ? [{ name: conversionCustomer.contactPerson }] : [],
+          }, ...records]
+        })
         setEmployees(employeeResponse.data || [])
       } catch (error) {
         setToast(error instanceof Error ? error.message : 'Failed to load customer and employee data')
@@ -109,6 +125,27 @@ export default function FunnelFormPage() {
 
     void loadFunnel()
   }, [id])
+
+  useEffect(() => {
+    if (!conversionCustomer) return
+    const customerId = conversionCustomer._id || conversionCustomer.id || ''
+    const companyName = conversionCustomer.companyName || conversionCustomer.customerName || ''
+    setCustomers((current) => current.some((customer) => customer._id === customerId || (customer.companyName || customer.customerName) === companyName)
+      ? current
+      : [{
+        _id: customerId,
+        companyName,
+        customerName: companyName,
+        email: conversionCustomer.email || '',
+        phone: conversionCustomer.mobile || conversionCustomer.phone || '',
+        contacts: conversionCustomer.contactPerson ? [{ name: conversionCustomer.contactPerson }] : [],
+      }, ...current])
+    setForm((current) => ({
+      ...current,
+      customerName: companyName || current.customerName,
+      contactPerson: conversionCustomer.contactPerson || current.contactPerson,
+    }))
+  }, [conversionCustomer])
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => {

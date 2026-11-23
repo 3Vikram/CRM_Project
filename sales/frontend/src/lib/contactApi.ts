@@ -158,6 +158,7 @@ export async function updateContact(id: string, payload: ContactPayload) {
 
 export async function deleteContact(id: string) {
   const response = await requestWithFallback('delete', `/contacts/${id}`);
+  clearApiCache();
   return response.data;
 }
 

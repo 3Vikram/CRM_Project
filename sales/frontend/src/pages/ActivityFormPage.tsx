@@ -1,17 +1,31 @@
-import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, RotateCcw } from 'lucide-react';
 import { Toast } from '@/components/toast';
-import { createActivity, fetchActivityById, updateActivity } from '@/lib/activityApi';
+import { checkActivityCompany, createActivity, fetchActivityById, updateActivity } from '@/lib/activityApi';
 import { fetchCustomers, type CustomerApiRecord } from '@/lib/customerApi';
+import { fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi';
 import { fetchProductsForSuppliers } from '@/lib/supplierApi';
 import { getStoredAuth } from '@/lib/auth';
 
 const activityTypeOptions = ['Meeting', 'Call', 'Email', 'Demo', 'Site Visit', 'Follow-up', 'Support', 'Other'];
+const statusOptions = ['Open', 'Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show', 'Completed', 'Cancelled'];
 const responseOptions = ['Positive', 'Negative', 'Pending', 'No Response'];
 const followUpOptions = ['Required', 'Not Required', 'Completed', 'Pending'];
 const sourceOfLeadOptions = ['Website', 'Manual', 'Referral', 'Campaign', 'LinkedIn', 'Facebook', 'Instagram', 'Email Campaign', 'Cold Call', 'Other'];
 const tagResourceOptions = ['Admin', 'Anaya Patel', 'Rahul Sharma', 'Rhea Shah', 'Maya Nair', 'System'];
+
+const getTodayInKolkata = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const dateParts = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+};
 
 const initialState = {
   customerName: '',
@@ -20,7 +34,7 @@ const initialState = {
   email: '',
   mobileNo: '',
   activityType: '',
-  activityDate: new Date().toISOString().slice(0, 10),
+  activityDate: getTodayInKolkata(),
   followUpDate: '',
   location: '',
   response: 'Pending',
@@ -30,7 +44,8 @@ const initialState = {
   product: '',
   customerRequirements: '',
   customerRemarks: '',
-  assignedUser: 'Admin',
+  assignedUser: '',
+  assignedUserId: '',
   company: '',
   priority: 'Medium',
   campaign: '',
@@ -54,9 +69,16 @@ export default function ActivityFormPage() {
   const isEditMode = Boolean(id);
   const [form, setForm] = useState(createInitialState);
   const [customers, setCustomers] = useState<CustomerApiRecord[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [employeesError, setEmployeesError] = useState('');
   const [products, setProducts] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [saving, setSaving] = useState(false);
+  const submittingRef = useRef(false);
+  const isCompletedReadOnly = isEditMode
+    && form.status === 'Completed'
+    && getStoredAuth()?.user.role !== 'admin';
   const lead = (location.state as { lead?: any; activity?: any } | null)?.lead ?? null;
   const passedActivity = (location.state as { activity?: any } | null)?.activity ?? null;
 
@@ -74,6 +96,15 @@ export default function ActivityFormPage() {
         setProducts(productOptions);
       } catch {
         setProducts([]);
+      }
+
+      try {
+        const employeeResponse = await fetchEmployees({ limit: 1000, status: 'Active', department: 'Sales' });
+        setEmployees(employeeResponse.data || []);
+        setEmployeesError('');
+      } catch {
+        setEmployees([]);
+        setEmployeesError('Unable to load Sales employees. Please try again before saving.');
       }
     };
 
@@ -93,7 +124,11 @@ export default function ActivityFormPage() {
         sourceOfLead: lead.sourceOfLead || 'Manual',
         customerRequirements: lead.customerRequirements || '',
         customerRemarks: lead.remarks || '',
-        assignedUser: lead.assignedTo || 'Admin',
+        assignedUser: lead.assignedTo || '',
+        assignedUserId: lead.assignedToId || employees.find((employee) =>
+          (employee.employeeName || employee.fullName || employee.email).toLowerCase()
+            === String(lead.assignedTo || '').toLowerCase(),
+        )?._id || '',
         campaign: lead.campaignName || '',
         priority: lead.priority || 'Medium',
         leadId: lead.leadId || lead._id || '',
@@ -117,7 +152,7 @@ export default function ActivityFormPage() {
           email: activity.email || '',
           mobileNo: activity.mobileNo || '',
           activityType: activity.activityType || '',
-          activityDate: activity.activityDate || new Date().toISOString().slice(0, 10),
+          activityDate: activity.activityDate || getTodayInKolkata(),
           followUpDate: activity.followUpDate || '',
           location: activity.location || '',
           response: activity.response || 'Pending',
@@ -127,7 +162,8 @@ export default function ActivityFormPage() {
           product: activity.product || '',
           customerRequirements: activity.customerRequirements || '',
           customerRemarks: activity.customerRemarks || '',
-          assignedUser: activity.assignedUser || 'Admin',
+          assignedUser: activity.assignedUser || '',
+          assignedUserId: activity.assignedUserId || '',
           company: activity.company || '',
           priority: activity.priority || 'Medium',
           campaign: activity.campaign || '',
@@ -135,7 +171,7 @@ export default function ActivityFormPage() {
           leadIdLabel: activity.leadIdLabel || '',
           createdBy: activity.createdBy || 'Admin',
           lastModifiedBy: activity.lastModifiedBy || 'Admin',
-          status: activity.status || 'Open',
+          status: ['Pending', 'Overdue'].includes(activity.status) ? 'Open' : activity.status || 'Open',
         });
       } catch {
         setToast('Unable to load activity details');
@@ -144,6 +180,16 @@ export default function ActivityFormPage() {
 
     void loadActivity();
   }, [id, isEditMode]);
+
+  useEffect(() => {
+    if (form.assignedUserId || !form.assignedUser) return;
+    const assignedEmployee = employees.find((employee) =>
+      (employee.employeeName || employee.fullName || employee.email).toLowerCase() === form.assignedUser.toLowerCase(),
+    );
+    if (assignedEmployee) {
+      setForm((prev) => ({ ...prev, assignedUserId: assignedEmployee._id }));
+    }
+  }, [employees, form.assignedUser, form.assignedUserId]);
 
   useEffect(() => {
     if (passedActivity) {
@@ -162,12 +208,21 @@ export default function ActivityFormPage() {
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
+    if (name === 'assignedUserId') {
+      const employee = employees.find((item) => item._id === value);
+      setForm((prev) => ({
+        ...prev,
+        assignedUserId: value,
+        assignedUser: employee?.employeeName || employee?.fullName || employee?.email || '',
+      }));
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleCustomerSelect = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const normalizedValue = event.target.value;
-    setForm((prev) => ({ ...prev, customerName: normalizedValue }));
+    setForm((prev) => ({ ...prev, customerName: normalizedValue, company: normalizedValue }));
 
     const customer = customers.find((item) => (item.companyName || item.customerName || '') === normalizedValue);
     if (!customer) return;
@@ -181,30 +236,64 @@ export default function ActivityFormPage() {
       designation: primaryContact?.designation || '',
       email: primaryContact?.email || customer.email || '',
       mobileNo: primaryContact?.phone || customer.phone || '',
-      assignedUser: customer.createdBy || prev.assignedUser,
     }));
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
+    if (submittingRef.current) return;
     if (!form.customerName.trim() || !form.activityType.trim() || !form.activityDate || !form.product.trim()) {
       setToast('Customer / Partner Name, Activity Type, Activity Date, and Product are required.');
+      setToastType('error');
+      return;
+    }
+    if (!form.assignedUserId) {
+      setToast('Please select an employee in Assigned To.');
+      setToastType('error');
+      return;
+    }
+    if (employeesError) {
+      setToast(employeesError);
+      setToastType('error');
+      return;
+    }
+    if (['Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show'].includes(form.status) && !form.followUpDate) {
+      setToast(`${form.status} requires a Follow-Up Date.`);
+      setToastType('error');
+      return;
+    }
+    if (['Rescheduled / No-Show', 'Cancelled'].includes(form.status) && !form.customerRemarks.trim()) {
+      setToast(`${form.status} requires a reason in Remarks.`);
+      setToastType('error');
       return;
     }
 
+    submittingRef.current = true;
     setSaving(true);
+    setToast(null);
     try {
       const { createdBy: _createdBy, ...activityFields } = form;
       const payload = {
         ...activityFields,
         customerName: form.customerName.trim(),
-        company: form.company || form.customerName || '',
+        company: (form.company || form.customerName).trim(),
         contactPerson: form.contactPerson.trim(),
         email: form.email.trim(),
         mobileNo: form.mobileNo.trim(),
+        assignedUserId: form.assignedUserId,
+        assignedUser: form.assignedUser,
         lastModifiedBy: form.lastModifiedBy || 'Admin',
       };
+
+      if (!isEditMode) {
+        const duplicateCheck = await checkActivityCompany(payload.company);
+        if (duplicateCheck.exists) {
+          setToast('This company already exists.');
+          setToastType('error');
+          return;
+        }
+      }
 
       const response = isEditMode && id
         ? await updateActivity(id, payload)
@@ -212,19 +301,28 @@ export default function ActivityFormPage() {
 
       if (!response.success) {
         setToast(response.message || 'Unable to save activity');
+        setToastType('error');
         return;
       }
 
-      setToast('Activity created successfully.');
+      const message = isEditMode ? 'Activity updated successfully.' : 'Activity created successfully.';
       navigate('/sales/activities', {
         state: {
-          message: 'Activity created successfully.',
+          message,
           refresh: true,
+          toastType: 'success',
         },
       });
-    } catch (error: any) {
-      setToast(error?.response?.data?.message || 'Unable to save activity');
+    } catch (error: unknown) {
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : error instanceof Error
+          ? error.message
+          : undefined;
+      setToast(message || 'Unable to save activity');
+      setToastType('error');
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   };
@@ -240,10 +338,22 @@ export default function ActivityFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-[#EFECE5] bg-white p-6 shadow-sm">
+        {isCompletedReadOnly ? <p role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">This activity is completed and locked. Only an administrator can reopen or modify it.</p> : null}
+        <fieldset disabled={isCompletedReadOnly} className="contents">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Created By</span>
-            <input value={form.createdBy} readOnly className="w-full rounded-lg border border-[#EFECE5] bg-gray-100 px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Assigned To <span className="required-asterisk">*</span></span>
+            <select name="assignedUserId" value={form.assignedUserId} onChange={handleChange} required disabled={Boolean(lead && form.assignedUserId && employees.some((employee) => employee._id === form.assignedUserId))} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+              <option value="">Select Sales employee</option>
+              {lead && form.assignedUserId && !employees.some((employee) => employee._id === form.assignedUserId)
+                ? <option value={form.assignedUserId}>{form.assignedUser}</option>
+                : null}
+              {employees.map((employee) => {
+                const employeeName = employee.employeeName || employee.fullName || employee.email;
+                return <option key={employee._id} value={employee._id}>{employeeName}</option>;
+              })}
+            </select>
+            {employeesError ? <span role="alert" className="text-xs text-red-600">{employeesError}</span> : null}
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-gray-700">Customer / Partner Name <span className="required-asterisk">*</span></span>
@@ -287,8 +397,15 @@ export default function ActivityFormPage() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-gray-700">Follow-up Date</span>
-            <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Follow-up Date{['Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show'].includes(form.status) ? <span className="required-asterisk"> *</span> : null}</span>
+            <input type="date" name="followUpDate" value={form.followUpDate} onChange={handleChange} required={['Follow-Up Required', 'Awaiting Client', 'Rescheduled / No-Show'].includes(form.status)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-gray-700">Activity Status <span className="required-asterisk">*</span></span>
+            <select name="status" value={form.status} onChange={handleChange} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+              {statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
           </label>
 
           <label className="space-y-2">
@@ -339,8 +456,8 @@ export default function ActivityFormPage() {
           </label>
 
           <label className="space-y-2 md:col-span-2 xl:col-span-3">
-            <span className="text-sm font-semibold text-gray-700">Customer Remarks</span>
-            <textarea name="customerRemarks" value={form.customerRemarks} onChange={handleChange} rows={3} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
+            <span className="text-sm font-semibold text-gray-700">Customer Remarks{['Rescheduled / No-Show', 'Cancelled'].includes(form.status) ? <span className="required-asterisk"> *</span> : null}</span>
+            <textarea name="customerRemarks" value={form.customerRemarks} onChange={handleChange} required={['Rescheduled / No-Show', 'Cancelled'].includes(form.status)} rows={3} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm" />
           </label>
         </div>
 
@@ -352,9 +469,10 @@ export default function ActivityFormPage() {
             <RotateCcw className="h-4 w-4" /> Reset
           </button>
         </div>
+        </fieldset>
       </form>
 
-      {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
     </div>
   );
 }

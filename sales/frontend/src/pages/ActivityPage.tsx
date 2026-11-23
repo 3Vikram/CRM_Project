@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Download, Plus, Search, X } from 'lucide-react';
 import { Toast } from '@/components/toast';
 import { deleteActivity, fetchActivities, type ActivityRecord } from '@/lib/activityApi';
 import { PermissionGate } from '@/components/PermissionGate';
+import { ActionMenu } from '@/components/ActionMenu';
 import { fetchCustomers } from '@/lib/customerApi';
 import { fetchEmployees, type EmployeeRecord } from '@/lib/employeeApi';
+import { getStoredAuth } from '@/lib/auth';
 
 const dateOptions = [
   { value: 'All', label: 'All' },
@@ -18,7 +20,27 @@ const dateOptions = [
   { value: 'last-year', label: 'Last Year' },
   { value: 'custom-date', label: 'Custom Date' },
 ];
+const activityStatusOptions = [
+  'Open',
+  'Follow-Up Today',
+  'Overdue',
+  'Upcoming / Scheduled',
+  'Follow-Up Required',
+  'Awaiting Client',
+  'Rescheduled / No-Show',
+  'Completed',
+  'Cancelled',
+];
 const DATE_FORMATTER = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
+const getStatusBadgeClass = (status: string) => {
+  if (status.startsWith('Overdue - ') || status === 'Overdue') return 'bg-red-100 text-red-800';
+  if (status === 'Follow-Up Today' || status === 'Follow-Up Required') return 'bg-orange-100 text-orange-800';
+  if (status === 'Awaiting Client') return 'bg-purple-100 text-purple-800';
+  if (status === 'Rescheduled / No-Show') return 'bg-yellow-100 text-yellow-900';
+  if (status === 'Completed') return 'bg-green-100 text-green-800';
+  if (status === 'Cancelled') return 'bg-gray-200 text-gray-700';
+  return 'bg-blue-100 text-blue-800';
+};
 
 export default function ActivityPage() {
   const navigate = useNavigate();
@@ -35,7 +57,10 @@ export default function ActivityPage() {
   const [createdBy, setCreatedBy] = useState('All');
   const [customerName, setCustomerName] = useState('All');
   const [followUpPreset, setFollowUpPreset] = useState('All');
+  const [activityStatus, setActivityStatus] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [customerOptions, setCustomerOptions] = useState<string[]>([]);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
@@ -55,6 +80,8 @@ export default function ActivityPage() {
         createdById: createdBy.startsWith('employee:') ? createdBy.slice('employee:'.length) : '',
         customerName: customerName !== 'All' ? customerName : '',
         followUpPreset: followUpPreset !== 'All' ? followUpPreset : '',
+        status: activityStatus !== 'All' ? activityStatus : '',
+        search: searchQuery.trim(),
         sortBy: 'createdAt',
         sortOrder: 'desc',
       });
@@ -68,7 +95,7 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, createdBy, selectedEmployeeName, customerName, followUpPreset]);
+  }, [page, limit, createdBy, selectedEmployeeName, customerName, followUpPreset, activityStatus, searchQuery]);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -117,19 +144,20 @@ export default function ActivityPage() {
   }, [loadActivities]);
 
   useEffect(() => {
-    const flashMessage = (location.state as { message?: string; refresh?: boolean } | null)?.message;
+    const navigationState = location.state as {
+      message?: string;
+      refresh?: boolean;
+      toastType?: 'success' | 'error' | 'info';
+    } | null;
+    const flashMessage = navigationState?.message;
     if (flashMessage) {
       setToast(flashMessage);
+      setToastType(navigationState?.toastType || 'info');
     }
-    if ((location.state as { refresh?: boolean } | null)?.refresh) {
+    if (navigationState?.refresh) {
       void loadActivities();
     }
   }, [location.state, loadActivities]);
-
-  const handleSearch = useCallback(() => {
-    setPage(1);
-    void loadActivities();
-  }, [loadActivities]);
 
   const handleDownloadReport = useCallback(() => {
     const csvHeader = [
@@ -163,7 +191,7 @@ export default function ActivityPage() {
       activity.contactPerson || '',
       activity.email || '',
       activity.mobileNo || '',
-      activity.status || '',
+      activity.effectiveStatus || activity.status || 'Open',
     ]);
 
     const csvContent = [csvHeader, ...csvRows].map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
@@ -175,6 +203,7 @@ export default function ActivityPage() {
     link.click();
     URL.revokeObjectURL(url);
     setToast('Activity report downloaded');
+    setToastType('info');
   }, [activities]);
 
   const handleDelete = useCallback(async () => {
@@ -185,9 +214,11 @@ export default function ActivityPage() {
       await deleteActivity(activityPendingDeletion._id);
       setActivityPendingDeletion(null);
       setToast('Activity deleted successfully');
+      setToastType('info');
       await loadActivities();
     } catch {
       setToast('Unable to delete activity');
+      setToastType('info');
     } finally {
       setDeleting(false);
     }
@@ -207,10 +238,11 @@ export default function ActivityPage() {
           <h1 className="crm-page-heading">Activity Dashboard</h1>
           {/* <p className="text-sm text-gray-600">Search, filter, review, and export activity records across the CRM.</p> */}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {/* <button type="button" onClick={handleSearch} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white">
-            <Search className="h-4 w-4" /> Search
-          </button> */}
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <label className="relative w-full sm:w-56">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }} placeholder="Search activities" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2.5 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
+          </label>
           <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
             <Download className="h-4 w-4" /> Download Report
           </button>
@@ -223,7 +255,7 @@ export default function ActivityPage() {
       </div>
 
       <div className="rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-4">
           <label className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
             <select value={createdBy} onChange={(event) => {
@@ -258,6 +290,14 @@ export default function ActivityPage() {
             </select>
           </label>
 
+          <label className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Activity Status</span>
+            <select value={activityStatus} onChange={(event) => { setActivityStatus(event.target.value); setPage(1); }} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
+              <option value="All">All Statuses</option>
+              {activityStatusOptions.map((option) => <option key={option} value={option}>{option === 'Overdue' ? 'Overdue Activities' : option}</option>)}
+            </select>
+          </label>
+
         </div>
       </div>
 
@@ -266,9 +306,8 @@ export default function ActivityPage() {
           <table className="min-w-full divide-y divide-[#EFECE5] text-sm">
             <thead className="bg-[#F8F7F3] text-left text-xs font-semibold tracking-wider text-gray-600">
               <tr>
-                <th className={tableCellClass}>SL No</th>
-                <th className={tableCellClass}>REPRESENTATIVE</th>
                 <th className={tableCellClass}>ACTIVITY ID</th>
+                <th className={tableCellClass}>REPRESENTATIVE</th>
                 <th className={tableCellClass}>COMPANY</th>
                 <th className={tableCellClass}>ACTIVITY TYPE</th>
                 <th className={tableCellClass}>ACTIVITY DATE</th>
@@ -289,21 +328,20 @@ export default function ActivityPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, index) => (
                   <tr key={`skeleton-${index}`}>
-                    <td colSpan={15} className="px-4 py-6">
+                    <td colSpan={14} className="px-4 py-6">
                       <div className="h-4 animate-pulse rounded bg-[#EFECE5]" />
                     </td>
                   </tr>
                 ))
               ) : activities.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="px-4 py-10 text-center text-sm text-gray-500">No activities found</td>
+                  <td colSpan={14} className="px-4 py-10 text-center text-sm text-gray-500">No activities found</td>
                 </tr>
               ) : (
-                activities.map((activity, index) => (
+                activities.map((activity) => (
                   <tr key={activity._id} className="align-top">
-                    <td className={tableCellClass}>{(page - 1) * limit + index + 1}</td>
-                    <td className={tableCellClass}>{activity.assignedUser || 'Admin'}</td>
                     <td className={tableCellClass}>{activity.activityId || activity._id}</td>
+                    <td className={tableCellClass}>{activity.assignedUser || 'Admin'}</td>
                     <td className={tableCellClass}>{activity.company || activity.customerName || '-'}</td>
                     <td className={tableCellClass}>{activity.activityType || '-'}</td>
                     <td className={tableCellClass}>{activity.activityDate || '-'}</td>
@@ -314,15 +352,9 @@ export default function ActivityPage() {
                     <td className={tableCellClass}>{activity.contactPerson || '-'}</td>
                     <td className={tableCellClass}>{activity.email || '-'}</td>
                     <td className={tableCellClass}>{activity.mobileNo || '-'}</td>
-                    <td className={tableCellClass}><span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">{activity.status || 'Open'}</span></td>
+                    <td className={tableCellClass}><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(activity.effectiveStatus || activity.status || 'Open')}`}>{activity.effectiveStatus || activity.status || 'Open'}</span></td>
                     <td className={tableCellClass}>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setSelectedActivity(activity)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700">
-                          <Eye className="h-3.5 w-3.5" /> View
-                        </button>
-                        <PermissionGate moduleName="activities" action="edit"><button type="button" onClick={() => navigate(`/sales/activities/edit/${activity._id}`)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700"><Pencil className="h-3.5 w-3.5" /> Edit</button></PermissionGate>
-                        <PermissionGate moduleName="activities" action="delete"><button type="button" onClick={() => setActivityPendingDeletion(activity)} className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"><Trash2 className="h-3.5 w-3.5" /> Delete</button></PermissionGate>
-                      </div>
+                      <ActionMenu moduleName="activities" onView={() => setSelectedActivity(activity)} onEdit={activity.status === 'Completed' && getStoredAuth()?.user.role !== 'admin' ? undefined : () => navigate(`/sales/activities/edit/${activity._id}`)} onDelete={() => setActivityPendingDeletion(activity)} />
                     </td>
                   </tr>
                 ))
@@ -425,7 +457,7 @@ export default function ActivityPage() {
         </div>
       )}
 
-      {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
     </div>
   );
 }

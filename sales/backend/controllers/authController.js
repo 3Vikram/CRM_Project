@@ -100,6 +100,7 @@ const buildSessionPayload = (employee, role) => ({
   email: employee.email,
   name: employee.employeeName || employee.fullName || employee.email,
   role,
+  employeeRole: String(employee.role || '').trim(),
   employeeType: String(employee.employeeType || '').trim(),
   permissions: role === 'admin' ? allPermissions() : getEmployeePermissions(employee),
 });
@@ -306,6 +307,7 @@ exports.employeeLogin = async (req, res) => {
         name: employee.employeeName || employee.fullName || employee.email,
         email: employee.email,
         role: 'employee',
+        employeeRole: String(employee.role || '').trim(),
         employeeType: String(employee.employeeType || '').trim(),
         permissions: getEmployeePermissions(employee),
       },

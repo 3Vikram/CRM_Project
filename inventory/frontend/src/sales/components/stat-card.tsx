@@ -10,6 +10,7 @@ interface StatCardProps {
   /** Icon color, e.g. "text-emerald-700" */
   iconColor?: string
   labelClassName?: string
+  onClick?: () => void
 }
 
 export function StatCard({
@@ -20,24 +21,30 @@ export function StatCard({
   iconBg = 'bg-[#F2EFE8]',
   iconColor = 'text-gray-700',
   labelClassName = '',
+  onClick,
 }: StatCardProps) {
   return (
-    <div className="bg-white rounded-lg border border-[#EFECE5] p-6 shadow-sm">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <div className={`stat-card-label text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 ${labelClassName}`}>
-            {label}
-          </div>
-          <div className="text-3xl font-bold text-gray-900">{value}</div>
-          {description && (
-            <p className="text-xs text-gray-600 mt-1">{description}</p>
-          )}
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      } : undefined}
+      className={`sales-summary-card flex h-full items-center gap-3 ${onClick ? 'cursor-pointer transition-shadow duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111827]' : ''}`}
+    >
+      <div className={`sales-summary-card-icon ${iconBg}`}>
+        <Icon className={`${iconColor}`} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="sales-summary-card-value">{value}</div>
+        <div className={`sales-summary-card-label stat-card-label ${labelClassName}`}>
+          {label}
         </div>
-        <div
-          className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconBg}`}
-        >
-          <Icon className={`w-6 h-6 ${iconColor}`} />
-        </div>
+        {description && <p className="sales-summary-card-description mt-0.5 truncate">{description}</p>}
       </div>
     </div>
   )

@@ -1,26 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, Download, Plus, Search, X } from 'lucide-react';
 import { Toast } from '@/sales/components/toast';
 import { deleteActivity, fetchActivities, type ActivityRecord } from '@/sales/lib/activityApi';
 import { PermissionGate } from '@/sales/components/PermissionGate';
+import { ActionMenu } from '@/sales/components/ActionMenu'
 import { fetchCustomers } from '@/sales/lib/customerApi';
 import { downloadExcelReport } from '@/lib/downloadExcelReport';
 import { toExcelDate } from '@/sales/lib/excelFormat';
 import { fetchEmployees, type EmployeeRecord } from '@/sales/lib/employeeApi';
+import { PageFilters, type PageFilterField, type PageFilterValues } from '@/sales/components/PageFilters';
+import { getStoredAuth } from '@/sales/lib/auth';
 
-const dateOptions = [
-  { value: 'All', label: 'All' },
-  { value: 'today', label: 'Today' },
-  { value: 'yesterday', label: 'Yesterday' },
-  { value: 'this-week', label: 'This Week' },
-  { value: 'this-month', label: 'This Month' },
-  { value: 'this-quarter', label: 'This Quarter' },
-  { value: 'this-year', label: 'This Year' },
-  { value: 'last-year', label: 'Last Year' },
-  { value: 'custom-date', label: 'Custom Date' },
-];
 const DATE_FORMATTER = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
+const getDateFilterValue = (value?: string) => value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '';
+const activityStatusOptions = [
+  'Open',
+  'Follow-Up Today',
+  'Overdue',
+  'Upcoming / Scheduled',
+  'Follow-Up Required',
+  'Awaiting Client',
+  'Rescheduled / No-Show',
+  'Completed',
+  'Cancelled',
+];
+const getStatusBadgeClass = (status: string) => {
+  if (status.startsWith('Overdue - ') || status === 'Overdue') return 'bg-red-100 text-red-800';
+  if (status === 'Follow-Up Today' || status === 'Follow-Up Required') return 'bg-orange-100 text-orange-800';
+  if (status === 'Awaiting Client') return 'bg-purple-100 text-purple-800';
+  if (status === 'Rescheduled / No-Show') return 'bg-yellow-100 text-yellow-900';
+  if (status === 'Completed') return 'bg-green-100 text-green-800';
+  if (status === 'Cancelled') return 'bg-gray-200 text-gray-700';
+  return 'bg-blue-100 text-blue-800';
+};
 
 export default function ActivityPage() {
   const navigate = useNavigate();
@@ -34,35 +47,55 @@ export default function ActivityPage() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null);
   const [activityPendingDeletion, setActivityPendingDeletion] = useState<ActivityRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [createdBy, setCreatedBy] = useState('All');
-  const [customerName, setCustomerName] = useState('All');
-  const [followUpPreset, setFollowUpPreset] = useState('All');
+  const [filters, setFilters] = useState<PageFilterValues>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [customerOptions, setCustomerOptions] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
-  const [employeesLoading, setEmployeesLoading] = useState(false);
-  const [employeesError, setEmployeesError] = useState('');
-  const selectedEmployee = createdBy.startsWith('employee:')
-    ? employees.find((employee) => `employee:${employee._id}` === createdBy)
-    : undefined;
+  const selectedEmployee = employees.find((employee) =>
+    (employee.employeeName || employee.fullName) === filters.createdBy,
+  );
   const selectedEmployeeName = selectedEmployee?.employeeName || selectedEmployee?.fullName || '';
 
   const loadActivities = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchActivities({
-        page,
-        limit,
-        createdBy: selectedEmployeeName || (createdBy !== 'All' && !createdBy.startsWith('employee:') ? createdBy : ''),
-        createdById: createdBy.startsWith('employee:') ? createdBy.slice('employee:'.length) : '',
-        customerName: customerName !== 'All' ? customerName : '',
-        followUpPreset: followUpPreset !== 'All' ? followUpPreset : '',
+      const requestFilters = {
+        createdBy: selectedEmployeeName || filters.createdBy || '',
+        createdById: selectedEmployee?._id || '',
+        customerName: filters.customerName || '',
+        status: filters.status || '',
+        search: searchQuery.trim(),
         sortBy: 'createdAt',
         sortOrder: 'desc',
-      });
-      setActivities(response.data || []);
-      setTotalPages(response.pagination?.totalPages || 1);
-      setTotalRows(response.pagination?.total || 0);
+      } as const;
+      if (filters.followUpDate) {
+        const allActivities: ActivityRecord[] = [];
+        let currentPage = 1;
+        let lastPage = 1;
+        do {
+          const response = await fetchActivities({ ...requestFilters, page: currentPage, limit: 500 });
+          allActivities.push(...(response.data || []));
+          lastPage = response.pagination?.totalPages || 1;
+          currentPage += 1;
+        } while (currentPage <= lastPage);
+
+        const matchingActivities = allActivities.filter((activity) => getDateFilterValue(activity.followUpDate) === filters.followUpDate);
+        setTotalRows(matchingActivities.length);
+        setTotalPages(Math.max(1, Math.ceil(matchingActivities.length / limit)));
+        setActivities(matchingActivities.slice((page - 1) * limit, page * limit));
+      } else {
+        const response = await fetchActivities({
+          ...requestFilters,
+          page,
+          limit,
+          followUpPreset: '',
+        });
+        setActivities(response.data || []);
+        setTotalPages(response.pagination?.totalPages || 1);
+        setTotalRows(response.pagination?.total || 0);
+      }
     } catch {
       setActivities([]);
       setTotalPages(1);
@@ -70,20 +103,15 @@ export default function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, createdBy, selectedEmployeeName, customerName, followUpPreset]);
+  }, [page, limit, filters, selectedEmployee, selectedEmployeeName, searchQuery]);
 
   useEffect(() => {
     const loadEmployees = async () => {
-      setEmployeesLoading(true);
-      setEmployeesError('');
       try {
         const response = await fetchEmployees({ limit: 500 });
         setEmployees(response.data || []);
       } catch {
         setEmployees([]);
-        setEmployeesError('Unable to load employees.');
-      } finally {
-        setEmployeesLoading(false);
       }
     };
 
@@ -108,14 +136,33 @@ export default function ActivityPage() {
   }, [loadActivities]);
 
   useEffect(() => {
-    const flashMessage = (location.state as { message?: string; refresh?: boolean } | null)?.message;
+    const navigationState = location.state as {
+      message?: string;
+      refresh?: boolean;
+      toastType?: 'success' | 'error' | 'info';
+    } | null;
+    const flashMessage = navigationState?.message;
     if (flashMessage) {
       setToast(flashMessage);
+      setToastType(navigationState?.toastType || 'info');
     }
-    if ((location.state as { refresh?: boolean } | null)?.refresh) {
+    if (navigationState?.refresh) {
       void loadActivities();
     }
   }, [location.state, loadActivities]);
+
+  const createdByOptions = useMemo(() => Array.from(new Set([
+    ...employees.map((employee) => employee.employeeName || employee.fullName || '').filter(Boolean),
+    ...activities.map((activity) => activity.createdBy || '').filter(Boolean),
+    ...(filters.createdBy ? [filters.createdBy] : []),
+  ])).sort((a, b) => a.localeCompare(b)), [activities, employees, filters.createdBy]);
+
+  const filterFields: PageFilterField[] = [
+    { key: 'createdBy', label: 'Created By', type: 'select', options: createdByOptions },
+    { key: 'customerName', label: 'Customer Name', type: 'select', options: customerOptions },
+    { key: 'followUpDate', label: 'Follow-up Date', type: 'date' },
+    { key: 'status', label: 'Activity Status', type: 'select', options: activityStatusOptions },
+  ];
 
   const handleSearch = useCallback(() => {
     setPage(1);
@@ -124,9 +171,9 @@ export default function ActivityPage() {
 
   const handleDownloadReport = useCallback(async () => {
     const headers = [
-      'SL No.',
       'Activity ID',
-      'Representative',
+      'Created By',
+      'Assigned To',
       'Company',
       'Activity Type',
       'Activity Date',
@@ -140,10 +187,10 @@ export default function ActivityPage() {
       'Activity Status',
     ];
 
-    const rows = activities.map((activity, index) => [
-      index + 1,
+    const rows = activities.map((activity) => [
       activity.activityId || activity._id || '',
-      activity.assignedUser || '',
+      activity.createdBy || '',
+      activity.assignedUser || 'Unassigned',
       activity.company || activity.customerName || '',
       activity.activityType || '',
       toExcelDate(activity.activityDate),
@@ -154,7 +201,7 @@ export default function ActivityPage() {
       activity.contactPerson || '',
       activity.email || '',
       activity.mobileNo ? String(activity.mobileNo) : '',
-      activity.status || '',
+      activity.effectiveStatus || activity.status || 'Open',
     ]);
 
     try {
@@ -163,16 +210,18 @@ export default function ActivityPage() {
         sheetName: 'Activities',
         headers,
         rows,
-        textColumns: [1, 5, 6, 12],
-        centerColumns: [0, 1, 4, 5, 6, 13],
-        leftColumns: [2, 3, 7, 8, 9, 10, 11, 12],
+        textColumns: [0, 5, 6, 12],
+        centerColumns: [0, 4, 5, 6, 13],
+        leftColumns: [1, 2, 3, 7, 8, 9, 10, 11, 12],
         wrapColumns: [3, 7, 8, 9, 10, 11],
         wideColumns: [3, 8, 9, 11],
-        columnWidths: [8, 18, 24, 32, 16, 14, 14, 28, 40, 40, 24, 32, 18, 16],
+        columnWidths: [18, 24, 24, 32, 16, 14, 14, 28, 40, 40, 24, 32, 18, 16],
       });
       setToast('Activity report downloaded');
+      setToastType('info');
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Unable to download activity report');
+      setToastType('error');
     }
   }, [activities]);
 
@@ -184,9 +233,11 @@ export default function ActivityPage() {
       await deleteActivity(activityPendingDeletion._id);
       setActivityPendingDeletion(null);
       setToast('Activity deleted successfully');
+      setToastType('info');
       await loadActivities();
     } catch {
       setToast('Unable to delete activity');
+      setToastType('error');
     } finally {
       setDeleting(false);
     }
@@ -206,54 +257,32 @@ export default function ActivityPage() {
           <h1 className="crm-page-heading">Activity Dashboard</h1>
           {/* <p className="text-sm text-gray-600">Search, filter, review, and export activity records across the CRM.</p> */}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {/* <button type="button" onClick={handleSearch} className="flex items-center gap-2 rounded-lg bg-[#2563EB] px-4 py-2.5 text-sm font-medium text-white">
-            <Search className="h-4 w-4" /> Search
-          </button> */}
-          <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2.5 text-sm font-medium text-gray-700">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+          <label className="relative w-full sm:w-56">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }} placeholder="Search activities" className="w-full rounded-lg border border-[#EFECE5] bg-white py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#CEC9BD]" />
+          </label>
+          <button
+            type="button"
+            onClick={() => navigate('/sales/activities/analytics')}
+            className="flex items-center gap-2 rounded-lg border border-[#E8EAF0] bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            <BarChart3 className="h-4 w-4 text-blue-600" /> Analytics
+          </button>
+          <PageFilters
+            fields={filterFields}
+            values={filters}
+            onApply={(nextFilters) => { setFilters(nextFilters); setPage(1) }}
+            onClear={() => { setFilters({}); setPage(1) }}
+          />
+          <button type="button" onClick={handleDownloadReport} className="flex items-center gap-2 rounded-lg border border-[#EFECE5] bg-[#F2EFE8] px-4 py-2 text-sm font-medium text-gray-700">
             <Download className="h-4 w-4" /> Download Report
           </button>
           <PermissionGate moduleName="activities" action="create">
-            <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B]">
+            <button type="button" onClick={() => navigate('/sales/activities/new')} className="flex items-center gap-2 rounded-lg bg-[#111827] px-4 py-2 text-sm font-medium text-white hover:bg-[#1E293B]">
               <Plus className="h-4 w-4" /> Add New
             </button>
           </PermissionGate>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-[#EFECE5] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-3">
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Created By</span>
-            <select value={createdBy} onChange={(event) => { setPage(1); setCreatedBy(event.target.value); }} disabled={employeesLoading} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm disabled:bg-gray-50">
-              <option value="All">All</option>
-              <option value="Admin">Admin</option>
-              {employees.map((employee) => {
-                const fullName = employee.employeeName || employee.fullName;
-                return fullName ? <option key={employee._id} value={`employee:${employee._id}`}>{fullName}</option> : null;
-              })}
-              <option value="System">System</option>
-            </select>
-            {employeesLoading ? <span className="text-xs text-gray-500">Loading employees...</span> : null}
-            {!employeesLoading && employeesError ? <span className="text-xs text-red-600">{employeesError}</span> : null}
-            {!employeesLoading && !employeesError && !employees.length ? <span className="text-xs text-gray-500">No employees found.</span> : null}
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Customer Name</span>
-            <select value={customerName} onChange={(event) => setCustomerName(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
-              <option value="All">All</option>
-              {customerOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Follow-up Date</span>
-            <select value={followUpPreset} onChange={(event) => setFollowUpPreset(event.target.value)} className="w-full rounded-lg border border-[#EFECE5] px-3 py-2.5 text-sm">
-              {dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-
         </div>
       </div>
 
@@ -262,9 +291,9 @@ export default function ActivityPage() {
           <table className="min-w-full divide-y divide-[#EFECE5] text-sm">
             <thead className="bg-[#F8F7F3] text-left text-xs font-semibold tracking-wider text-gray-600">
               <tr>
-                <th className={tableCellClass}>SL No</th>
-                <th className={tableCellClass}>REPRESENTATIVE</th>
                 <th className={tableCellClass}>ACTIVITY ID</th>
+                <th className={tableCellClass}>CREATED BY</th>
+                <th className={tableCellClass}>ASSIGNED TO</th>
                 <th className={tableCellClass}>COMPANY</th>
                 <th className={tableCellClass}>ACTIVITY TYPE</th>
                 <th className={tableCellClass}>ACTIVITY DATE</th>
@@ -295,11 +324,11 @@ export default function ActivityPage() {
                   <td colSpan={15} className="px-4 py-10 text-center text-sm text-gray-500">No activities found</td>
                 </tr>
               ) : (
-                activities.map((activity, index) => (
+                activities.map((activity) => (
                   <tr key={activity._id} className="align-top">
-                    <td className={tableCellClass}>{(page - 1) * limit + index + 1}</td>
-                    <td className={tableCellClass}>{activity.assignedUser || 'Admin'}</td>
                     <td className={tableCellClass}>{activity.activityId || activity._id}</td>
+                    <td className={tableCellClass}>{activity.createdBy || 'Unknown'}</td>
+                    <td className={tableCellClass}>{activity.assignedUser || 'Unassigned'}</td>
                     <td className={tableCellClass}>{activity.company || activity.customerName || '-'}</td>
                     <td className={tableCellClass}>{activity.activityType || '-'}</td>
                     <td className={tableCellClass}>{activity.activityDate || '-'}</td>
@@ -310,15 +339,9 @@ export default function ActivityPage() {
                     <td className={tableCellClass}>{activity.contactPerson || '-'}</td>
                     <td className={tableCellClass}>{activity.email || '-'}</td>
                     <td className={tableCellClass}>{activity.mobileNo || '-'}</td>
-                    <td className={tableCellClass}><span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">{activity.status || 'Open'}</span></td>
+                    <td className={tableCellClass}><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(activity.effectiveStatus || activity.status || 'Open')}`}>{activity.effectiveStatus || activity.status || 'Open'}</span></td>
                     <td className={tableCellClass}>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setSelectedActivity(activity)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700">
-                          <Eye className="h-3.5 w-3.5" /> View
-                        </button>
-                        <PermissionGate moduleName="activities" action="edit"><button type="button" onClick={() => navigate(`/sales/activities/edit/${activity._id}`)} className="flex items-center gap-1 rounded bg-[#F2EFE8] px-2.5 py-1 text-xs font-medium text-gray-700"><Pencil className="h-3.5 w-3.5" /> Edit</button></PermissionGate>
-                        <PermissionGate moduleName="activities" action="delete"><button type="button" onClick={() => setActivityPendingDeletion(activity)} className="flex items-center gap-1 rounded bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"><Trash2 className="h-3.5 w-3.5" /> Delete</button></PermissionGate>
-                      </div>
+                      <ActionMenu moduleName="activities" onView={() => setSelectedActivity(activity)} onEdit={activity.status === 'Completed' && getStoredAuth()?.user.role !== 'admin' ? undefined : () => navigate(`/sales/activities/edit/${activity._id}`)} onDelete={() => setActivityPendingDeletion(activity)} />
                     </td>
                   </tr>
                 ))
@@ -421,7 +444,7 @@ export default function ActivityPage() {
         </div>
       )}
 
-      {toast && <Toast message={toast} type="info" onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
     </div>
   );
 }

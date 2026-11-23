@@ -10,6 +10,11 @@ export const hasPermission = (
 ) => {
   const session = getStoredAuth()
   if (session?.user.role === 'admin') return true
+  if (
+    moduleName === 'reports'
+    && (['admin', 'manager'].includes(String(session?.user.employeeType || '').trim().toLowerCase())
+      || String(session?.user.employeeRole || '').trim().toLowerCase() === 'sales manager')
+  ) return true
   if (moduleName === 'employees') return false
   const source = permissions || session?.user.permissions
   if (!source) return false

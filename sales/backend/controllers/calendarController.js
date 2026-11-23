@@ -4,6 +4,7 @@ const Contact = require('../models/Contact');
 const MailCampaign = require('../models/MailCampaign');
 const Supplier = require('../models/Supplier');
 const Activity = require('../models/Activity');
+const OPF = require('../models/OPF');
 const { ownerScope } = require('../utils/accessScope');
 
 const priorityOrder = { High: 3, Medium: 2, Low: 1 };
@@ -16,6 +17,7 @@ const moduleColors = {
   Activities: 'gray',
   Quotations: 'purple',
   Funnels: 'red',
+  OPF: 'orange',
   Suppliers: 'slate',
   Meetings: 'darkblue',
   Calls: 'orange',
@@ -28,12 +30,17 @@ const normalizeDate = (value) => {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return null;
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (dateOnly) {
+      const localDate = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+      return localDate.getFullYear() === Number(dateOnly[1])
+        && localDate.getMonth() === Number(dateOnly[2]) - 1
+        && localDate.getDate() === Number(dateOnly[3])
+        ? localDate
+        : null;
+    }
     const direct = new Date(trimmed);
     if (!Number.isNaN(direct.getTime())) return direct;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      const iso = new Date(`${trimmed}T00:00:00`);
-      if (!Number.isNaN(iso.getTime())) return iso;
-    }
   }
   return null;
 };
@@ -87,6 +94,8 @@ const toDisplayTitle = (value) => {
   return String(value).trim();
 };
 
+const isCancelled = (value) => ['cancelled', 'canceled', 'deleted', 'trash', 'rejected'].includes(String(value || '').trim().toLowerCase());
+
 const formatDescription = ({ title, module, customerName, contactName, assignedTo, date, time }) => {
   const parts = [title, module];
   if (customerName) parts.push(customerName);
@@ -101,6 +110,7 @@ const buildCalendarEvent = ({
   module,
   date,
   time,
+  endTime,
   customerName,
   contactName,
   assignedTo,
@@ -112,16 +122,22 @@ const buildCalendarEvent = ({
   referenceModule,
   eventType,
   sourceField,
+  amount,
+  amountCurrency,
+  recordLabel,
+  targetId,
+  quotationType,
 }) => {
   const normalizedDate = toISODate(date);
-  if (!normalizedDate) return null;
+  if (!normalizedDate || isCancelled(status) || isCancelled(calendarStatus)) return null;
 
   const event = {
-    id: referenceId ? `${referenceModule || module}:${referenceId}:${sourceField || eventType || title}:${normalizedDate}:${time || '09:00'}` : `${module}:${title}:${normalizedDate}:${time || '09:00'}`,
+    id: referenceId ? `${referenceModule || module}:${referenceId}:${targetId || referenceId}:${sourceField || eventType || title}:${normalizedDate}:${time || '09:00'}` : `${module}:${title}:${normalizedDate}:${time || '09:00'}`,
     title: toDisplayTitle(title),
     module,
     date: normalizedDate,
     time: normalizeTime(time || '09:00'),
+    endTime: endTime ? normalizeTime(endTime) : '',
     customerName: customerName || '',
     contactName: contactName || '',
     assignedTo: assignedTo || 'Unassigned',
@@ -130,8 +146,13 @@ const buildCalendarEvent = ({
     description: description || formatDescription({ title, module, customerName, contactName, assignedTo, date: normalizedDate, time: normalizeTime(time || '09:00') }),
     referenceId: referenceId || '',
     referenceModule: referenceModule || module,
+    targetId: targetId || referenceId || '',
+    recordLabel: recordLabel || '',
+    quotationType: quotationType || '',
     eventType: eventType || 'Schedule',
     sourceField: sourceField || '',
+    amount: amount ?? null,
+    amountCurrency: amountCurrency || '',
     color: moduleColors[module] || 'blue',
   };
 
@@ -217,15 +238,39 @@ const collectLeadEvents = (lead) => {
       description: `Next action scheduled for ${lead.companyName || lead.contactPerson || 'lead'}.`,
       sourceField: 'nextActionDate',
     },
+    {
+      value: lead.quotationDetails?.expectedClosure,
+      time: lead.quotationDetails?.expectedClosureTime,
+      title: 'Quotation Expected Closure',
+      module: lead.quotationId ? 'Quotations' : 'Funnels',
+      eventType: 'Expected Closure',
+      status: lead.leadStatus || 'Pending',
+      calendarStatus: lead.calendarStatus,
+      priority: lead.priority || 'Medium',
+      customerName: lead.companyName || '',
+      contactName: lead.contactPerson || '',
+      assignedTo: lead.assignedTo || lead.createdBy || 'Unassigned',
+      description: `Expected quotation closure for ${lead.companyName || lead.contactPerson || 'customer'}.`,
+      sourceField: 'quotationDetails.expectedClosure',
+      amount: lead.quotationDetails?.value ?? lead.quotationDetails?.revenue,
+      amountCurrency: lead.quotationDetails?.currency,
+      recordLabel: lead.quotationId || lead.leadId || '',
+      quotationType: lead.quotationType,
+    },
   ];
 
   return candidates
     .filter((candidate) => candidate.value)
     .map((candidate) => buildCalendarEvent({
-      title: candidate.title,
-      module: candidate.module,
+      title: candidate.sourceField === 'quotationDetails.expectedClosure' && !lead.quotationId
+        ? 'Funnel Expected Closure'
+        : candidate.title,
+      module: candidate.sourceField === 'quotationDetails.expectedClosure' && !lead.quotationId
+        ? 'Funnels'
+        : candidate.module,
       date: candidate.value,
       time: candidate.time,
+      endTime: candidate.endTime,
       customerName: candidate.customerName,
       contactName: candidate.contactName,
       assignedTo: candidate.assignedTo,
@@ -234,7 +279,13 @@ const collectLeadEvents = (lead) => {
       description: candidate.description,
       referenceId: lead._id?.toString?.() || lead.leadId || '',
       referenceModule: 'Leads',
+      targetId: lead._id?.toString?.() || lead.leadId || '',
+      recordLabel: candidate.recordLabel || lead.leadId || '',
+      quotationType: candidate.quotationType || lead.quotationType,
       eventType: candidate.eventType,
+      sourceField: candidate.sourceField,
+      amount: candidate.amount,
+      amountCurrency: candidate.amountCurrency,
     }))
     .filter(Boolean);
 };
@@ -259,6 +310,7 @@ const collectCustomerEvents = (customer) => {
         module: candidate.module,
         date: dateValue,
         time: timeValue,
+        endTime: customer[`${candidate.key.replace('Date', 'EndTime')}`],
         customerName: customer.companyName || customer.customerName || '',
         contactName: customer.customerName || '',
         assignedTo: customer.assignedTo || customer.createdBy || 'Unassigned',
@@ -269,6 +321,7 @@ const collectCustomerEvents = (customer) => {
         sourceField: candidate.key,
         referenceId: customer._id?.toString?.() || '',
         referenceModule: 'Customers',
+        recordLabel: customer.customerId || customer._id?.toString?.() || '',
         eventType: candidate.type,
       });
     })
@@ -295,6 +348,7 @@ const collectContactEvents = (contact) => {
         module: candidate.module,
         date: dateValue,
         time: timeValue,
+        endTime: contact[`${candidate.key.replace('Date', 'EndTime')}`],
         customerName: contact.customerName || '',
         contactName: contact.contactName || '',
         assignedTo: 'Unassigned',
@@ -305,6 +359,7 @@ const collectContactEvents = (contact) => {
         sourceField: candidate.key,
         referenceId: contact._id?.toString?.() || '',
         referenceModule: 'Contacts',
+        recordLabel: contact.contactId || contact._id?.toString?.() || '',
         eventType: candidate.type,
       });
     })
@@ -313,7 +368,8 @@ const collectContactEvents = (contact) => {
 
 const collectCampaignEvents = (campaign) => {
   if (!campaign) return [];
-  const dateValue = campaign.scheduledDate || campaign.createdDate;
+  if (String(campaign.status || '').toLowerCase() !== 'scheduled') return [];
+  const dateValue = campaign.scheduledDate;
   const timeValue = campaign.scheduledTime || '09:00';
   if (!dateValue) return [];
 
@@ -323,6 +379,7 @@ const collectCampaignEvents = (campaign) => {
       module: 'Mail Campaigns',
       date: dateValue,
       time: timeValue,
+      endTime: campaign.scheduledEndTime || '',
       customerName: campaign.recipientGroup?.[0] || campaign.createdBy || '',
       contactName: '',
       assignedTo: campaign.createdBy || 'Unassigned',
@@ -356,6 +413,7 @@ const collectSupplierEvents = (supplier) => {
         module: candidate.module,
         date: dateValue,
         time: timeValue,
+        endTime: supplier[`${candidate.key.replace('Date', 'EndTime')}`],
         customerName: supplier.supplierName || '',
         contactName: supplier.contactName || '',
         assignedTo: supplier.createdBy || 'Unassigned',
@@ -372,17 +430,69 @@ const collectSupplierEvents = (supplier) => {
     .filter(Boolean);
 };
 
+const collectOPFEvents = (opf, linkedLead) => {
+  if (!opf) return [];
+  const candidates = [
+    { key: 'startDate', title: 'OPF Start Date', type: 'OPF', module: 'OPF' },
+    { key: 'endDate', title: 'OPF End Date', type: 'OPF', module: 'OPF' },
+    { key: 'eta', title: 'OPF Delivery ETA', type: 'Delivery', module: 'OPF' },
+    { key: 'customerPODate', title: 'Customer PO Date', type: 'Purchase Order', module: 'OPF' },
+    { key: 'renewalDate', title: 'OPF Renewal', type: 'Renewal', module: 'OPF' },
+    { key: 'renewalReminderDate', title: 'Renewal Follow-up', type: 'Follow-up', module: 'OPF' },
+    { key: 'amcRenewalDate', title: 'AMC Renewal', type: 'Renewal', module: 'OPF' },
+    {
+      key: 'quotationDetails.expectedClosure',
+      value: linkedLead?.quotationDetails?.expectedClosure,
+      title: 'OPF Expected Closure',
+      type: 'Expected Closure',
+      module: 'OPF',
+      sourceModule: 'Leads',
+      sourceId: linkedLead?._id?.toString?.(),
+    },
+  ];
+
+  return candidates.map((candidate) => {
+    const dateValue = candidate.value || opf[candidate.key];
+    if (!dateValue) return null;
+    return buildCalendarEvent({
+      title: candidate.title,
+      module: candidate.module,
+      date: dateValue,
+      time: opf[`${candidate.key.replace('Date', '')}Time`] || '09:00',
+      endTime: opf[`${candidate.key.replace('Date', '')}EndTime`] || '',
+      customerName: opf.customerName || '',
+      contactName: opf.contactPerson || '',
+      assignedTo: opf.createdBy || 'Unassigned',
+      priority: 'Medium',
+      status: opf.approvalStatus || 'Pending',
+      description: `${candidate.title} for OPF ${opf.opfNo || ''}${opf.customerName ? ` · ${opf.customerName}` : ''}.`,
+      sourceField: candidate.key,
+      referenceId: candidate.sourceId || opf._id?.toString?.() || '',
+      referenceModule: candidate.sourceModule || 'OPF',
+      targetId: opf._id?.toString?.() || '',
+      recordLabel: opf.opfNo || '',
+      amount: opf.revenue ?? (Number(opf.quantity || 0) * Number(opf.unitPrice || 0)),
+      amountCurrency: opf.vendorCurrency || 'INR',
+      eventType: candidate.type,
+    });
+  }).filter(Boolean);
+};
+
 exports.getCalendarEvents = async (req, res) => {
   try {
-    const [leads, customers, contacts, campaigns, suppliers, activities] = await Promise.all([
-      Lead.find({ $and: [{}, ownerScope(req)] }).lean(),
+    const [leads, customers, contacts, campaigns, suppliers, activities, opfs] = await Promise.all([
+      Lead.find({ $and: [{ isScrapped: { $ne: true } }, ownerScope(req)] }).lean(),
       Customer.find({ $and: [{}, ownerScope(req)] }).lean(),
-      Contact.find({}).lean(),
+      Contact.find({ $and: [{}, ownerScope(req)] }).lean(),
       MailCampaign.find({ $and: [{ deletedAt: null }, ownerScope(req, { idField: 'employeeId', nameField: 'createdBy' })] }).lean(),
       Supplier.find({ $and: [{}, ownerScope(req)] }).lean(),
       Activity.find({ $and: [{ deletedAt: null }, ownerScope(req)] }).lean(),
+      OPF.find({ $and: [{}, ownerScope(req)] }).lean(),
     ]);
 
+    const leadsByQuotationId = new Map(
+      leads.filter((lead) => lead.quotationId).map((lead) => [String(lead.quotationId), lead]),
+    );
     const mergedEvents = [
       ...leads.flatMap(collectLeadEvents),
       ...customers.flatMap(collectCustomerEvents),
@@ -390,13 +500,16 @@ exports.getCalendarEvents = async (req, res) => {
       ...campaigns.flatMap(collectCampaignEvents),
       ...suppliers.flatMap(collectSupplierEvents),
       ...activities.flatMap((activity) => {
-        const date = activity.followUpDate || activity.activityDate;
-        if (!date) return [];
-        return [buildCalendarEvent({
-          title: activity.activityType || 'Activity',
+        const dates = [
+          { date: activity.activityDate, sourceField: 'activityDate' },
+          { date: activity.followUpDate, sourceField: 'followUpDate' },
+        ].filter((entry) => entry.date);
+        return dates.map(({ date, sourceField }) => buildCalendarEvent({
+          title: sourceField === 'followUpDate' ? 'Customer Follow-up' : activity.activityType || 'Activity',
           module: 'Activities',
           date,
-          time: '09:00',
+          time: activity[`${sourceField === 'activityDate' ? 'activity' : 'followUp'}Time`] || '09:00',
+          endTime: activity[`${sourceField === 'activityDate' ? 'activity' : 'followUp'}EndTime`] || '',
           customerName: activity.company || activity.customerName || '',
           contactName: activity.contactPerson || '',
           assignedTo: activity.assignedUser || 'Unassigned',
@@ -404,14 +517,22 @@ exports.getCalendarEvents = async (req, res) => {
           status: activity.status || 'Pending',
           calendarStatus: activity.status === 'Completed' ? 'Completed' : undefined,
           description: activity.customerRemarks || activity.customerRequirements || 'CRM activity.',
-          sourceField: activity.followUpDate ? 'followUpDate' : 'activityDate',
+          sourceField,
           referenceId: activity._id?.toString?.() || '',
           referenceModule: 'Activities',
+          recordLabel: activity.activityId || '',
           eventType: activity.activityType || 'Activity',
-        })];
+        })).filter(Boolean);
       }),
+      ...opfs.flatMap((opf) => collectOPFEvents(opf, leadsByQuotationId.get(String(opf.quotationNumber || opf.quotationId || '')))),
     ]
       .filter(Boolean)
+      .filter((event, index, allEvents) => {
+        const duplicateKey = [event.referenceModule, event.referenceId, event.targetId, event.module, event.sourceField, event.date, event.time].join('|');
+        return allEvents.findIndex((candidate) =>
+          [candidate.referenceModule, candidate.referenceId, candidate.targetId, candidate.module, candidate.sourceField, candidate.date, candidate.time].join('|') === duplicateKey,
+        ) === index;
+      })
       .sort((a, b) => {
         const dateDiff = new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime();
         if (dateDiff !== 0) return dateDiff;
@@ -428,17 +549,19 @@ const calendarSources = {
   Leads: { model: Lead, softDelete: false, completion: { calendarStatus: 'Completed' } },
   Customers: { model: Customer, softDelete: false, completion: { calendarStatus: 'Completed' } },
   Contacts: { model: Contact, softDelete: false, completion: { calendarStatus: 'Completed' } },
-  'Mail Campaigns': { model: MailCampaign, softDelete: true, completion: { calendarStatus: 'Completed' } },
+  'Mail Campaigns': { model: MailCampaign, softDelete: true, scope: { idField: 'employeeId', nameField: 'createdBy' }, completion: { calendarStatus: 'Completed' } },
   Suppliers: { model: Supplier, softDelete: false, completion: { calendarStatus: 'Completed' } },
   Activities: { model: Activity, softDelete: true, completion: { status: 'Completed' } },
+  OPF: { model: OPF, softDelete: false, completion: null, dateFields: ['startDate', 'endDate', 'eta', 'customerPODate', 'renewalDate', 'renewalReminderDate', 'amcRenewalDate'] },
 };
 
 exports.completeCalendarEvent = async (req, res) => {
   try {
     const source = calendarSources[req.params.module];
     if (!source) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
+    if (!source.completion) return res.status(400).json({ success: false, message: 'This calendar event cannot be marked complete.' });
     const event = await source.model.findOneAndUpdate(
-      { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}) },
+      { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}), ...ownerScope(req, source.scope) },
       { $set: source.completion },
       { new: true, runValidators: true },
     );
@@ -454,20 +577,21 @@ exports.deleteCalendarEvent = async (req, res) => {
   try {
     const source = calendarSources[req.params.module];
     if (!source) return res.status(400).json({ success: false, message: 'Unsupported calendar event module' });
-    const query = { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}) };
+    const query = { _id: req.params.id, ...(source.softDelete ? { deletedAt: null } : {}), ...ownerScope(req, source.scope) };
     const sourceField = String(req.body?.sourceField || '');
     const allowedFields = {
-      Leads: ['followUpDate', 'demoDate', 'meetingDate', 'callbackDate', 'nextActionDate'],
+      Leads: ['followUpDate', 'demoDate', 'meetingDate', 'callbackDate', 'nextActionDate', 'quotationDetails.expectedClosure'],
       Customers: ['meetingDate', 'renewalDate', 'contractExpiryDate', 'visitDate', 'nextActionDate'],
       Contacts: ['meetingDate', 'callReminderDate', 'birthday', 'anniversary', 'nextActionDate'],
       'Mail Campaigns': ['scheduledDate', 'createdDate'],
       Suppliers: ['deliveryDate', 'paymentReminderDate', 'followUpDate'],
       Activities: ['followUpDate', 'activityDate'],
+      OPF: source.dateFields,
     }[req.params.module] || [];
     if (!allowedFields.includes(sourceField)) return res.status(400).json({ success: false, message: 'Invalid calendar event source field' });
     const event = source.softDelete && sourceField === 'activityDate'
       ? await source.model.findOneAndUpdate(query, { $set: { deletedAt: new Date() } }, { new: true })
-      : await source.model.findOneAndUpdate(query, { $set: { [sourceField]: '' } }, { new: true, runValidators: true });
+      : await source.model.findOneAndUpdate(query, { $set: { [sourceField]: source.dateFields?.includes(sourceField) ? null : '' } }, { new: true, runValidators: true });
     if (!event) return res.status(404).json({ success: false, message: 'Calendar event source not found' });
     res.status(200).json({ success: true, message: 'Calendar event deleted.' });
   } catch (error) {
