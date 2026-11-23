@@ -2,8 +2,6 @@ import axios from 'axios'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { clearInventorySession, installInventoryApiAuthorization } from '@/lib/inventoryAuth'
-import { AccountsRoutes } from '../../../accounts/frontend/src/App'
-import '../../../accounts/frontend/src/index.css'
 import { InventoryLayout } from '@/components/inventory-layout'
 import ModuleSelectPage from '@/pages/ModuleSelectPage'
 import InventoryOverviewPage from '@/pages/InventoryOverviewPage'
@@ -528,9 +526,7 @@ function AppRoutes() {
     }
   }, [])
 
-  if (pathname === '/accounts' || pathname.startsWith('/accounts/')) {
-    return <AccountsRoutes />
-  }
+
 
   const isSalesRoute =
     pathname === '/sales' ||
